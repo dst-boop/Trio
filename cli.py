@@ -70,6 +70,10 @@ async def main() -> int:
                 else:
                     print(ev["text"])
                 note(f"\nDone in {ev['seconds']}s (written by {NAMES.get(ev['by'], ev['by'])}).")
+                u = ev.get("usage")
+                if u:
+                    cost = f" (~${u['cost']:.2f})" if u.get("cost") is not None else ""
+                    note(f"Tokens: {u['input']:,} in / {u['output']:,} out{cost}")
                 if ev.get("note"):
                     note(ev["note"])
                 exit_code = 0
