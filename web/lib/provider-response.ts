@@ -4,7 +4,8 @@ export const maxProviderResponseBytes = 2_000_000;
 export const maxAnswerCharacters = 120_000;
 
 /** Bound decoded network bytes before parsing; never surface a vendor/parser diagnostic. */
-export async function readProviderJson(response: Response, signal: AbortSignal): Promise<Record<string, any>> {
+export async function readProviderJson(response: Response, signal: AbortSignal, maxBytes = maxProviderResponseBytes): Promise<Record<string, any>> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 10_000_000) throw new Error('Invalid provider response limit.');
   if (!response.body) throw new Error('The provider returned an unreadable response.');
   const reader = response.body.getReader(), decoder = new TextDecoder('utf-8', { fatal: true });
   let bytes = 0, text = '';
@@ -13,14 +14,14 @@ export async function readProviderJson(response: Response, signal: AbortSignal):
   try {
     signal.throwIfAborted();
     // Headers are only an early rejection hint; count actual bytes even if omitted or incorrect.
-    if (Number(response.headers.get('content-length')) > maxProviderResponseBytes) throw new Error();
+    if (Number(response.headers.get('content-length')) > maxBytes) throw new Error();
     while (true) {
       signal.throwIfAborted();
       const { value, done } = await reader.read();
       signal.throwIfAborted();
       if (done) { text += decoder.decode(); break; }
       bytes += value.byteLength;
-      if (bytes > maxProviderResponseBytes) throw new Error();
+      if (bytes > maxBytes) throw new Error();
       text += decoder.decode(value, { stream: true });
     }
     const data: unknown = JSON.parse(text);
