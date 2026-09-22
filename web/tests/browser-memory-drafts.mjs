@@ -40,6 +40,8 @@ try {
   await notes.fill('Keep my unsaved notes.'); assert.equal(await warnsOnUnload(), true);
   await close(); await confirm.waitFor(); await keep(); assert.equal(await notes.inputValue(), 'Keep my unsaved notes.');
   await notes.focus(); await page.keyboard.press('Escape'); await confirm.waitFor();
+  // Target the newly opened confirmation after focus has entered its keyboard scope.
+  await confirm.getByRole('button', { name: 'Keep editing', exact: true }).focus();
   await page.keyboard.press('Escape'); await confirm.waitFor({ state: 'hidden' }); assert.equal(await notes.inputValue(), 'Keep my unsaved notes.');
   await page.mouse.click(5, 5); await confirm.waitFor();
   for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
