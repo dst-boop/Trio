@@ -1,0 +1,56 @@
+const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+
+const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Connections', exact: true }).click();
+  await page.getByPlaceholder('Paste your API key').nth(1).fill('fake-claude-only');
+  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('switch', { name: 'Web research', exact: true }).click();
+  assert.equal(await page.getByLabel('Research provider', { exact: true }).inputValue(), 'auto');
+  const research = { text: 'Claude found [evidence](https://example.org/evidence).', sources: [{ title: 'Claude source', url: 'https://example.org/evidence' }], at: '2026-09-22T00:00:00Z', provider: 'claude' };
+  let calls = 0;
+  await page.route('**/api/ask', async route => {
+    calls++; const body = route.request().postDataJSON();
+    assert.equal(body.researchProvider, calls === 1 ? 'auto' : 'claude'); assert.equal(body.connections.openai.key, ''); assert.equal(body.webResearch, true);
+    const result = { drafts: { claude: 'A draft' }, reviews: {}, answer: `Claude research answer ${calls}`, by: 'claude', errors: [], seconds: 1, demo: false, researchRequested: true, researchBy: 'claude', research };
+    const events = [{ type: 'stage', stage: 'research', provider: 'claude' }, { type: 'research', research }, { type: 'final', result }, { type: 'future_event', phase: 'research' }];
+    await route.fulfill({ contentType: 'application/x-ndjson', body: events.map(e => JSON.stringify(e)).join('\n') + '\n' });
+  });
+  const ask = async question => { await page.getByRole('textbox', { name: 'Your question' }).fill(question); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click(); await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor(); };
+  await ask('Research with my connected Claude model');
+  await page.getByText('Claude research answer 1', { exact: true }).waitFor();
+  await page.locator('.research-panel summary').filter({ hasText: 'Claude' }).click();
+  await page.getByRole('link', { name: 'Claude source', exact: false }).waitFor();
+  let saved = JSON.parse(await page.evaluate(() => localStorage.getItem('trio-sessions')));
+  assert.equal(saved[0].turns[0].result.research.provider, 'claude'); assert.equal(saved[0].turns[0].result.researchBy, 'claude');
+  assert.ok(!JSON.stringify(saved).includes('fake-claude-only'));
+  await page.getByLabel('Research provider', { exact: true }).selectOption('openai');
+  await page.getByRole('textbox', { name: 'Your question' }).fill('Unavailable explicit researcher'); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
+  await page.getByRole('heading', { name: 'Connect your AI team' }).waitFor(); await page.getByText('Web research requires an enabled OpenAI API connection.', { exact: true }).waitFor();
+  assert.equal(calls, 1); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByLabel('Research provider', { exact: true }).selectOption('claude');
+  await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.getByText('Web research requires an enabled OpenAI API connection.', { exact: true }).waitFor({ state: 'hidden' });
+  await mkdir('test-output', { recursive: true }); await page.locator('.research-setting').screenshot({ path: 'test-output/claude-research-mobile.png' });
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  await ask('Follow up using Claude explicitly'); await page.getByText('Claude research answer 2', { exact: true }).waitFor();
+  const downloadEvent = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export session as Markdown' }).click();
+  let text = ''; for await (const chunk of await (await downloadEvent).createReadStream()) text += chunk;
+  assert.ok(text.includes('Web research requested via Claude')); assert.ok(!text.includes('via OpenAI'));
+  await page.reload({ waitUntil: 'networkidle' }); await page.getByText('Claude research answer 2', { exact: true }).waitFor();
+  await page.locator('.research-panel summary').filter({ hasText: 'Claude' }).click(); await page.getByRole('link', { name: 'Claude source', exact: false }).waitFor();
+  const connections = { openai: { enabled: false, key: '', model: 'model' }, claude: { enabled: false, key: '', model: 'model' }, gemini: { enabled: true, key: 'fake', model: 'model' } };
+  const rejected = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'gemini', webResearch: true, researchProvider: 'auto', connections } });
+  assert.equal(rejected.status(), 400); assert.match((await rejected.json()).error, /OpenAI or Claude/);
+  const invalid = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'gemini', webResearch: true, researchProvider: 'gemini', connections } });
+  assert.equal(invalid.status(), 400); assert.deepEqual(errors, []);
+  console.log('Claude research browser checks passed: automatic and explicit choice, unavailable connection, attribution, unknown-event preservation, persistence, export, mobile, and API validation.');
+} finally { await browser.close(); }

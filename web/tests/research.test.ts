@@ -40,7 +40,7 @@ test('streamed and nonstreamed research use native bounded search requests and a
 
 test('research is opt-in and requires enabled OpenAI before any provider is charged', async () => {
   const c = connections(); c.openai.enabled = false; let called = false;
-  await assert.rejects(orchestrate({ question: 'q', webResearch: true, connections: c, mode: 'deep', lead: 'claude' }, () => {}, signal(), (async () => { called = true; return response(); }) as typeof fetch), /OpenAI/);
+  await assert.rejects(orchestrate({ question: 'q', webResearch: true, researchProvider: 'openai', connections: c, mode: 'deep', lead: 'claude' }, () => {}, signal(), (async () => { called = true; return response(); }) as typeof fetch), /OpenAI/);
   assert.equal(called, false);
   await orchestrate({ question: 'q', connections: connections(), mode: 'compare', lead: 'claude' }, () => {}, signal(), (async (_url, init) => { assert.equal(JSON.parse(init!.body as string).tools, undefined); return response(); }) as typeof fetch);
 });

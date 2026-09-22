@@ -5,7 +5,7 @@ export function applyRunEvent(result: Result, event: RunEvent): Result {
   if (event.type === 'final' && event.result) return event.result;
   if (event.type === 'error' && event.text) return { ...result, errors: [...result.errors, event.text] };
   if (event.type === 'usage' && event.usage) return { ...result, usage: event.usage };
-  if (event.type === 'stage' && event.stage === 'research') return { ...result, researchRequested: true };
+  if (event.type === 'stage' && event.stage === 'research') return { ...result, researchRequested: true, researchBy: event.provider === 'claude' ? 'claude' : 'openai' };
   if (event.type === 'research' && event.research) return { ...result, researchRequested: true, research: event.research };
   if (event.phase === 'research') return event.type === 'contribution_start' ? { ...result, researchRequested: true, research: undefined } : result;
   if (!event.provider) return result;

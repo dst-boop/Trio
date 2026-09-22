@@ -54,3 +54,7 @@
 .backup-plan { font-size:13px; color:#cfbcdf; margin:16px 0 8px; }
 .backup-warning { font-size:13px; line-height:1.7; color:#efbf83; margin:12px 0; }
 @media(max-width:640px) { .backup-export { align-items:flex-start; flex-direction:column; gap:8px; } }
+.research-controls { display:flex; align-items:center; gap:18px; }
+.research-controls label { font-size:11px; color:#b6a3c7; display:flex; flex-direction:column; gap:6px; }
+.research-controls select { background:#211a2a; border:1px solid #493953; color:#deceeb; font:inherit; font-size:12px; padding:8px; border-radius:6px; max-width:100%; }
+@media(max-width:720px) { .research-setting { align-items:flex-start; flex-wrap:wrap; } .research-controls { flex:1; justify-content:space-between; } }
