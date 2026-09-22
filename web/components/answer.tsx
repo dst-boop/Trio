@@ -1,29 +1,21 @@
 'use client';
 
-import { useRef, useState, type ComponentProps } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Check, Copy } from 'lucide-react';
-import { toast } from 'sonner';
+import { Component, lazy, Suspense, type ReactNode } from 'react';
 
-function CodeBlock({ children, ...props }: ComponentProps<'pre'>) {
-  const block = useRef<HTMLPreElement>(null);
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(block.current?.textContent ?? '');
-      setCopied(true); toast.success('Code copied');
-    } catch { toast.error('Clipboard unavailable. Select and copy the code manually.'); }
-  }
-  return <div className="code-block"><div className="code-toolbar"><span>Code</span><button onClick={() => void copy()} aria-label="Copy code">{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}</button></div><pre ref={block} {...props}>{children}</pre></div>;
+const FormattedAnswer = lazy(() => import('./answer-renderer').then(module => ({ default: module.Answer })));
+
+function PlainAnswer({ text, failed = false }: { text: string; failed?: boolean }) {
+  return <div className="prose-answer"><div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{text}</div>{failed && <p className="revision-note">Answer formatting is unavailable. You can still read and copy the full text.</p>}</div>;
 }
 
-/** No raw HTML, embedded media, or executable links from model-generated text. */
+class FormattingBoundary extends Component<{ children: ReactNode; text: string }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? <PlainAnswer text={this.props.text} failed /> : this.props.children; }
+}
+
+/** Load Markdown only when an answer exists. Plain text remains readable if its chunk fails. */
 export function Answer({ text }: { text: string }) {
-  return <div className="prose-answer"><Markdown remarkPlugins={[remarkGfm]} skipHtml components={{
-    pre: ({ node: _node, ...props }) => <CodeBlock {...props} />,
-    a: ({ node: _node, href, children, ...props }) => href ? <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span>,
-    img: ({ alt }) => <span className="unloaded-image">[Image: {alt || 'model-provided image'}]</span>,
-    table: ({ node: _node, ...props }) => <div className="answer-table" role="region" aria-label="Answer table" tabIndex={0}><table {...props} /></div>,
-  }}>{text}</Markdown></div>;
+  if (!text) return null;
+  return <FormattingBoundary text={text}><Suspense fallback={<PlainAnswer text={text} />}><FormattedAnswer text={text} /></Suspense></FormattingBoundary>;
 }
