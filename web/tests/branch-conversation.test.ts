@@ -27,3 +27,9 @@ test('branches cannot exceed the shared storage budget or copy unrecognized cred
   const large=structuredClone(source);large.turns=Array.from({length:22},()=>({...source.turns[0],result:{...source.turns[0].result,answer:'x'.repeat(120000)}}));assert.throws(()=>branchConversation([large],'source',21,'Large copy','branch'),/storage limit/);assert.equal(large.turns.length,22);
   const unsafe={...source,key:'secret',turns:[{...source.turns[0],key:'secret',result:{...source.turns[0].result,key:'secret'}}]};assert.ok(!JSON.stringify(branchConversation([unsafe],'source',0,'Safe copy','branch').session).includes('secret'));
 });
+
+test('prepared demos cannot be branch points, while live answers retain their own usable context',()=>{
+  const mixed=structuredClone(source);mixed.turns[0].result.demo=true;
+  assert.throws(()=>branchConversation([mixed],'source',0,'Demo copy','branch'),/completed live answer/);
+  const copy=branchConversation([mixed],'source',1,'Live copy','branch').session;assert.equal(copy.turns.length,2);assert.deepEqual(conversationHistory(copy.turns),[{role:'user',content:'Second question'},{role:'assistant',content:'Claude:\nSecond draft'}]);
+});

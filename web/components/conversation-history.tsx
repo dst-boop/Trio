@@ -29,7 +29,7 @@ function PastTurn({ turn, onBranch, busy }: { turn: Turn; onBranch?: () => void;
   return <div className="history-turn-body">
     <div className="history-turn-meta"><span>{modeNames[turn.mode]} · {result.seconds}s{result.by ? ` · ${providers.find(provider => provider.id === result.by)?.name}` : ''}</span>{result.answer && <button className="subtle-button" onClick={() => void copy()}><Copy size={14} />Copy earlier answer</button>}</div>
     {result.demo && <p className="demo-notice">ILLUSTRATIVE DEMO · No model APIs were called.</p>}
-    {onBranch && <button className="subtle-button branch-turn" disabled={busy} onClick={onBranch}>Continue from here ↗</button>}
+    {onBranch && !result.demo && <button className="subtle-button branch-turn" disabled={busy} onClick={onBranch}>Continue from here ↗</button>}
     <InstructionsUsed value={turn.instructions} />
     <MemoryUsed value={turn.result.memory} />
     {turn.imageName && <p className="revision-note">Image used: {turn.imageName}. Reattach it to revisit visual details; image data is not saved.</p>}
