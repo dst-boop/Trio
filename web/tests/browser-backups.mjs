@@ -7,7 +7,7 @@ const browser = await chromium.launch({ headless: true, channel: process.env.PLA
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Run demo', exact: true }).click();
   await page.getByRole('button', { name: 'Run demo', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
@@ -62,7 +62,7 @@ try {
   // On another device, restore is local and does not turn persistence on or call APIs.
   const other = await browser.newPage({ viewport: { width: 1440, height: 1050 } }); let apiCalls = 0;
   await other.route('**/api/ask', route => { apiCalls++; return route.abort(); });
-  await other.goto(baseUrl, { waitUntil: 'networkidle' }); await other.getByRole('button', { name: 'Back up & restore', exact: true }).click();
+  await other.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' }); await other.getByRole('button', { name: 'Back up & restore', exact: true }).click();
   await other.getByLabel('Choose workspace backup').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(mixed)) });
   await other.getByText(/Local history is off/).waitFor(); await other.getByRole('button', { name: 'Import 1 session', exact: true }).click();
   assert.equal(await other.evaluate(() => localStorage.getItem('trio-remember')), 'false'); assert.equal(await other.evaluate(() => localStorage.getItem('trio-sessions')), null);

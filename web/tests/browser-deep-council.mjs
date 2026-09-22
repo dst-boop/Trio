@@ -7,7 +7,7 @@ const browser = await chromium.launch({ headless: true, channel: process.env.PLA
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
-  await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   await page.getByRole('tab', { name: 'Deep Council', exact: true }).click();
   await page.getByRole('button', { name: 'Run demo', exact: true }).click();
   await page.getByText('Make the first 30 days a learning sprint.', { exact: false }).waitFor();

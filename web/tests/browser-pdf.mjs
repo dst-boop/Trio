@@ -8,7 +8,7 @@ const browser = await chromium.launch({ headless: true, channel: process.env.PLA
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   const png = await page.locator('.models-grid').screenshot();
   const file = { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from(samplePdf) };
   await page.getByLabel('Choose PDF', { exact: true }).setInputFiles(file);

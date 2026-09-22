@@ -1,4 +1,11 @@
-// Intentionally empty by default.
-// Add Drizzle tables here when the site actually needs a database.
-// See examples/d1/db/schema.ts for an opt-in example.
-export {};
+import { integer, sqliteTable, text, primaryKey } from 'drizzle-orm/sqlite-core';
+export const workspaces = sqliteTable('workspaces', {
+  userId: text('user_id').primaryKey(),
+  revision: integer('revision').notNull().default(0),
+  token: text('token').notNull(),
+});
+export const workspaceChunks = sqliteTable('workspace_chunks', {
+  userId: text('user_id').notNull().references(() => workspaces.userId),
+  position: integer('position').notNull(),
+  content: text('content').notNull(),
+}, t => [primaryKey({ columns: [t.userId, t.position] })]);

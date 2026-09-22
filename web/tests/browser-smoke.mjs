@@ -6,7 +6,7 @@ const browser = await chromium.launch({ headless: true, channel: process.env.PLA
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const errors = []; page.on('pageerror', e => errors.push(e.message));
 await mkdir('test-output', { recursive: true });
-await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
 await page.getByRole('heading', { name: 'One question. Three perspectives.' }).waitFor();
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 await page.screenshot({ path: 'test-output/desktop.png', fullPage: true });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { orchestrate } from '@/lib/orchestrate';
 import { selectResearchProvider } from '@/lib/research';
 import { instructionsSchema } from '@/lib/instructions';
@@ -8,6 +9,7 @@ import { pdfSchema, attachmentBytes, maxAttachmentBytes } from '@/lib/pdf';
 const connection = z.object({ key: z.string().max(1024), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
 const schema = z.object({ instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
 export async function POST(request: Request) {
+  if (!await getChatGPTUser()) return Response.json({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, { status: 401, headers: { 'Cache-Control': 'private, no-store' } });
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
   if (!request.headers.get('content-type')?.includes('application/json')) return Response.json({ error: 'Expected JSON.' }, { status: 415 });

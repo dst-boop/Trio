@@ -1,8 +1,22 @@
 # Trio — Collective intelligence
 
-A private online workspace for OpenAI, Claude, and Gemini. Ask once, get independent perspectives, review disagreements, and combine the strongest ideas.
+A multi-user online workspace for OpenAI, Claude, and Gemini. Ask once, get independent perspectives, review disagreements, and combine the strongest ideas.
+
+## Accounts and online history
+
+The public welcome page is at /; /workspace requires **Sign in with ChatGPT**. Sites handles identity and sign-out, and injects verified identity headers at its edge. Deploy this app behind that trusted edge, not a server that accepts arbitrary identity headers from clients. The local Vite plugin strips those headers and supplies a localhost-only test identity after its mock sign-in. No app passwords are collected.
+
+Each account has its own D1 history, keyed only by the authenticated server identity. GET/PUT /api/workspace and live POST /api/ask require sign-in. History responses are private/no-store; writes require same-origin and a matching account identity, so a stale tab cannot save one person's data into another signed-in account. API keys and original image/PDF bytes remain ephemeral and never enter the database.
+
+Online history saves automatically after changes. Up to 30 conversations and 5 million serialized characters are supported. SQL transactions replace bounded chunks with a revision check; a newer device's save returns a visible conflict instead of overwriting it. Export the local version, then choose **Load latest workspace** to recover. Network errors preserve the last saved copy and offer retry/export. Wait for **Saved to your account** before closing a tab. Unsaved prompts and attachment bytes are not synced.
+
+Existing browser history is never uploaded automatically. Open **Back up & restore → Preview browser sessions**, review the selection, and import only your own conversations. Portable JSON imports and Markdown exports remain available. /demo keeps the prior optional device-only history for exploration; live requests still require sign-in.
+
+Production provisioning uses .openai/hosting.json with d1=DB and the checked-in Drizzle migration; the Sites build copies migrations into dist/.openai/drizzle. Apply that same SQL to the local D1 binding before account browser tests. Tests use the scaffold's local mock sign-in; real ChatGPT OAuth is provided by Sites.
 
 ## Use the app
+
+Sign in from the welcome page and open your workspace first.
 
 1. Open Connections and add API keys for the providers you want to use.
 2. Turn Demo mode off. Keys stay in the current tab's memory and are cleared on reload.
@@ -47,7 +61,7 @@ pnpm typecheck
 pnpm build
 ```
 
-The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/ask endpoint streams stage updates and visible answer text as newline-delimited JSON. Provider calls happen server-side to fixed vendor endpoints; API keys are never sent to another vendor, logged, or saved by the app. Production access is controlled by the private Sites deployment.
+The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/ask endpoint streams stage updates and visible answer text as newline-delimited JSON. Provider calls happen server-side to fixed vendor endpoints; API keys are never sent to another vendor, logged, or saved by the app. The public welcome page is accessible to visitors; account history and live model requests are protected by Sites sign-in.
 
 Live drafts, reviews, revisions, and synthesis stream as they are written. The workspace initially shows Perspectives and switches to Answer when synthesis starts. A broken stream retries once without streaming, clearing its previous partial text. Partial output never enters peer-review prompts or saved turns. Stop cancels provider reads and preserves completed questions; the interrupted contribution remains visible only in the current tab.
 

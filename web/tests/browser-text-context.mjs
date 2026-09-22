@@ -11,7 +11,7 @@ try {
     requests.push(route.request().postDataJSON());
     await route.fulfill({ contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'final', result: { drafts: { openai: 'Context answer' }, reviews: {}, answer: 'Context answer', by: 'openai', errors: [], seconds: 1, demo: false } }) + '\n' });
   });
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').first().fill('fake-context-key');
   await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
