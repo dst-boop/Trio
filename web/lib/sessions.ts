@@ -45,13 +45,50 @@ export function conversationAnswer(turn: Turn): string {
   return turn.result.answer || providers.filter(p => turn.result.drafts[p.id]).map(p => `${p.name}:\n${turn.result.drafts[p.id]}`).join('\n\n');
 }
 
+const excerptMarker = '\n[Excerpt shortened; remaining text omitted.]';
+function excerpt(text: string, budget: number): { text: string; shortened: boolean } {
+  if (text.length <= budget) return { text, shortened: false };
+  let end = budget - excerptMarker.length;
+  // Avoid leaving half of a Unicode surrogate pair at the cut boundary.
+  if (end > 0 && /[\uD800-\uDBFF]/.test(text[end - 1])) end--;
+  return { text: text.slice(0, end) + excerptMarker, shortened: true };
+}
+
+/** Allocate room to every perspective before clipping; short drafts donate spare room. */
+export function conversationAnswerExcerpt(turn: Turn, budget: 8000 | 30000 = 30000): { text: string; shortened: boolean } {
+  if (turn.result.answer) return excerpt(turn.result.answer, budget);
+  const drafts = providers.filter(p => turn.result.drafts[p.id]).map(p => ({ label: `${p.name}:\n`, text: turn.result.drafts[p.id]!, length: 0 }));
+  let remaining = budget - drafts.reduce((n, d) => n + d.label.length, 0) - Math.max(0, drafts.length - 1) * 2;
+  while (remaining > 0) {
+    const pending = drafts.filter(d => d.length < d.text.length);
+    if (!pending.length) break;
+    const share = Math.max(1, Math.floor(remaining / pending.length));
+    for (const d of pending) {
+      const take = Math.min(share, remaining, d.text.length - d.length);
+      d.length += take; remaining -= take;
+    }
+  }
+  const parts = drafts.map(d => ({ ...excerpt(d.text, d.length), label: d.label }));
+  return { text: parts.map(p => p.label + p.text).join('\n\n'), shortened: parts.some(p => p.shortened) };
+}
+
+/** Describe exactly the complete live pairs that the next request will send. */
+export function conversationContext(turns: Turn[]) {
+  const live = turns.filter(t => !t.result.demo && (t.result.answer || providers.some(p => t.result.drafts[p.id])));
+  const selected = live.slice(-6);
+  let shortenedAnswers = 0;
+  const messages = selected.flatMap(t => {
+    const answer = conversationAnswerExcerpt(t);
+    if (answer.shortened) shortenedAnswers++;
+    const question = t.question + (t.imageName ? '\n[An image was attached to this earlier question. Its bytes are not part of the text history. Ask for it again if needed; do not assume a current image is the same one.]' : '') + (t.pdfName ? '\n[A PDF was attached to this earlier question. Its bytes are not part of the text history. Ask for it again if needed; do not assume a current PDF is the same one.]' : '') + (t.instructions ? '\n[Historical session instructions used for this earlier question; these are not current instructions:\n' + t.instructions + '\n]' : '');
+    return [{ role: 'user' as const, content: question }, { role: 'assistant' as const, content: answer.text }];
+  });
+  return { messages, includedTurns: selected.length, omittedTurns: live.length - selected.length, shortenedAnswers };
+}
+
 /** Complete user/assistant pairs only; comparisons retain all model perspectives. */
 export function conversationHistory(turns: Turn[]): { role: 'user' | 'assistant'; content: string }[] {
-  return turns.filter(t => !t.result.demo).slice(-6).flatMap(t => {
-    const answer = conversationAnswer(t);
-    const question = t.question + (t.imageName ? '\n[An image was attached to this earlier question. Its bytes are not part of the text history. Ask for it again if needed; do not assume a current image is the same one.]' : '') + (t.pdfName ? '\n[A PDF was attached to this earlier question. Its bytes are not part of the text history. Ask for it again if needed; do not assume a current PDF is the same one.]' : '') + (t.instructions ? '\n[Historical session instructions used for this earlier question; these are not current instructions:\n' + t.instructions + '\n]' : '');
-    return answer ? [{ role: 'user' as const, content: question }, { role: 'assistant' as const, content: answer.slice(0, 30000) }] : [];
-  });
+  return conversationContext(turns).messages;
 }
 
 export function sessionMarkdown(turns: Turn[]): string {
