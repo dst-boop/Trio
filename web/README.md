@@ -65,6 +65,10 @@ Google Search grounding is not used as a shared research source: its [grounding 
 
 ## Portable session backups
 
+Use **Search conversations** in the sidebar to filter saved sessions by title, questions, answers, model contributions, instructions, attachment filenames, research sources, and run notes. Search is local, case-insensitive, and matches every entered word; it does not inspect API keys or original attachment bytes. Filtering never changes the current conversation or its unsent prompt.
+
+Each session’s **Session actions** menu supports renaming (up to 120 characters), exporting that conversation as Markdown, and deleting it after confirmation. Follow-up answers preserve custom names. Deleting a different session leaves the current draft intact; deleting the active session clears its composer, instructions, and attachments. Changes follow the existing local-history setting. Downloaded backups are not modified.
+
 Use **Back up & restore** in the sidebar to download a versioned Trio JSON file or preview one from another device. Backups include complete questions, answers, session instructions, all model contributions, citations, and usage. API connection settings and original attachment bytes are stripped; conversations themselves may contain private information, so keep the file private. Markdown exports remain available for reading and sharing.
 
 Import validates every record before making changes, then lets you select conversations. Identical content is skipped, even if another device assigned it a different ID. Changed versions with matching IDs are kept as separate copies. Existing sessions, the active conversation, and an unsent prompt remain intact. An import that would exceed the 30-session limit is blocked until fewer conversations are selected; it never silently evicts existing history.
@@ -105,6 +109,7 @@ node tests/browser-research.mjs
 node tests/browser-claude-research.mjs
 node tests/browser-backups.mjs
 node tests/browser-instructions.mjs
+node tests/browser-session-library.mjs
 ```
 
 The scripts default to Microsoft Edge and http://localhost:5173. Set TRIO_BASE_URL to test a server on another port, PLAYWRIGHT_CHANNEL for another installed Chromium channel, and optionally PLAYWRIGHT_MODULE to a module URL if using a bundled Playwright installation.

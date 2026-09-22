@@ -30,7 +30,7 @@ try {
   await emit({ type: 'stage', stage: 'draft' }, { type: 'contribution_start', phase: 'draft', provider: 'openai' }, { type: 'contribution_delta', phase: 'draft', provider: 'openai', text: 'First words arrive' });
   await page.getByText('First words arrive', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Stop', exact: true }).count(), 1);
-  assert.equal(await page.locator('.session-list button').count(), 0, 'Partial turns are not saved');
+  assert.equal(await page.locator('.session-list .session-open').count(), 0, 'Partial turns are not saved');
   await emit({ type: 'contribution_delta', phase: 'draft', provider: 'openai', text: ' before completion.' });
   await page.getByText('First words arrive before completion.', { exact: true }).waitFor();
   await emit({ type: 'contribution_start', phase: 'draft', provider: 'openai' }, { type: 'contribution_delta', phase: 'draft', provider: 'openai', text: 'Replacement draft' });
@@ -43,7 +43,7 @@ try {
   await page.evaluate(() => window.trioStream.close());
   await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor();
   await page.getByText('Completed combined answer', { exact: true }).waitFor();
-  assert.equal(await page.locator('.session-list button').count(), 1);
+  assert.equal(await page.locator('.session-list .session-open').count(), 1);
   const saved = await page.evaluate(() => localStorage.getItem('trio-sessions'));
   assert.ok(saved.includes('Completed combined answer')); assert.ok(!saved.includes('Partial combined answer')); assert.ok(!saved.includes('streaming-fake-key'));
   await page.getByRole('textbox', { name: 'Your question' }).fill('Cancel this follow-up');
