@@ -35,8 +35,8 @@ async generator of plain dict events that drives all three frontends.
   `final`, `error`, plus the SSE-only `done`. A repeated `draft_start` or
   `final_start` means that answer restarts from scratch (a stream broke and
   a non-streaming retry is replacing it). Three consumers must stay in sync when you touch them:
-  `static/index.html` (`handle()`), `cli.py`, and `run_to_completion()` in
-  `orchestrator.py`. Unknown event types must be ignored gracefully by every
+  `static/index.html` (`handle()`), `cli.py`, and `collect_event()` in
+  `conversations.py`. Unknown event types must be ignored gracefully by every
   consumer, so *adding* a type is cheap; renaming or removing one is a
   breaking change — update all three and the README's API section.
 - **Keep mock mode working.** Every feature must be demoable with

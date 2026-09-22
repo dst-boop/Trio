@@ -131,3 +131,21 @@ def test_real_mock_round_trip(client):
     saved = client.get('/api/conversations/' + out['conversation_id']).json()
     assert saved['turns'][0]['result']['answer'] == out['answer']
     assert set(saved['turns'][0]['result']['drafts']) == {'claude', 'openai', 'gemini'}
+
+
+def test_delete_conversation_kills_the_link(client, pipeline):
+    cid = client.post('/api/ask', json={"question": "q", "stream": False}).json()['conversation_id']
+    assert client.delete(f'/api/conversations/{cid}').json() == {'deleted': True}
+    assert client.get(f'/api/conversations/{cid}').status_code == 404
+    assert client.delete(f'/api/conversations/{cid}').status_code == 404  # already gone
+    assert client.post('/api/ask', json={"question": "again", "conversation_id": cid}).status_code == 404
+
+
+def test_delete_requires_password_and_valid_id(client, pipeline, monkeypatch):
+    cid = client.post('/api/ask', json={"question": "q", "stream": False}).json()['conversation_id']
+    assert client.delete('/api/conversations/not-a-valid-id!').status_code == 404
+    monkeypatch.setenv('APP_PASSWORD', 'pw')
+    assert client.delete(f'/api/conversations/{cid}').status_code == 401
+    ok = client.delete(f'/api/conversations/{cid}', headers={'X-App-Password': 'pw'})
+    assert ok.status_code == 200
+    assert client.get(f'/api/conversations/{cid}', headers={'X-App-Password': 'pw'}).status_code == 404

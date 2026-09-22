@@ -280,22 +280,3 @@ async def run(
         "usage": _usage_summary(providers, usage_totals),
         "seconds": round(time.monotonic() - t_start, 1),
     }
-
-
-async def run_to_completion(client, question, history=None, thorough=True) -> dict:
-    """Non-streaming helper: collect every event into one JSON-friendly dict."""
-    out: dict = {"drafts": {}, "reviews": {}, "errors": {}}
-    async for ev in run(client, question, history, thorough):
-        t = ev["type"]
-        if t in ("draft", "review"):
-            bucket = out["drafts"] if t == "draft" else out["reviews"]
-            if ev["text"]:
-                bucket[ev["model"]] = ev["text"]
-            else:
-                out["errors"][f"{ev['model']}:{t}"] = ev["error"]
-        elif t == "final":
-            out.update(answer=ev["text"], written_by=ev["by"], seconds=ev["seconds"],
-                       note=ev.get("note"), usage=ev.get("usage"))
-        elif t == "error":
-            out["error"] = ev["message"]
-    return out

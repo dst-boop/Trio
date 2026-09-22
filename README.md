@@ -110,7 +110,11 @@ server's disk; API keys are not part of the records. Back up the database to
 retain conversations. The hosted `web/` workspace uses its separate opt-in
 browser history and does not share this SQLite database.
 
-`GET /api/conversations/<id>` returns the saved turns. Send `conversation_id`
+`GET /api/conversations/<id>` returns the saved turns, and
+`DELETE /api/conversations/<id>` removes a conversation for good - the share
+link dies immediately (404). Holding the link is the authorization for
+deleting, same as for reading; the **Delete this conversation** control on a
+saved page asks for a second click to confirm. Send `conversation_id`
 with `POST /api/ask` to continue using the stored history. Optional
 `expected_turns` rejects a stale tab with HTTP 409 before calling models. A
 concurrent change during generation returns `save_error` without overwriting
