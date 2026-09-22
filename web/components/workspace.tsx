@@ -60,6 +60,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
   const [sessionQuery, setSessionQuery] = useState(''), [sessionAction, setSessionAction] = useState<SessionAction>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const personalMemory = usePersonalMemory(account?.userId);
+  const memoryStatus = personalMemory.loading ? 'Loading…' : personalMemory.error || !personalMemory.profile ? 'Unavailable' : personalMemory.profile.enabled ? 'On' : 'Off';
   const [backupsOpen, setBackupsOpen] = useState(false);
   const [settings, setSettings] = useState(false), [help, setHelp] = useState(false);
   const [demo, setDemo] = useState(true), [mode, setMode] = useState<Mode>('council'), [lead, setLead] = useState<ProviderId>('claude');
@@ -206,7 +207,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
         <div className="side-label">YOUR WORKSPACE</div>
         <button className="side-nav selected" onClick={() => promptRef.current?.focus()}><Layers3 size={17} /> Collective intelligence</button>
         <button className="side-nav" onClick={() => setSettings(true)}><Settings2 size={17} /> Model connections <span className="nav-count">{connected}/3</span></button>
-        {account && <button className="side-nav" disabled={busy} onClick={() => setMemoryOpen(true)}><Lightbulb size={17} />Personal memory<span className="nav-count">{personalMemory.profile?.enabled ? "On" : "Off"}</span></button>}
+        {account && <button className="side-nav" disabled={busy} onClick={() => setMemoryOpen(true)}><Lightbulb size={17} />Personal memory<span className="nav-count" role="status">{memoryStatus}</span></button>}
         <button className="side-nav" disabled={busy} onClick={() => setBackupsOpen(true)}><Archive size={17} />Back up & restore</button>
         <div className="history-heading"><span className="side-label">RECENT SESSIONS</span>{sessions.length > 0 && <button aria-label="Clear session history" disabled={busy} onClick={() => setClearHistory(true)}><Trash2 size={14} /></button>}</div>
         <SessionList sessions={sessions} current={current} busy={busy} query={sessionQuery} onQuery={setSessionQuery} onSelect={s => { if (busy) return; setCurrent(s.id); setInstructions(s.instructions ?? s.turns.at(-1)?.instructions ?? ''); setTurns(s.turns); setWorking(null); setRunningQuestion(''); setPrompt(''); clearContext(); clearImage(); clearPdf(); setStage('done'); setTab(s.turns.at(-1)?.mode === 'compare' ? 'drafts' : 'answer'); }} onAction={setSessionAction} onExport={s => downloadSession(s.turns)} />
