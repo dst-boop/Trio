@@ -8,7 +8,7 @@ A private online workspace for OpenAI, Claude, and Gemini. Ask once, get indepen
 2. Turn Demo mode off. Keys stay in the current tab's memory and are cleared on reload.
 3. Choose Council (drafts → reviews → synthesis), Quick synthesis (drafts → synthesis), or Compare (drafts only).
 4. Ask your question. Optionally attach a text, Markdown, CSV, JSON, or code file under 60 KB.
-5. Inspect perspectives and reviews, copy the result, or export the session as Markdown.
+5. Inspect perspectives and reviews, copy individual code blocks, or export the session as Markdown with run notes and fallback labels. Answers render Markdown headings, lists, links, and tables; raw HTML and embedded images are disabled.
 
 The demo uses explicitly labeled, prepared sample responses. It never calls a model and does not answer arbitrary prompts. Live requests require API access and available credits at each provider. Consumer subscriptions do not supply these keys automatically.
 
@@ -35,8 +35,8 @@ The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/as
 
 - Prompts, attached text, and recent live conversation context are sent to enabled providers. Drafts and reviews are shared among participating providers.
 - Keys live in browser memory and in server request memory while a run is active. Reloading clears them.
-- Sessions live in browser memory unless you explicitly enable local history. Local history is device-specific, includes prompts and answers, and does not include API keys or file contents. Clear history with the sidebar trash button.
-- Each follow-up includes at most 12 recent live user/assistant messages; demo content is excluded.
+- Sessions live in browser memory unless you explicitly enable local history. Local history is device-specific, includes prompts and answers, and does not include API keys or the original attachments (answers may quote them). Refresh restores the active session after validating saved records. Clear history with the sidebar trash button and confirmation.
+- Each follow-up includes at most six recent live question/answer pairs, including the model perspectives from Compare runs; demo content is excluded. Prior answers are capped at 30,000 characters per turn.
 - Each question is limited to 20,000 characters; attached text to 60,000 characters. Provider timeouts are 120 seconds per call.
 - Three connected models use seven calls in Council, four in Quick synthesis, or three in Compare. Synthesis failover can add up to two calls. Each vendor bills its own usage.
 - A failed provider does not stop the others. If all synthesis attempts fail, an independent draft is explicitly labeled as a fallback.
@@ -45,12 +45,13 @@ The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/as
 
 ## Validation
 
-Eight deterministic service tests cover the pipeline, shared context, provider failures, synthesis failover, comparison, single-provider operation, no-key rejection, and error-message redaction. A browser smoke test covers desktop/mobile layout, the demo, tabs, connection controls, key non-persistence, history isolation, and request validation.
+Thirteen deterministic tests cover the pipeline, provider failures, synthesis failover, shared context, comparison, no-key rejection, error-message redaction, saved-record validation, and exports. Browser tests cover desktop/mobile layout, the demo, tabs, connection controls, key non-persistence, history restoration, request validation, Markdown safety, code copying, and attachment isolation.
 
 Run browser checks with Playwright installed separately and a local dev server running:
 
 ```sh
 node tests/browser-smoke.mjs
+node tests/browser-quality.mjs
 ```
 
 The script defaults to Microsoft Edge. Set PLAYWRIGHT_CHANNEL for another installed Chromium channel, and optionally PLAYWRIGHT_MODULE to a module URL if using a bundled Playwright installation.

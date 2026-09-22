@@ -6,11 +6,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
+import { Answer as Prose } from '@/components/answer';
+import { parseSessions, conversationHistory, sessionMarkdown, type Turn, type Session } from '@/lib/sessions';
 import { Toaster, toast } from 'sonner';
 import { providers, freshConnections, type Connections, type Mode, type ProviderId, type Result, type RunEvent } from '@/lib/trio';
 
-type Turn = { question: string; result: Result; mode: Mode };
-type Session = { id: string; title: string; turns: Turn[]; time: string };
 const modes = { council: { title: 'Council', icon: Layers3, desc: 'Independent answers, peer review, one stronger result.', calls: 'Up to 7 calls + failover' }, fast: { title: 'Quick synthesis', icon: Zap, desc: 'Three perspectives, combined without the review round.', calls: 'Up to 4 calls + failover' }, compare: { title: 'Compare', icon: GitCompareArrows, desc: 'Independent answers side by side. You make the call.', calls: 'Up to 3 calls' } };
 const emptyResult = (demo: boolean): Result => ({ drafts: {}, reviews: {}, errors: [], answer: '', seconds: 0, demo });
 const demoQuestion = 'Design a practical 30-day plan to turn an idea into a validated product.';
@@ -26,7 +27,6 @@ const demoReviews = [
 ];
 const demoFinal = 'Make the first 30 days a learning sprint. Your goal is evidence that a specific group will act on your offer.\n\n01 — Find the problem · Days 1–7\nPick one reachable customer segment. Interview 8–10 people about a recent experience, current workarounds, and the cost of the problem. Record evidence that challenges your idea.\n\n02 — Test the offer · Days 8–14\nWrite a one-sentence promise and build a simple prototype. Ask five prospective users to complete the core task. Define a measurable success threshold before you run the pilot.\n\n03 — Deliver the outcome · Days 15–23\nRun a small, hands-on pilot with three users. Deliver the result manually where possible. Track completion, repeated use, time saved, and willingness to commit.\n\n04 — Decide with evidence · Days 24–30\nCompare results with your original threshold. Continue if the behavior supports the idea; revise the audience or offer if it does not. Document what you still do not know.\n\nKeep in mind\nThese sample sizes are a starting point, not statistical validation. Positive feedback is weaker evidence than repeated use or a concrete commitment.\n\nYour first move: name the customer segment and the one problem you want to test.';
 function Mark({ id, small = false }: { id?: ProviderId; small?: boolean }) { const p = providers.find(p => p.id === id); return <span className={`model-mark ${small ? 'small' : ''}`} style={{ color: p?.color ?? '#c4bbff', background: (p?.color ?? '#aa99ff') + '14' }}>{p?.mark ?? '◈'}</span>; }
-function Prose({ text }: { text: string }) { return <div className="prose-answer">{text.split(/\n\n+/).map((p, i) => <p key={i}>{p}</p>)}</div>; }
 
 export default function Home() {
   const [connections, setConnections] = useState<Connections>(freshConnections);
@@ -37,10 +37,21 @@ export default function Home() {
   const [turns, setTurns] = useState<Turn[]>([]), [busy, setBusy] = useState(false), [stage, setStage] = useState('');
   const [working, setWorking] = useState<Result | null>(null), [runningQuestion, setRunningQuestion] = useState(''), [tab, setTab] = useState('answer');
   const [remember, setRemember] = useState(false), [loaded, setLoaded] = useState(false);
+  const [clearHistory, setClearHistory] = useState(false), [runMode, setRunMode] = useState<Mode>('council');
   const abortRef = useRef<AbortController | null>(null), fileRef = useRef<HTMLInputElement>(null), promptRef = useRef<HTMLTextAreaElement>(null);
   const connected = providers.filter(p => connections[p.id].key.trim() && connections[p.id].enabled).length;
-  useEffect(() => { try { const enabled = localStorage.getItem('trio-remember') === 'true'; setRemember(enabled); if (enabled) { const saved = JSON.parse(localStorage.getItem('trio-sessions') ?? '[]'); if (Array.isArray(saved)) setSessions(saved.filter(s => typeof s.id === 'string' && Array.isArray(s.turns)).slice(0, 30)); } } catch {} setLoaded(true); }, []);
-  useEffect(() => { if (!loaded) return; try { localStorage.setItem('trio-remember', String(remember)); if (remember) localStorage.setItem('trio-sessions', JSON.stringify(sessions)); else localStorage.removeItem('trio-sessions'); } catch { toast.error('Browser storage is full or unavailable. This session stays in memory.'); } }, [sessions, remember, loaded]);
+  useEffect(() => {
+    try {
+      const enabled = localStorage.getItem('trio-remember') === 'true'; setRemember(enabled);
+      if (enabled) {
+        const saved = parseSessions(localStorage.getItem('trio-sessions')); setSessions(saved);
+        const active = localStorage.getItem('trio-active-session');
+        const restored = active === null ? saved[0] : saved.find(s => s.id === active);
+        if (restored) { setCurrent(restored.id); setTurns(restored.turns); setStage('done'); setTab(restored.turns.at(-1)?.mode === 'compare' ? 'drafts' : 'answer'); }
+      }
+    } catch {} setLoaded(true);
+  }, []);
+  useEffect(() => { if (!loaded) return; try { localStorage.setItem('trio-remember', String(remember)); if (remember) { localStorage.setItem('trio-sessions', JSON.stringify(sessions)); localStorage.setItem('trio-active-session', current ?? ''); } else { localStorage.removeItem('trio-sessions'); localStorage.removeItem('trio-active-session'); } } catch { toast.error('Browser storage is full or unavailable. This session stays in memory.'); } }, [sessions, remember, loaded, current]);
   useEffect(() => () => abortRef.current?.abort(), []);
   function newSession() { if (busy) return; setTurns([]); setCurrent(null); setWorking(null); setPrompt(''); setContext(null); setRunningQuestion(''); promptRef.current?.focus(); }
   function saveTurn(question: string, result: Result) { const next = [...turns, { question, result, mode }]; setTurns(next); const id = current ?? crypto.randomUUID(); setCurrent(id); setSessions(prev => [{ id, title: next[0].question, turns: next, time: new Date().toISOString() }, ...prev.filter(s => s.id !== id)].slice(0, 30)); }
@@ -50,7 +61,7 @@ export default function Home() {
     const question = demo ? demoQuestion : prompt.trim();
     if (!question) return;
     if (!demo && !connected) { setSettings(true); toast('Add an API key to start a live session.'); return; }
-    setBusy(true); setStage('draft'); setWorking(emptyResult(demo)); setRunningQuestion(question); setTab(mode === 'compare' ? 'drafts' : 'answer');
+    setBusy(true); setRunMode(mode); setStage('draft'); setWorking(emptyResult(demo)); setRunningQuestion(question); setTab(mode === 'compare' ? 'drafts' : 'answer');
     const controller = new AbortController(); abortRef.current = controller;
     let result = emptyResult(demo), completed = false;
     try {
@@ -60,7 +71,7 @@ export default function Home() {
         if (mode !== 'compare') { setStage('synthesis'); await delay(700, controller.signal); result = { ...result, answer: demoFinal, by: lead }; }
         result.seconds = mode === 'council' ? 3.4 : mode === 'fast' ? 2.2 : 1.5; completed = true;
       } else {
-        const history = turns.filter(t => !t.result.demo).flatMap(t => [{ role: 'user', content: t.question }, ...(t.result.answer ? [{ role: 'assistant', content: t.result.answer.slice(0, 30000) }] : [])]).slice(-12);
+        const history = conversationHistory(turns);
         const response = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, context: context?.text, history, connections, mode, lead }), signal: controller.signal });
         if (!response.ok) { const data = await response.json() as { error?: string }; throw new Error(data.error ?? 'Could not start this session.'); }
         const reader = response.body!.getReader(), decoder = new TextDecoder(); let buffer = '';
@@ -82,10 +93,10 @@ export default function Home() {
   }
   async function attach(file?: File) { if (!file) return; if (!/\.(txt|md|csv|json|js|ts|tsx|py|html|css)$/i.test(file.name)) return toast.error('Choose a text, Markdown, CSV, JSON, or code file.'); if (file.size > 60000) return toast.error('Use a text file smaller than 60 KB.'); const text = await file.text(); setContext({ name: file.name, text }); }
   async function copy(text: string) { try { await navigator.clipboard.writeText(text); toast.success('Copied to clipboard'); } catch { toast.error('Clipboard unavailable. Select and copy the answer manually.'); } }
-  function exportSession() { const text = turns.map(t => `# ${t.question}\n\n${t.result.demo ? '> Illustrative demo — no live models were called.\n\n' : ''}${t.result.answer}\n\n${Object.entries(t.result.drafts).map(([p, v]) => `## ${p} draft\n\n${v}`).join('\n\n')}\n\n${Object.entries(t.result.reviews).map(([p, v]) => `## ${p} review\n\n${v}`).join('\n\n')}`).join('\n\n---\n\n'); const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' })); const a = document.createElement('a'); a.href = url; a.download = 'trio-session.md'; a.click(); URL.revokeObjectURL(url); }
+  function exportSession() { const url = URL.createObjectURL(new Blob([sessionMarkdown(turns)], { type: 'text/markdown' })); const a = document.createElement('a'); a.href = url; a.download = 'trio-session.md'; a.click(); URL.revokeObjectURL(url); }
   const displayed = working ?? turns.at(-1)?.result;
   const question = runningQuestion || turns.at(-1)?.question;
-  const displayMode = working ? mode : turns.at(-1)?.mode ?? mode;
+  const displayMode = working ? runMode : turns.at(-1)?.mode ?? mode;
 
   return <SidebarProvider style={{ '--sidebar-width': '248px' } as React.CSSProperties}>
     <Sidebar className="trio-sidebar">
@@ -95,8 +106,8 @@ export default function Home() {
         <div className="side-label">YOUR WORKSPACE</div>
         <button className="side-nav selected" onClick={() => promptRef.current?.focus()}><Layers3 size={17} /> Collective intelligence</button>
         <button className="side-nav" onClick={() => setSettings(true)}><Settings2 size={17} /> Model connections <span className="nav-count">{connected}/3</span></button>
-        <div className="history-heading"><span className="side-label">RECENT SESSIONS</span>{sessions.length > 0 && <button aria-label="Clear session history" disabled={busy} onClick={() => { setSessions([]); newSession(); toast('Session history cleared'); }}><Trash2 size={14} /></button>}</div>
-        <div className="session-list">{sessions.length ? sessions.map(s => <button key={s.id} disabled={busy} className={s.id === current ? 'active' : ''} onClick={() => { setCurrent(s.id); setTurns(s.turns); setWorking(null); setRunningQuestion(''); setStage('done'); setTab('answer'); }}><MessageSquare size={15} /><span>{s.title}</span></button>) : <p className="history-empty">Good ideas start with a question.<br />Your sessions will appear here.</p>}</div>
+        <div className="history-heading"><span className="side-label">RECENT SESSIONS</span>{sessions.length > 0 && <button aria-label="Clear session history" disabled={busy} onClick={() => setClearHistory(true)}><Trash2 size={14} /></button>}</div>
+        <div className="session-list">{sessions.length ? sessions.map(s => <button key={s.id} disabled={busy} className={s.id === current ? 'active' : ''} onClick={() => { setCurrent(s.id); setTurns(s.turns); setWorking(null); setRunningQuestion(''); setPrompt(''); setContext(null); setStage('done'); setTab(s.turns.at(-1)?.mode === 'compare' ? 'drafts' : 'answer'); }}><MessageSquare size={15} /><span>{s.title}</span></button>) : <p className="history-empty">Good ideas start with a question.<br />Your sessions will appear here.</p>}</div>
         <div className="sidebar-bottom-card"><span className="tiny-orbits">◎ <span>✳</span> ✦</span><strong>Different perspectives.<br />A stronger answer.</strong><p>Independent thinking.<br />Collective intelligence.</p><button onClick={() => setHelp(true)}>How Trio works <ChevronRight size={14} /></button></div>
       </SidebarContent>
       <SidebarFooter className="sidebar-foot"><span className="avatar">Y</span><div>Your workspace<small><ShieldCheck size={12} /> Private by default</small></div><button aria-label="About Trio" onClick={() => setHelp(true)}><CircleHelp size={17} /></button></SidebarFooter>
@@ -122,6 +133,7 @@ export default function Home() {
     </main>
     <Dialog open={settings} onOpenChange={setSettings}><DialogContent className="connections-dialog"><DialogTitle>Connect your AI team</DialogTitle><DialogDescription>Use API keys from each provider. Consumer subscriptions and API billing are separate. Keys stay in this tab’s memory and are sent securely to the server only to make your requests.</DialogDescription><div className="connection-mode"><div><strong>Demo mode</strong><p>Explore the workflow with prepared examples.</p></div><Switch checked={demo} disabled={busy} onCheckedChange={setDemo} aria-label="Demo mode" /></div>{providers.map(p => <div className="connection-row" key={p.id}><div className="connection-header"><Mark id={p.id} small /><strong>{p.name}</strong><a href={p.id === 'openai' ? 'https://platform.openai.com/api-keys' : p.id === 'claude' ? 'https://platform.claude.com/settings/keys' : 'https://aistudio.google.com/apikey'} target="_blank" rel="noreferrer">Get API key ↗</a><Switch aria-label={`Enable ${p.name}`} disabled={busy} checked={connections[p.id].enabled} onCheckedChange={enabled => setConnections(c => ({ ...c, [p.id]: { ...c[p.id], enabled } }))} /></div><label>API key<input type="password" autoComplete="off" spellCheck={false} disabled={busy} placeholder="Paste your API key" value={connections[p.id].key} onChange={e => setConnections(c => ({ ...c, [p.id]: { ...c[p.id], key: e.target.value.trim() } }))} /></label><label>Model ID<input value={connections[p.id].model} disabled={busy} spellCheck={false} onChange={e => setConnections(c => ({ ...c, [p.id]: { ...c[p.id], model: e.target.value.trim() } }))} /></label></div>)}<div className="lead-setting"><label>Preferred synthesis model</label><Select value={lead} onValueChange={v => setLead(v as ProviderId)} disabled={busy}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{providers.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></div><div className="connection-mode"><div><strong>Remember sessions on this device</strong><p>Stores prompts and answers locally. API keys are never saved.</p></div><Switch checked={remember} onCheckedChange={setRemember} aria-label="Remember sessions on this device" /></div><div className="dialog-actions"><button className="subtle-button" disabled={busy} onClick={() => { setConnections(freshConnections()); setDemo(true); toast('API keys cleared'); }}>Clear keys</button><button className="run-button" onClick={() => { setSettings(false); if (!demo && !connected) toast('Add at least one API key to run live.'); }}>Done<Check size={15} /></button></div></DialogContent></Dialog>
     <Dialog open={help} onOpenChange={setHelp}><DialogContent><DialogTitle>Three minds. One workspace.</DialogTitle><DialogDescription>Trio coordinates OpenAI, Anthropic, and Google model APIs.</DialogDescription><div className="help-steps"><p><strong>01 · Think independently</strong>Each enabled model answers your question with the same context.</p><p><strong>02 · Challenge the answers</strong>Council mode asks each model to review anonymized drafts and flag gaps or disagreements.</p><p><strong>03 · Bring it together</strong>Your preferred model writes the final answer. If it fails, another participating model takes over.</p><p>Trio currently supports text, code, and text-file context. It does not browse the web, execute code, or generate images. A shared answer can still be wrong.</p><p>API usage is billed by each provider. Connect only the models you want to use. Sessions stay in memory unless you enable local history.</p></div></DialogContent></Dialog>
+    <AlertDialog open={clearHistory} onOpenChange={setClearHistory}><AlertDialogContent><AlertDialogTitle>Clear session history?</AlertDialogTitle><AlertDialogDescription>This removes all saved sessions from this device and clears the current conversation. Export any answers you want to keep first.</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep sessions</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { setSessions([]); newSession(); toast('Session history cleared'); }}>Clear all sessions</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     <Toaster theme="dark" position="bottom-right" richColors />
   </SidebarProvider>;
 }
