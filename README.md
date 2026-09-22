@@ -69,6 +69,7 @@ see [.env.example](.env.example) for the full list.
 | `MAX_OUTPUT_TOKENS` | `4000` | Response length cap per model call |
 | `MODEL_TIMEOUT_SECONDS` | `240` | Per-call timeout |
 | `MAX_CONCURRENT_RUNS` | `8` | Simultaneous questions per server instance |
+| `TRIO_DB` | `./trio.db` | SQLite file for saved conversations; use a persistent volume in containers |
 
 ## API
 
@@ -89,6 +90,33 @@ Consumers should ignore event types and fields they don't recognise. With
 `GET /api/status` reports which models are configured; `GET /healthz` is the
 health check. If `APP_PASSWORD` is set, send it as the `X-App-Password` header.
 
+## Saved conversations (Python app)
+
+Completed answers are saved to SQLite with their drafts, reviews, model metadata,
+timing, and any usage information. The browser URL becomes `/c/<random-id>`;
+refreshing or opening that link restores the full conversation. A shared link
+opens read-only; **Continue conversation** enables another question. **Copy
+conversation link** copies its URL, and **New conversation** starts a separate
+thread without deleting the old one. Incomplete or failed answers are not saved.
+
+There are no individual accounts: the unguessable link is a bearer capability.
+Anyone with that link can read or continue the conversation, and must also know
+`APP_PASSWORD` when it is set. The HTML shell contains no saved content; reads
+use the password-gated API and are marked `no-store`. Keep links private when
+the content is sensitive. Prompts and answers are stored unencrypted on the
+server's disk; API keys are not part of the records. Back up the database to
+retain conversations. The hosted `web/` workspace uses its separate opt-in
+browser history and does not share this SQLite database.
+
+`GET /api/conversations/<id>` returns the saved turns. Send `conversation_id`
+with `POST /api/ask` to continue using the stored history. Optional
+`expected_turns` rejects a stale tab with HTTP 409 before calling models. A
+concurrent change during generation returns `save_error` without overwriting
+the other answer. The browser keeps the unsaved answer visible for copying.
+Streaming responses add `saved` after `final`, carrying `conversation_id` and
+`turn_count`, or `save_error` if storage fails, then `done`. JSON responses carry
+those fields directly. A save failure never masquerades as a saved link.
+
 ## Deploy
 
 A `Dockerfile` is included and respects `PORT`, so Railway, Cloud Run, Fly.io
@@ -98,6 +126,10 @@ and similar all work as-is. Two things before you expose it to the internet:
    API credits.
 2. Each thorough question makes ~7 model calls, so watch your spend; lower
    `MAX_CONCURRENT_RUNS` if you need a tighter cap.
+3. Mount a persistent volume and set `TRIO_DB` to a file on it. Railway and
+   Cloud Run container filesystems can be ephemeral; an unmounted database may
+   disappear on restart or redeploy. Keep SQLite on one server instance with a
+   supported local volume; use a shared database before scaling across hosts.
 
 ## Tests
 
@@ -107,4 +139,9 @@ pytest
 ```
 
 The tests run the whole pipeline in mock mode — no keys, no network.
+Each test uses a temporary database. With Playwright installed, browser checks
+can also run against a local mock server on port 8000 started with
+`APP_PASSWORD=local-browser-test` and a disposable `TRIO_DB` path:
+`node tests/browser-conversations.mjs`. Set `PLAYWRIGHT_MODULE` to a bundled
+Playwright module URL if needed; the default browser channel is Microsoft Edge.
 

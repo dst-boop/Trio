@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
 <title>Trio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='4' width='6' height='24' rx='3' fill='%23B45309'/><rect x='13' y='4' width='6' height='24' rx='3' fill='%230F766E'/><rect x='22' y='4' width='6' height='24' rx='3' fill='%234338CA'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,6 +42,8 @@ h1 { font: 700 2.6rem/1 var(--display); letter-spacing: -0.03em; margin: 0 0 .6r
 .dot { width: .65rem; height: .65rem; border-radius: 50%; background: var(--c); flex: none; }
 [data-m="claude"] { --c: var(--claude); } [data-m="openai"] { --c: var(--openai); } [data-m="gemini"] { --c: var(--gemini); }
 .banner { margin-top: 1rem; padding: .7rem .9rem; border-radius: .6rem; background: var(--surface); border: 1px solid var(--line); font-size: .92rem; }
+.saved-tools { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; font-size: .9rem; color: var(--muted); }
+[hidden] { display: none !important; }
 
 #thread { padding-bottom: 1rem; flex: 1; }
 .turn { margin: 0 0 2.25rem; }
@@ -107,6 +110,7 @@ textarea { width: 100%; border: 0; outline: 0; resize: none; background: transpa
     <p class="lede">Claude, ChatGPT and Gemini each answer your question, check one another's work, and then one final answer is written from all three.</p>
     <ul class="roster" id="roster" aria-label="Models in use"></ul>
     <div class="banner" id="banner" hidden></div>
+    <div class="saved-tools" id="saved-tools" hidden><span id="saved-label">Saved on this server</span><button class="link" id="share" type="button">Copy conversation link</button><button class="link" id="continue" type="button" hidden>Continue conversation</button><a class="link" href="/">New conversation</a></div>
   </header>
 
   <main id="thread" aria-live="polite"></main>
@@ -135,6 +139,9 @@ const NAMES = { claude: "Claude", openai: "ChatGPT", gemini: "Gemini" };
 
 let history = [];          // [{role, content}] of questions and final answers
 let busy = false;
+let conversationId = location.pathname.startsWith('/c/') ? location.pathname.slice(3) : null;
+let turnCount = 0, saveFailed = false;
+if (conversationId) $('#form').hidden = true;
 
 const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
                 set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
@@ -144,7 +151,7 @@ async function loadStatus() {
   const r = await fetch("/api/status", { headers: headers() });
   if (r.status === 401) {
     const pw = prompt("Password for this Trio server:");
-    if (pw == null) return;
+    if (pw == null) return false;
     store.set("trio_pw", pw);
     return loadStatus();
   }
@@ -161,6 +168,25 @@ async function loadStatus() {
   if (s.mock) { banner.hidden = false; banner.textContent = "Demo mode: answers are fake. Add API keys to .env and remove TRIO_MOCK to go live."; }
   else if (!on.size) { banner.hidden = false; banner.textContent = "No API keys found. Add them to the .env file and restart the server."; }
   else if (on.size < 3) { banner.hidden = false; banner.textContent = "Running with fewer than three models. Add the missing API keys to .env to use all of them."; }
+  return true;
+}
+
+async function restoreConversation() {
+  if (!conversationId) return;
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, { headers: headers(), cache: 'no-store' });
+  if (!response.ok) throw new Error(response.status === 404 ? 'This conversation could not be found.' : 'Could not open this conversation. Check the server password and reload.');
+  const saved = await response.json();
+  history = []; $('#thread').replaceChildren(); turnCount = saved.turns.length;
+  for (const turn of saved.turns) {
+    const ui = newTurn(turn.question); ui.question = turn.question;
+    ui.drafts = turn.result.drafts; ui.reviews = turn.result.reviews;
+    showFinal(ui, { ...turn.result, text: turn.result.answer, by: turn.result.written_by });
+    for (const [step, message] of Object.entries(turn.result.errors || {})) ui.turn.append(el('p', 'note', `${step}: ${message}`));
+    history.push({ role: 'user', content: turn.question }, { role: 'assistant', content: turn.result.answer });
+  }
+  $('#saved-tools').hidden = false; $('#continue').hidden = false;
+  $('#saved-label').textContent = 'Saved conversation · Read-only';
+  window.scrollTo(0, 0);
 }
 
 function newTurn(question) {
@@ -270,6 +296,15 @@ function handle(ui, ev) {
       ui.live?.card.remove(); ui.live = null;
       ui.turn.append(el("p", "note", ev.message));
       break;
+    case "saved":
+      conversationId = ev.conversation_id; turnCount = ev.turn_count;
+      window.history.replaceState(null, '', `/c/${conversationId}`);
+      $('#saved-tools').hidden = false; $('#saved-label').textContent = 'Saved on this server';
+      break;
+    case "save_error":
+      saveFailed = true; $('#share').hidden = true;
+      ui.turn.append(el('p', 'note', ev.message + ' Copy your answer, then reload or start a new conversation.'));
+      break;
   }
 }
 
@@ -278,12 +313,13 @@ async function ask(question) {
   let res;
   try {
     res = await fetch("/api/ask", { method: "POST", headers: headers(),
-      body: JSON.stringify({ question, history, thorough: $("#thorough").checked, stream: true }) });
+      body: JSON.stringify({ question, history: conversationId ? [] : history.slice(-40), conversation_id: conversationId, expected_turns: conversationId ? turnCount : null, thorough: $("#thorough").checked, stream: true }) });
   } catch { return handle(ui, { type: "error", message: "Can't reach the server. Check that it's running and try again." }); }
   if (res.status === 401) { store.set("trio_pw", ""); await loadStatus(); return handle(ui, { type: "error", message: "Password needed. Enter it, then ask again." }); }
+  if (res.status === 409) return handle(ui, { type: 'save_error', message: 'This conversation changed in another tab. Reload before continuing.' });
   if (!res.ok) return handle(ui, { type: "error", message: `The server returned an error (${res.status}). Try again.` });
 
-  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", completed = false;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -291,9 +327,10 @@ async function ask(question) {
     let i;
     while ((i = buf.indexOf("\n\n")) >= 0) {
       const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
-      if (line.startsWith("data:")) handle(ui, JSON.parse(line.slice(5)));
+      if (line.startsWith("data:")) { const event = JSON.parse(line.slice(5)); if (event.type === 'done') completed = true; handle(ui, event); }
     }
   }
+  if (!completed) handle(ui, { type: 'save_error', message: 'The connection ended before the session was confirmed saved.' });
 }
 
 const q = $("#q");
@@ -304,15 +341,22 @@ q.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.
 $("#form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const question = q.value.trim();
-  if (!question || busy) return;
+  if (!question || busy || saveFailed) return;
   busy = true; $("#go").disabled = true; $("#go").textContent = "Working"; q.value = ""; grow();
   try { await ask(question); }
-  finally { busy = false; $("#go").disabled = false; $("#go").textContent = "Ask all three"; }
+  catch { handle({ turn: $('#thread').lastElementChild }, { type: 'save_error', message: 'The connection was interrupted. Your latest answer may not be saved.' }); }
+  finally { busy = false; $("#go").disabled = saveFailed; $("#go").textContent = "Ask all three"; }
 });
 
-$("#reset").addEventListener("click", () => { if (busy) return; history = []; $("#thread").replaceChildren(); $("#reset").hidden = true; q.focus(); });
+$("#reset").addEventListener("click", () => { if (busy) return; history = []; conversationId = null; turnCount = 0; saveFailed = false; window.history.replaceState(null, '', '/'); $("#thread").replaceChildren(); $("#reset").hidden = true; $('#saved-tools').hidden = true; $('#share').hidden = false; $('#go').disabled = false; q.focus(); });
+$('#continue').addEventListener('click', () => { $('#form').hidden = false; $('#continue').hidden = true; $('#reset').hidden = false; $('#saved-label').textContent = 'Continuing saved conversation'; q.focus(); });
+$('#share').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(new URL(`/c/${conversationId}`, location.origin).href); $('#saved-label').textContent = 'Link copied · Anyone with the link and server password can read or continue'; }
+  catch { $('#saved-label').textContent = 'Copy the conversation URL from the address bar'; }
+});
+window.addEventListener('popstate', () => location.reload());
 
-loadStatus();
+loadStatus().then(ok => { if (ok) return restoreConversation(); }).catch(error => { $('#banner').hidden = false; $('#banner').textContent = error.message || 'Could not connect. Reload to try again.'; });
 </script>
 </body>
 </html>
