@@ -16,11 +16,17 @@ Existing browser history is never uploaded automatically. Open **Back up & resto
 
 Production provisioning uses .openai/hosting.json with d1=DB and the checked-in Drizzle migration; the Sites build copies migrations into dist/.openai/drizzle. Apply that same SQL to the local D1 binding before account browser tests. Tests use the scaffold's local mock sign-in; real ChatGPT OAuth is provided by Sites.
 
+## Provider access checks
+
+Connections checks the provider's model metadata endpoint: [OpenAI Models](https://developers.openai.com/api/reference/resources/models/methods/retrieve), [Claude Models](https://platform.claude.com/docs/en/api/models/retrieve), or [Gemini Models](https://ai.google.dev/api/models). It makes one GET request without generating text, sending prompts, or saving credentials. Only the selected key goes to its own fixed vendor endpoint; redirects are rejected. Checks require sign-in and a same-origin JSON request, with bounded input and response bodies, cancellation, a 15-second vendor timeout, and fixed errors that never expose vendor diagnostics.
+
+**Access checked** means the key was accepted and model details were returned. It does not confirm available funds, generation permissions, image/PDF/search support, or answer quality. A key restricted from reading model metadata may fail this check while still allowing generation. Checks are optional. Editing a key or model, clearing keys, or closing Connections cancels pending checks and discards their results. Consumer chat subscriptions do not supply these API keys or API billing.
+
 ## Use the app
 
 Sign in from the welcome page and open your workspace first.
 
-1. Open Connections and add API keys for the providers you want to use.
+1. Open Connections and add API keys for the providers you want to use. Choose **Check access** to check each key and model before asking a question; one provider is enough to start.
 2. Turn Demo mode off. Keys stay in the current tab's memory and are cleared on reload.
 3. Choose Council (drafts → reviews → synthesis), Deep Council (drafts → reviews → revisions → synthesis), Quick synthesis (drafts → synthesis), or Compare (drafts only).
 4. Ask your question. Optionally attach a text, Markdown, CSV, JSON, or code file under 60 KB, one PNG, JPEG, or WebP image, and one PDF. Image and PDF bytes together must be under 4 MB. Images must be no larger than 8,000 pixels on either side. The preview shows exactly which image is attached.
@@ -126,6 +132,7 @@ Run browser checks with Playwright installed separately and a local dev server r
 ```sh
 node tests/browser-smoke.mjs
 node tests/browser-quality.mjs
+node tests/browser-connections.mjs
 node tests/browser-deep-council.mjs
 node tests/browser-history.mjs
 node tests/browser-storage.mjs
