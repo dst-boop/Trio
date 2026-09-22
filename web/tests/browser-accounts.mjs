@@ -15,7 +15,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: 'test-output/accounts-welcome-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.setViewportSize({ width: 1440, height: 1050 });
-  await page.getByRole('link', { name: 'Get started with ChatGPT' }).click(); await page.getByText('Saved to your account', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Sign in with ChatGPT' }).click(); await page.getByText('Saved to your account', { exact: true }).waitFor();
   const snapshot = await (await page.request.get(baseUrl + '/api/workspace')).json();
   await context.setExtraHTTPHeaders({ 'X-Trio-Account': snapshot.accountId });
   assert.equal((await page.request.put(baseUrl + '/api/workspace', { headers: { origin: baseUrl, 'X-Trio-Account': 'different-account' }, data: { revision: snapshot.revision, sessions: [] } })).status(), 401);
@@ -52,7 +52,26 @@ try {
   await page.getByRole('group', { name: 'Session: Saved from first device', exact: true }).getByRole('button', { name: 'Session actions', exact: true }).click(); await page.getByRole('menuitem', { name: 'Rename session' }).click(); await page.getByRole('textbox', { name: 'Session name', exact: true }).fill('Recovered after retry'); await page.getByRole('button', { name: 'Save name', exact: true }).click();
   await page.getByText('Temporary save failure', { exact: true }).waitFor(); assert.equal((await (await page.request.get(baseUrl + '/api/workspace')).json()).sessions[0].title, 'Saved from first device');
   failSave = false; await page.getByRole('button', { name: 'Retry saving', exact: true }).click(); await page.getByText('Saved to your account', { exact: true }).waitFor(); assert.equal((await (await page.request.get(baseUrl + '/api/workspace')).json()).sessions[0].title, 'Recovered after retry');
-  await page.getByRole('link', { name: 'Sign out', exact: true }).click(); await page.getByRole('link', { name: 'Get started with ChatGPT' }).waitFor();
+  // The server commits, but the browser never receives its acknowledgment.
+  await page.unroute('**/api/workspace');
+  const beforeLost = await (await page.request.get(baseUrl + '/api/workspace')).json();
+  const attempts = []; let loseResponse = true;
+  await page.route('**/api/workspace', async route => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    attempts.push(route.request().postDataJSON());
+    if (!loseResponse) return route.continue();
+    loseResponse = false; const saved = await route.fetch(); assert.equal(saved.status(), 200); await route.abort('connectionreset');
+  });
+  const rename = async (from, to) => {
+    await page.getByRole('group', { name: `Session: ${from}`, exact: true }).getByRole('button', { name: 'Session actions', exact: true }).click(); await page.getByRole('menuitem', { name: 'Rename session' }).click(); await page.getByRole('textbox', { name: 'Session name', exact: true }).fill(to); await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  };
+  await rename('Recovered after retry', 'Committed without acknowledgment'); await page.getByText('Account history needs attention').waitFor();
+  const committed = await (await page.request.get(baseUrl + '/api/workspace')).json(); assert.equal(committed.revision, beforeLost.revision + 1); assert.equal(committed.sessions[0].title, 'Committed without acknowledgment');
+  await rename('Committed without acknowledgment', 'Edited after lost response');
+  await page.getByRole('button', { name: 'Retry saving', exact: true }).click(); await page.getByText('Saved to your account', { exact: true }).waitFor();
+  const afterRetry = await (await page.request.get(baseUrl + '/api/workspace')).json(); assert.equal(afterRetry.revision, beforeLost.revision + 2); assert.equal(afterRetry.sessions[0].title, 'Edited after lost response');
+  assert.equal(attempts.length, 3); assert.deepEqual(attempts[1], attempts[0]); assert.notEqual(attempts[2].requestId, attempts[0].requestId); assert.equal(attempts[2].revision, committed.revision);
+  await page.getByRole('link', { name: 'Sign out', exact: true }).click(); await page.getByRole('link', { name: 'Sign in with ChatGPT' }).waitFor();
   assert.equal((await page.request.get(baseUrl + '/api/workspace')).status(), 401);
   assert.equal((await page.request.post(baseUrl + '/api/ask', { data: {} })).status(), 401);
   await otherContext.close(); assert.deepEqual(errors, []);

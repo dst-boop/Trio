@@ -58,6 +58,13 @@ async generator of plain dict events that drives all three frontends.
 
 ## Hosted workspace
 
+- **Invite-only access is the owner's current requirement.** Keep the Sites
+  audience `custom` and preserve its invitation allowlist. Do not enable public
+  access unless the owner explicitly requests that change in a later instruction.
+  Adding accounts must be by invitation; a deployment is not permission to open
+  registration. Keep personalization private to each account and controllable by
+  its user. Do not claim that model agreement guarantees accuracy or no bias.
+
 - Run commands from `web/`: `pnpm install --frozen-lockfile`, `pnpm test`,
   `pnpm typecheck`, and `pnpm build`. Use Node 24 and the pnpm version in
   `web/package.json`. GitHub Actions checks the Python and hosted apps.
