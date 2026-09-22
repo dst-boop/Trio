@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readUsage, estimateStandardCost } from '../lib/usage.ts';
+import { readUsage, estimateStandardCost, summarizeUsage } from '../lib/usage.ts';
 import { orchestrate, callProvider } from '../lib/orchestrate.ts';
 import { freshConnections, type RunEvent } from '../lib/trio.ts';
 import { parseSessions, sessionMarkdown } from '../lib/sessions.ts';
@@ -23,6 +23,15 @@ test('standard rates expire and unknown or cached models have no invented cost',
   assert.equal(estimateStandardCost('custom-model', tokens, now), null);
   assert.equal(estimateStandardCost('claude-sonnet-5', { ...tokens, cached: 10 }, now), null);
   assert.equal(estimateStandardCost('gemini-3.8-flash', tokens, Date.parse('2027-01-01')), null);
+});
+
+test('in-flight provider rows never price incomplete token counts as a complete bill', () => {
+  const pending = { model: 'gpt-6-astra', calls: 2, reportedCalls: 1, inputTokens: 100, outputTokens: 20, costUSD: .002 };
+  const snapshot = summarizeUsage({ openai: pending });
+  assert.equal(snapshot.costUSD, null); assert.equal(snapshot.byProvider.openai?.costUSD, null);
+  assert.equal(pending.costUSD, .002, 'The running accumulator remains intact for eventual complete usage');
+  pending.reportedCalls = 2;
+  assert.equal(summarizeUsage({ openai: pending }).costUSD, .002);
 });
 
 function fixture(failFinal = false, missingGemini = false) {
