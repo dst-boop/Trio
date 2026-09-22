@@ -152,14 +152,14 @@ def test_broken_draft_stream_restarts_and_recovers(monkeypatch):
     import orchestrator
     from providers import Provider
 
-    async def ask(client, model, key, system, messages):
+    async def ask(client, model, key, system, messages, usage=None):
         return "recovered draft" if "reviewer" not in system.lower() else "review"
 
-    async def dying_stream(client, model, key, system, messages):
+    async def dying_stream(client, model, key, system, messages, usage=None):
         yield "doomed "
         raise RuntimeError("stream died")
 
-    async def fine_stream(client, model, key, system, messages):
+    async def fine_stream(client, model, key, system, messages, usage=None):
         yield "fine "
         yield "answer"
 
@@ -191,10 +191,10 @@ def test_broken_stream_restarts_the_final_answer(monkeypatch):
     import orchestrator
     from providers import Provider
 
-    async def draft(client, model, key, system, messages):
+    async def draft(client, model, key, system, messages, usage=None):
         return "complete answer"
 
-    async def dying_stream(client, model, key, system, messages):
+    async def dying_stream(client, model, key, system, messages, usage=None):
         yield "partial "
         raise RuntimeError("stream died")
 
@@ -214,6 +214,22 @@ def test_broken_stream_restarts_the_final_answer(monkeypatch):
     assert len(starts) == 2, "the abandoned stream must be followed by a restart"
     assert deltas and all(starts[0] < i < starts[1] for i in deltas)
     assert final["text"] == "complete answer" and final["by"] == "claude"
+
+
+def test_final_event_reports_usage(client):
+    out = client.post("/api/ask", json={"question": "hi", "stream": False}).json()
+    u = out["usage"]
+    assert set(u["models"]) == {"claude", "openai", "gemini"}
+    assert u["input"] == sum(m["input"] for m in u["models"].values()) > 0
+    assert u["output"] == sum(m["output"] for m in u["models"].values()) > 0
+    assert u["cost"] is None  # mock "models" are not in the price table
+
+
+def test_cost_estimate_uses_price_table():
+    from providers import estimate_cost
+    assert estimate_cost("claude-opus-5", 1_000_000, 1_000_000) == 30.0
+    assert estimate_cost("claude-opus-5", 200_000, 40_000) == 2.0
+    assert estimate_cost("some-unknown-model", 1000, 1000) is None
 
 
 def test_synthesizer_preference_is_respected(client, monkeypatch):

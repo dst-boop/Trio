@@ -79,9 +79,12 @@ With `stream: true` (what the UI uses) the response is Server-Sent Events:
 answer streams in as `final_start` + repeated `final_delta` chunks, and one
 `final` event carries the complete text, ending with `done`. A repeated
 `draft_start`/`final_start` for the same model means that answer restarts
-from scratch. Consumers should ignore event types they don't recognise. With `stream: false` you get a
-single JSON object with `answer`, `written_by`, `drafts`, `reviews` and
-`seconds`.
+from scratch. The `final` event also carries `usage`: per-model and total
+tokens, with an estimated dollar `cost` when every model used is in the
+price table in [providers.py](providers.py) (otherwise `cost` is null).
+Consumers should ignore event types and fields they don't recognise. With
+`stream: false` you get a single JSON object with `answer`, `written_by`,
+`drafts`, `reviews`, `usage` and `seconds`.
 
 `GET /api/status` reports which models are configured; `GET /healthz` is the
 health check. If `APP_PASSWORD` is set, send it as the `X-App-Password` header.

@@ -19,6 +19,22 @@ Message = dict  # {"role": "user" | "assistant", "content": str}
 RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 MAX_ATTEMPTS = 3
 
+# USD per million tokens (input, output), for the cost shown with each answer.
+# Prices change - update me. A model not listed here shows tokens only.
+PRICES = {
+    "claude-opus-5": (5.00, 25.00),
+    "gpt-6-astra": (10.00, 50.00),
+    "gemini-3.8-flash": (0.75, 3.75),  # intro rate; $1.50/$7.50 from Jan 2027
+}
+
+
+def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """Estimated USD for one call, or None when the model has no price entry."""
+    price = PRICES.get(model)
+    if not price:
+        return None
+    return (input_tokens * price[0] + output_tokens * price[1]) / 1_000_000
+
 
 class ProviderError(Exception):
     pass
@@ -78,20 +94,23 @@ async def _sse(client: httpx.AsyncClient, url: str, headers: dict, body: dict) -
 # --------------------------------------------------------------------------
 # Claude (Anthropic Messages API)
 # --------------------------------------------------------------------------
-async def ask_claude(client, model, key, system: str, messages: list[Message]) -> str:
+async def ask_claude(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> str:
     data = await _post(
         client,
         "https://api.anthropic.com/v1/messages",
         {"x-api-key": key, "anthropic-version": "2023-06-01"},
         {"model": model, "max_tokens": _max_tokens(), "system": system, "messages": messages},
     )
+    if usage is not None:
+        u = data.get("usage") or {}
+        usage.update(input=u.get("input_tokens") or 0, output=u.get("output_tokens") or 0)
     text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
     if not text.strip():
         raise ProviderError(f"empty response (stop_reason={data.get('stop_reason')})")
     return text.strip()
 
 
-async def stream_claude(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
+async def stream_claude(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> AsyncIterator[str]:
     events = _sse(
         client,
         "https://api.anthropic.com/v1/messages",
@@ -107,6 +126,12 @@ async def stream_claude(client, model, key, system: str, messages: list[Message]
             delta = ev.get("delta") or {}
             if delta.get("type") == "text_delta" and delta.get("text"):
                 yield delta["text"]
+        elif kind == "message_start" and usage is not None:
+            u = (ev.get("message") or {}).get("usage") or {}
+            usage["input"] = u.get("input_tokens") or 0
+        elif kind == "message_delta" and usage is not None:
+            u = ev.get("usage") or {}
+            usage["output"] = u.get("output_tokens") or usage.get("output", 0)
         elif kind == "message_stop":
             done = True
         elif kind == "error":
@@ -119,7 +144,7 @@ async def stream_claude(client, model, key, system: str, messages: list[Message]
 # ChatGPT (OpenAI Chat Completions API)
 # Note: current OpenAI reasoning models reject custom temperature, so none is sent.
 # --------------------------------------------------------------------------
-async def ask_openai(client, model, key, system: str, messages: list[Message]) -> str:
+async def ask_openai(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> str:
     data = await _post(
         client,
         "https://api.openai.com/v1/chat/completions",
@@ -131,6 +156,9 @@ async def ask_openai(client, model, key, system: str, messages: list[Message]) -
             "messages": [{"role": "developer", "content": system}, *messages],
         },
     )
+    if usage is not None:
+        u = data.get("usage") or {}
+        usage.update(input=u.get("prompt_tokens") or 0, output=u.get("completion_tokens") or 0)
     choice = (data.get("choices") or [{}])[0]
     text = (choice.get("message") or {}).get("content") or ""
     if not text.strip():
@@ -138,13 +166,14 @@ async def ask_openai(client, model, key, system: str, messages: list[Message]) -
     return text.strip()
 
 
-async def stream_openai(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
+async def stream_openai(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> AsyncIterator[str]:
     events = _sse(
         client,
         "https://api.openai.com/v1/chat/completions",
         {"Authorization": f"Bearer {key}"},
         {"model": model, "max_completion_tokens": _max_tokens() * 3,
-         "messages": [{"role": "developer", "content": system}, *messages], "stream": True},
+         "messages": [{"role": "developer", "content": system}, *messages],
+         "stream": True, "stream_options": {"include_usage": True}},
     )
     done = False
     async for data in events:
@@ -152,6 +181,9 @@ async def stream_openai(client, model, key, system: str, messages: list[Message]
             done = True
             break
         ev = json.loads(data)
+        u = ev.get("usage")
+        if u and usage is not None:  # final chunk before [DONE] carries the totals
+            usage.update(input=u.get("prompt_tokens") or 0, output=u.get("completion_tokens") or 0)
         piece = ((ev.get("choices") or [{}])[0].get("delta") or {}).get("content")
         if piece:
             yield piece
@@ -162,7 +194,14 @@ async def stream_openai(client, model, key, system: str, messages: list[Message]
 # --------------------------------------------------------------------------
 # Gemini (Google generateContent API)
 # --------------------------------------------------------------------------
-async def ask_gemini(client, model, key, system: str, messages: list[Message]) -> str:
+def _gemini_usage(data: dict, usage: dict | None) -> None:
+    u = data.get("usageMetadata")
+    if u and usage is not None:  # thinking tokens are billed as output
+        usage["input"] = u.get("promptTokenCount") or 0
+        usage["output"] = (u.get("candidatesTokenCount") or 0) + (u.get("thoughtsTokenCount") or 0)
+
+
+async def ask_gemini(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> str:
     contents = [
         {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
         for m in messages
@@ -177,6 +216,7 @@ async def ask_gemini(client, model, key, system: str, messages: list[Message]) -
             "generationConfig": {"maxOutputTokens": _max_tokens() * 3},
         },
     )
+    _gemini_usage(data, usage)
     cand = (data.get("candidates") or [{}])[0]
     parts = (cand.get("content") or {}).get("parts") or []
     text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
@@ -186,7 +226,7 @@ async def ask_gemini(client, model, key, system: str, messages: list[Message]) -
     return text.strip()
 
 
-async def stream_gemini(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
+async def stream_gemini(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> AsyncIterator[str]:
     contents = [
         {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
         for m in messages
@@ -204,6 +244,7 @@ async def stream_gemini(client, model, key, system: str, messages: list[Message]
     done = False
     async for data in events:
         ev = json.loads(data)
+        _gemini_usage(ev, usage)
         cand = (ev.get("candidates") or [{}])[0]
         for p in (cand.get("content") or {}).get("parts") or []:
             if p.get("text") and not p.get("thought"):
@@ -217,25 +258,35 @@ async def stream_gemini(client, model, key, system: str, messages: list[Message]
 # --------------------------------------------------------------------------
 # Mock provider: lets you try the whole app with no API keys (TRIO_MOCK=1)
 # --------------------------------------------------------------------------
+def _mock_usage(usage: dict | None, messages: list[Message], text: str) -> None:
+    if usage is not None:  # plausible fake numbers so the usage path is testable offline
+        usage["input"] = 100 + len(messages[-1]["content"]) // 4
+        usage["output"] = max(1, len(text) // 4)
+
+
 def _mock(label: str):
-    async def ask(client, model, key, system: str, messages: list[Message]) -> str:
+    async def ask(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> str:
         await asyncio.sleep(0.4 + random.random() * 1.2)
         q = messages[-1]["content"]
         if "final answer" in system.lower():
-            return f"**Mock final answer** written by {label}, combining all three drafts."
-        if "review" in system.lower():
-            return f"- {label} mock review: Response A is strongest; B misses a caveat."
-        return f"Mock draft from **{label}** for: _{q[:80]}_"
+            text = f"**Mock final answer** written by {label}, combining all three drafts."
+        elif "review" in system.lower():
+            text = f"- {label} mock review: Response A is strongest; B misses a caveat."
+        else:
+            text = f"Mock draft from **{label}** for: _{q[:80]}_"
+        _mock_usage(usage, messages, text)
+        return text
     return ask
 
 
 def _mock_stream(label: str):
-    async def stream(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
+    async def stream(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> AsyncIterator[str]:
         if "final answer" in system.lower():
             text = f"**Mock final answer** streamed by {label}, combining all three drafts."
         else:
             q = messages[-1]["content"]
             text = f"Mock streamed draft from **{label}** for: _{q[:60]}_"
+        _mock_usage(usage, messages, text)
         for word in text.split(" "):
             await asyncio.sleep(0.05)
             yield word + " "
@@ -251,11 +302,13 @@ class Provider:
     fn: Callable[..., Awaitable[str]]
     stream_fn: Callable[..., AsyncIterator[str]] | None = None
 
-    async def ask(self, client: httpx.AsyncClient, system: str, messages: list[Message]) -> str:
-        return await self.fn(client, self.model, self.api_key, system, messages)
+    async def ask(self, client: httpx.AsyncClient, system: str, messages: list[Message],
+                  usage: dict | None = None) -> str:
+        return await self.fn(client, self.model, self.api_key, system, messages, usage)
 
-    def stream(self, client: httpx.AsyncClient, system: str, messages: list[Message]) -> AsyncIterator[str]:
-        return self.stream_fn(client, self.model, self.api_key, system, messages)
+    def stream(self, client: httpx.AsyncClient, system: str, messages: list[Message],
+               usage: dict | None = None) -> AsyncIterator[str]:
+        return self.stream_fn(client, self.model, self.api_key, system, messages, usage)
 
 
 def active_providers() -> list[Provider]:
