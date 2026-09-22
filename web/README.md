@@ -113,7 +113,13 @@ Use **Back up & restore** in the sidebar to download a versioned Trio JSON file 
 
 Import validates every record before making changes, then lets you select conversations. Identical content is skipped, even if another device assigned it a different ID. Changed versions with matching IDs are kept as separate copies. Existing sessions, the active conversation, and an unsent prompt remain intact. An import that would exceed the 30-session limit is blocked until fewer conversations are selected; it never silently evicts existing history.
 
-New backups use format version 3 so older clients reject them instead of silently discarding personal-memory snapshots. This client still reads versions 1 and 2, including early files already containing instructions or PDF metadata. Imported legacy files are exported as version 3. Account history writes require the matching client format header; an old open tab is asked to export unsaved work and reload rather than stripping new fields.
+New backups use format version 4 so older clients reject them instead of silently discarding feedback or personal-memory snapshots. This client still reads versions 1, 2, and 3, including early files already containing instructions or PDF metadata. Imported legacy files are exported as version 4. Account history writes require the matching client format header; an old open tab is asked to export unsaved work and reload rather than stripping new fields.
+
+## Private answer feedback
+
+Completed live answers and Compare perspectives offer **Helpful** and **Needs work** feedback, with an optional 2,000-character note. Edit or remove it at any time. Feedback stays with that answer in private account history (or follows the guest browser-history setting), including branches and JSON/Markdown exports. Saving feedback calls no AI provider and does not modify the original answer. Removing feedback does not remove notes previously approved in Personal memory or copies already exported or branched.
+
+**Suggest from conversation** includes feedback attached to the latest six live turns in the selected conversation. Only this explicit action sends it to the chosen model, alongside those turns and existing memory. Suggestions remain drafts until the user reviews and saves them. Ratings are not evidence of factual accuracy, do not automatically change future answers, and do not train model weights. Provider credentials remain request-scoped and are never part of feedback metadata.
 
 ## Private personal memory
 

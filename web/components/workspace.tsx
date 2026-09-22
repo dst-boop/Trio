@@ -19,6 +19,8 @@ import { RunCoverage, RunPipeline, answerLabel } from '@/components/run-coverage
 import { ResearchPanel } from '@/components/research-panel';
 import { BranchConversation } from '@/components/branch-conversation';
 import { branchConversation } from '@/lib/branch-conversation';
+import { AnswerFeedback } from '@/components/answer-feedback';
+import { setAnswerFeedback, type AnswerFeedback as Feedback } from '@/lib/answer-feedback';
 import { ConversationHistory } from '@/components/conversation-history';
 import { readRunStream } from '@/lib/read-run-stream';
 import { applyRunEvent } from '@/lib/run-events';
@@ -120,6 +122,15 @@ export default function Home({ account }: { account?: { userId: string; displayN
       clearContext(); clearImage(); clearPdf(); setStage('done'); setTab(copy.session.turns.at(-1)!.mode === 'compare' ? 'drafts' : 'answer'); setBranchPoint(null);
       toast.success('New conversation created. Your original is unchanged.'); promptRef.current?.focus();
     } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not create the conversation.'); }
+  }
+  function saveFeedback(index: number, feedback: Feedback | null): boolean {
+    if (busy || !current) return false;
+    try {
+      const updated = setAnswerFeedback(sessions, current, index, feedback);
+      setSessions(updated); setTurns(updated.find(s => s.id === current)!.turns);
+      toast.success(feedback ? 'Feedback recorded. Memory changes still need your review.' : 'Feedback removed from this answer.');
+      return true;
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not record feedback.'); return false; }
   }
   function saveTurn(question: string, result: Result) { const next = [...turns, { question, result, mode, ...(!result.demo && instructions.trim() ? { instructions: instructions.trim() } : {}), ...(!result.demo && attachedImage ? { imageName: attachedImage.name } : {}), ...(!result.demo && attachedPdf ? { pdfName: attachedPdf.name } : {}) }]; setTurns(next); const id = current ?? crypto.randomUUID(); setCurrent(id); setSessions(prev => [{ id, instructions, title: prev.find(s => s.id === id)?.title ?? next[0].question, turns: next, time: new Date().toISOString() }, ...prev.filter(s => s.id !== id)]); }
   async function delay(ms: number, signal: AbortSignal) { await new Promise<void>((resolve, reject) => { if (signal.aborted) return reject(new DOMException('Cancelled', 'AbortError')); const cancel = () => { clearTimeout(timer); reject(new DOMException('Cancelled', 'AbortError')); }; const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve(); }, ms); signal.addEventListener('abort', cancel, { once: true }); }); }
@@ -229,7 +240,8 @@ export default function Home({ account }: { account?: { userId: string; displayN
           {!working && <><InstructionsUsed value={turns.at(-1)?.instructions} /><MemoryUsed value={turns.at(-1)?.result.memory} /></>}
           {!working && turns.at(-1)?.imageName && <p className="revision-note">Image used: {turns.at(-1)?.imageName}. Image data is not saved; reattach it to revisit visual details.</p>}{!working && turns.at(-1)?.pdfName && <p className="revision-note">PDF used: {turns.at(-1)?.pdfName}. PDF data is not saved; reattach it to revisit document details.</p>}{displayed.usage && !displayed.demo && <UsageSummary usage={displayed.usage} />}
           {displayed.errors.length > 0 && <div className="error-box" role="alert"><strong>Some steps could not finish</strong>{Array.from(new Set(displayed.errors)).map((e, i) => <p key={i}>{e}</p>)}<button onClick={() => setSettings(true)}>Check connections</button></div>}
-          <ConversationHistory key={current ?? 'new'} turns={working ? turns : turns.slice(0, -1)} busy={busy} onBranch={current ? setBranchPoint : undefined} />
+          {!busy && !working && !displayed.demo && (displayed.answer || Object.values(displayed.drafts).some(Boolean)) && <AnswerFeedback key={current + ':' + (turns.length - 1)} value={turns.at(-1)?.feedback} busy={busy} account={!!account} onSave={value => saveFeedback(turns.length - 1, value)} />}
+          <ConversationHistory account={!!account} onFeedback={saveFeedback} key={current ?? 'new'} turns={working ? turns : turns.slice(0, -1)} busy={busy} onBranch={current ? setBranchPoint : undefined} />
         </section>}
         <footer className="workspace-footer"><span><ShieldCheck size={13} /> Your keys. Your workspace.</span><span>Different models can make the same mistake. Verify important answers.</span></footer>
       </div>
