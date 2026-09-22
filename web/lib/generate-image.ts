@@ -14,7 +14,7 @@ export async function generateImage(input: unknown, signal: AbortSignal, fetcher
     const response = await fetcher('https://api.openai.com/v1/images/generations', {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...options, model: imageGenerationModel, n: 1, output_format: 'jpeg', output_compression: 90, background: 'opaque', moderation: 'auto' }),
-      signal: combined, redirect: 'error', cache: 'no-store',
+      signal: combined, redirect: 'manual', cache: 'no-store',
     });
     if (!response.ok) {
       void response.body?.cancel().catch(() => {});

@@ -13,7 +13,7 @@ export async function transcribeAudio(input: unknown, signal: AbortSignal, fetch
   form.set('model', transcriptionModel); form.set('response_format', 'json');
   try {
     combined.throwIfAborted();
-    const response = await fetcher('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: combined, redirect: 'error', cache: 'no-store' });
+    const response = await fetcher('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: combined, redirect: 'manual', cache: 'no-store' });
     if (!response.ok) {
       void response.body?.cancel().catch(() => {});
       if (response.status === 401 || response.status === 403) throw new TranscriptionError('OpenAI rejected access. Check your API key and transcription permissions.');

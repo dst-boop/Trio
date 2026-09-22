@@ -8,7 +8,7 @@ test('access checks use only the selected vendor metadata endpoint and never gen
   for (const p of providers) {
     const result = await checkConnection({ provider: p.id, key: 'secret-for-'+p.id, model: p.model }, new AbortController().signal, (async (url, init) => {
       const host = p.id === 'openai' ? 'https://api.openai.com/v1/models/' : p.id === 'claude' ? 'https://api.anthropic.com/v1/models/' : 'https://generativelanguage.googleapis.com/v1beta/models/';
-      assert.equal(String(url), host + p.model); assert.equal(init!.method, 'GET'); assert.equal(init!.body, undefined); assert.equal(init!.redirect, 'error'); assert.equal(init!.cache, 'no-store');
+      assert.equal(String(url), host + p.model); assert.equal(init!.method, 'GET'); assert.equal(init!.body, undefined); assert.equal(init!.redirect, 'manual'); assert.equal(init!.cache, 'no-store');
       assert.deepEqual(init!.headers, p.id === 'openai' ? { Authorization: 'Bearer secret-for-openai' } : p.id === 'claude' ? { 'x-api-key': 'secret-for-claude', 'anthropic-version': '2023-06-01' } : { 'x-goog-api-key': 'secret-for-gemini' });
       return Response.json(p.id === 'openai' ? { object: 'model', id: p.model } : p.id === 'claude' ? { type: 'model', id: p.model+'-resolved' } : { name: 'models/'+p.model });
     }) as typeof fetch);

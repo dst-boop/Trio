@@ -34,7 +34,9 @@ export async function callProvider(id: ProviderId, key: string, model: string, i
   requestSignal.throwIfAborted();
   let response: Response;
   try {
-    response = await fetcher(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body as object, ...(streaming ? { stream: true } : {}) }), signal: requestSignal, redirect: 'error', cache: 'no-store' });
+    // Manual mode is supported by Workers; non-2xx responses below reject all
+    // redirects without forwarding credentials, prompts, or attachments.
+    response = await fetcher(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body as object, ...(streaming ? { stream: true } : {}) }), signal: requestSignal, redirect: 'manual', cache: 'no-store' });
   } catch {
     signal.throwIfAborted();
     if (streaming) throw new StreamInterrupted();

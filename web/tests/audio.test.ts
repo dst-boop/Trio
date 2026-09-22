@@ -19,7 +19,7 @@ test('transcription sends only the audio and its own key to the fixed OpenAI end
   let calls = 0;
   const text = await transcribeAudio(input, signal(), async (url, init) => {
     calls++; assert.equal(url, 'https://api.openai.com/v1/audio/transcriptions');
-    assert.equal(init?.method, 'POST'); assert.equal(init?.redirect, 'error'); assert.equal(init?.cache, 'no-store');
+    assert.equal(init?.method, 'POST'); assert.equal(init?.redirect, 'manual'); assert.equal(init?.cache, 'no-store');
     assert.deepEqual(init?.headers, { Authorization: 'Bearer private-test-key' });
     const form = init?.body as FormData;
     assert.deepEqual([...form.keys()].sort(), ['file', 'model', 'response_format']);
