@@ -203,6 +203,10 @@ For raw upload validation, build the app, start the local Worker with `pnpm star
 
 Real paid API calls have not been verified without user-provided keys. Model availability depends on each account; model IDs are editable in Connections.
 
+## Current date and time
+
+Each hosted live question includes one server-generated time reference shared by research, drafts, reviews, revisions, and synthesis. The browser sends its time zone (for example `America/New_York`), and the server derives the local calendar date from its own UTC clock. Older clients and browsers without a zone use UTC. Invalid zones are rejected before model calls. The zone is sent to participating providers as question context, not saved as an account preference. Explicit dates/locations in the question take precedence; the timestamp does not date historical conversation excerpts or verify current facts. `node tests/browser-current-time.mjs` exercises browser forwarding/fallback and the local built Worker’s validation without provider calls.
+
 ## API references
 
 - [OpenAI Responses API](https://developers.openai.com/api/docs/quickstart)
