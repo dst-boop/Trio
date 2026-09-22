@@ -39,6 +39,7 @@ async def main() -> int:
 
     question = " ".join(words)
     exit_code = 1
+    printed = 0  # final-answer chunks already written to stdout
     timeout = httpx.Timeout(float(os.getenv("MODEL_TIMEOUT_SECONDS", "240")), connect=10)
     async with httpx.AsyncClient(timeout=timeout) as client:
         async for ev in run(client, question, thorough=thorough):
@@ -54,12 +55,23 @@ async def main() -> int:
             elif t == "review" and not ev["text"]:
                 note(f"  {NAMES.get(ev['model'], ev['model'])}'s review failed: {ev['error']}")
             elif t == "stage" and ev["stage"] == "final":
-                note("Writing the final answer...")
+                note("Writing the final answer...\n")
+            elif t == "final_start":
+                if printed:  # an earlier stream broke off; this model starts the answer over
+                    print("\n")
+                    note(f"(That attempt broke off - {NAMES.get(ev['by'], ev['by'])} is starting over.)")
+                    printed = 0
+            elif t == "final_delta":
+                print(ev["text"], end="", flush=True)
+                printed += 1
             elif t == "final":
-                note(f"Done in {ev['seconds']}s (written by {NAMES.get(ev['by'], ev['by'])}).\n")
+                if printed:
+                    print(flush=True)
+                else:
+                    print(ev["text"])
+                note(f"\nDone in {ev['seconds']}s (written by {NAMES.get(ev['by'], ev['by'])}).")
                 if ev.get("note"):
                     note(ev["note"])
-                print(ev["text"])
                 exit_code = 0
             elif t == "error":
                 note(ev["message"])

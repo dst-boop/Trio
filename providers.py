@@ -6,10 +6,11 @@ except the model names in your .env file.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import random
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import AsyncIterator, Awaitable, Callable
 
 import httpx
 
@@ -54,6 +55,20 @@ async def _post(client: httpx.AsyncClient, url: str, headers: dict, body: dict) 
     raise ProviderError(last)
 
 
+async def _sse(client: httpx.AsyncClient, url: str, headers: dict, body: dict) -> AsyncIterator[dict]:
+    """POST a streaming request and yield each SSE data payload as a dict."""
+    async with client.stream("POST", url, headers=headers, json=body) as r:
+        if r.status_code >= 300:
+            detail = (await r.aread()).decode(errors="replace")[:300]
+            raise ProviderError(f"HTTP {r.status_code}: {detail}")
+        async for line in r.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data and data != "[DONE]":
+                yield json.loads(data)
+
+
 # --------------------------------------------------------------------------
 # Claude (Anthropic Messages API)
 # --------------------------------------------------------------------------
@@ -68,6 +83,23 @@ async def ask_claude(client, model, key, system: str, messages: list[Message]) -
     if not text.strip():
         raise ProviderError(f"empty response (stop_reason={data.get('stop_reason')})")
     return text.strip()
+
+
+async def stream_claude(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
+    events = _sse(
+        client,
+        "https://api.anthropic.com/v1/messages",
+        {"x-api-key": key, "anthropic-version": "2023-06-01"},
+        {"model": model, "max_tokens": _max_tokens(), "system": system,
+         "messages": messages, "stream": True},
+    )
+    async for ev in events:
+        if ev.get("type") == "content_block_delta":
+            delta = ev.get("delta") or {}
+            if delta.get("type") == "text_delta" and delta.get("text"):
+                yield delta["text"]
+        elif ev.get("type") == "error":
+            raise ProviderError((ev.get("error") or {}).get("message") or "stream error")
 
 
 # --------------------------------------------------------------------------
@@ -91,6 +123,20 @@ async def ask_openai(client, model, key, system: str, messages: list[Message]) -
     if not text.strip():
         raise ProviderError(f"empty response (finish_reason={choice.get('finish_reason')})")
     return text.strip()
+
+
+async def stream_openai(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
+    events = _sse(
+        client,
+        "https://api.openai.com/v1/chat/completions",
+        {"Authorization": f"Bearer {key}"},
+        {"model": model, "max_completion_tokens": _max_tokens() * 3,
+         "messages": [{"role": "developer", "content": system}, *messages], "stream": True},
+    )
+    async for ev in events:
+        piece = ((ev.get("choices") or [{}])[0].get("delta") or {}).get("content")
+        if piece:
+            yield piece
 
 
 # --------------------------------------------------------------------------
@@ -120,6 +166,27 @@ async def ask_gemini(client, model, key, system: str, messages: list[Message]) -
     return text.strip()
 
 
+async def stream_gemini(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
+    contents = [
+        {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
+        for m in messages
+    ]
+    events = _sse(
+        client,
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse",
+        {"x-goog-api-key": key},
+        {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": contents,
+            "generationConfig": {"maxOutputTokens": _max_tokens() * 3},
+        },
+    )
+    async for ev in events:
+        for p in ((ev.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []:
+            if p.get("text") and not p.get("thought"):
+                yield p["text"]
+
+
 # --------------------------------------------------------------------------
 # Mock provider: lets you try the whole app with no API keys (TRIO_MOCK=1)
 # --------------------------------------------------------------------------
@@ -135,6 +202,15 @@ def _mock(label: str):
     return ask
 
 
+def _mock_stream(label: str):
+    async def stream(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
+        text = f"**Mock final answer** streamed by {label}, combining all three drafts."
+        for word in text.split(" "):
+            await asyncio.sleep(0.05)
+            yield word + " "
+    return stream
+
+
 @dataclass
 class Provider:
     key: str          # "claude" | "openai" | "gemini"
@@ -142,24 +218,28 @@ class Provider:
     model: str
     api_key: str
     fn: Callable[..., Awaitable[str]]
+    stream_fn: Callable[..., AsyncIterator[str]] | None = None
 
     async def ask(self, client: httpx.AsyncClient, system: str, messages: list[Message]) -> str:
         return await self.fn(client, self.model, self.api_key, system, messages)
+
+    def stream(self, client: httpx.AsyncClient, system: str, messages: list[Message]) -> AsyncIterator[str]:
+        return self.stream_fn(client, self.model, self.api_key, system, messages)
 
 
 def active_providers() -> list[Provider]:
     """Providers that have an API key configured (all three in mock mode)."""
     mock = os.getenv("TRIO_MOCK") == "1"
     specs = [
-        ("claude", "Claude", "ANTHROPIC_API_KEY", "CLAUDE_MODEL", "claude-opus-5", ask_claude),
-        ("openai", "ChatGPT", "OPENAI_API_KEY", "OPENAI_MODEL", "gpt-6-astra", ask_openai),
-        ("gemini", "Gemini", "GEMINI_API_KEY", "GEMINI_MODEL", "gemini-3.8-flash", ask_gemini),
+        ("claude", "Claude", "ANTHROPIC_API_KEY", "CLAUDE_MODEL", "claude-opus-5", ask_claude, stream_claude),
+        ("openai", "ChatGPT", "OPENAI_API_KEY", "OPENAI_MODEL", "gpt-6-astra", ask_openai, stream_openai),
+        ("gemini", "Gemini", "GEMINI_API_KEY", "GEMINI_MODEL", "gemini-3.8-flash", ask_gemini, stream_gemini),
     ]
     out = []
-    for key, label, key_env, model_env, default_model, fn in specs:
+    for key, label, key_env, model_env, default_model, fn, stream_fn in specs:
         api_key = os.getenv(key_env, "").strip()
         if mock:
-            out.append(Provider(key, label, "mock", "mock", _mock(label)))
+            out.append(Provider(key, label, "mock", "mock", _mock(label), _mock_stream(label)))
         elif api_key:
-            out.append(Provider(key, label, os.getenv(model_env, default_model), api_key, fn))
+            out.append(Provider(key, label, os.getenv(model_env, default_model), api_key, fn, stream_fn))
     return out

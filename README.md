@@ -67,9 +67,12 @@ see [.env.example](.env.example) for the full list.
 
 `POST /api/ask` with `{"question": "...", "history": [], "thorough": true, "stream": true}`.
 With `stream: true` (what the UI uses) the response is Server-Sent Events:
-`start`, then a `draft` per model, `review` per model, and one `final`, ending
-with `done`. With `stream: false` you get a single JSON object with `answer`,
-`written_by`, `drafts`, `reviews` and `seconds`.
+`start`, then a `draft` per model, `review` per model, then the final answer
+streams in live as `final_start` + repeated `final_delta` chunks, and one
+`final` event carries the complete text, ending with `done`. Consumers should
+ignore event types they don't recognise. With `stream: false` you get a
+single JSON object with `answer`, `written_by`, `drafts`, `reviews` and
+`seconds`.
 
 `GET /api/status` reports which models are configured; `GET /healthz` is the
 health check. If `APP_PASSWORD` is set, send it as the `X-App-Password` header.
