@@ -18,7 +18,7 @@ try {
     };
   });
   const emit = async (...events) => page.evaluate(events => { for (const event of events) window.trioStream.enqueue(new TextEncoder().encode(JSON.stringify(event) + '\n')); }, events);
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').first().fill('streaming-fake-key');
   await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();

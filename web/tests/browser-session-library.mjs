@@ -14,7 +14,7 @@ try {
   ];
   await page.addInitScript(sessions => { if (!localStorage.getItem('library-fixture')) { localStorage.setItem('library-fixture', '1'); localStorage.setItem('trio-remember', 'true'); localStorage.setItem('trio-sessions', JSON.stringify(sessions)); localStorage.setItem('trio-active-session', 'one'); } }, sessions);
   await page.route('**/api/ask', async route => { calls++; await route.fulfill({ contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'final', result: { drafts: { openai: 'Follow-up answer' }, reviews: {}, answer: 'Follow-up answer', by: 'openai', errors: [], seconds: 1, demo: false } }) + '\n' }); });
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   const search = page.getByRole('textbox', { name: 'Search sessions', exact: true });
   const row = title => page.getByRole('group', { name: `Session: ${title}`, exact: true });
   const menu = async title => row(title).getByRole('button', { name: 'Session actions', exact: true }).click();

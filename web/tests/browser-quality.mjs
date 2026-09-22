@@ -9,7 +9,7 @@ const page = await context.newPage();
 const errors = []; page.on('pageerror', error => errors.push(error.message));
 const result = { drafts: { openai: 'First perspective', claude: 'Second perspective' }, reviews: {}, answer: '', errors: [], seconds: 1, demo: false, usage: { calls: 3, reportedCalls: 2, inputTokens: 200, outputTokens: 40, costUSD: null, byProvider: { openai: { model: 'gpt-6-astra', calls: 3, reportedCalls: 2, inputTokens: 200, outputTokens: 40, costUSD: null } } } };
 const session = { id: 'restored-comparison', title: 'Saved comparison', time: new Date().toISOString(), turns: [{ question: 'Saved comparison', mode: 'compare', result }] };
-await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
 await page.evaluate(s => {
   localStorage.setItem('trio-remember', 'true');
   localStorage.setItem('trio-sessions', JSON.stringify([{ id: 'broken', turns: [{}] }, s]));

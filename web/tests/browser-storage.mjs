@@ -9,7 +9,7 @@ try {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const result = { drafts: { openai: 'Saved perspective' }, reviews: {}, answer: 'Saved answer', errors: [], seconds: 1, demo: false };
   const session = { id: 'long-history', title: 'Long conversation', time: new Date().toISOString(), turns: Array.from({ length: 205 }, (_, i) => ({ question: `Question ${i + 1}`, mode: 'fast', result })) };
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   await page.evaluate(s => {
     localStorage.setItem('trio-remember', 'true');
     localStorage.setItem('trio-sessions', JSON.stringify([s]));

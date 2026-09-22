@@ -12,7 +12,7 @@ try {
     requests.push(route.request().postDataJSON());
     await route.fulfill({ contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'final', result: { drafts: { openai: 'Answer' }, reviews: {}, answer: `Answer ${requests.length}`, by: 'openai', errors: [], seconds: 1, demo: false } }) + '\n' });
   });
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   const editor = page.getByRole('textbox', { name: 'Session instructions', exact: true });
   const open = async () => { if (!await page.locator('.session-instructions').evaluate(element => element.open)) await page.locator('.session-instructions > summary').click(); };
   const first = 'Audience: founders. Budget: $500. <script>window.injected=true</script>';

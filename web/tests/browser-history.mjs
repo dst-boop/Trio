@@ -14,7 +14,7 @@ try {
     { question: 'Challenge the original plan', mode: 'deep', result: { ...empty, drafts: { openai: 'Original before critique' }, reviews: { claude: 'A specific objection' }, revisions: { openai: 'Revised after critique' }, answer: 'Revised after critique', by: 'openai', fallback: true, errors: ['Synthesis unavailable'], usage: { calls: 4, reportedCalls: 3, inputTokens: 300, outputTokens: 60, costUSD: null, byProvider: { openai: { model: 'gpt-6-astra', calls: 4, reportedCalls: 3, inputTokens: 300, outputTokens: 60, costUSD: null } } } } },
     { question: 'Latest question', mode: 'council', result: { ...empty, drafts: { openai: 'Latest draft' }, answer: 'Latest answer stays in view', by: 'openai' } },
   ];
-  await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   await page.evaluate(turns => {
     localStorage.setItem('trio-remember', 'true');
     localStorage.setItem('trio-sessions', JSON.stringify([{ id: 'history', title: turns[0].question, turns, time: new Date().toISOString() }]));
