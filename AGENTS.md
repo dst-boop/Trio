@@ -19,6 +19,8 @@ async generator of plain dict events that drives all three frontends.
 | `static/index.html` | the whole web UI, one file, no build step |
 | `cli.py` | terminal frontend |
 | `tests/test_trio.py` | end-to-end tests in mock mode |
+| `conversations.py` | SQLite saved conversations, atomic append, event collection |
+| `tests/test_conversations.py` | Persistence, authorization, and conflicting updates |
 | `web/` | Hosted React/TypeScript workspace; Cloudflare Workers-compatible Vinext app |
 | `web/lib/orchestrate.ts` | Hosted multi-provider pipeline with request-scoped API keys |
 | `web/app/api/ask/route.ts` | Hosted NDJSON endpoint; distinct from the Python SSE API |
@@ -39,6 +41,10 @@ async generator of plain dict events that drives all three frontends.
   breaking change — update all three and the README's API section.
 - **Keep mock mode working.** Every feature must be demoable with
   `TRIO_MOCK=1` and no keys, and testable that way.
+- Python web responses additionally emit `saved` or `save_error` after `final`.
+  The CLI may ignore these storage events. Saved reads and continuations must
+  use `check_password`; never embed protected conversations in the HTML shell.
+  Tests use an isolated `TRIO_DB` through `tests/conftest.py`.
 - **Degrade gracefully.** One model failing must never sink a run. Streams
   fall back to non-streaming calls; synthesis falls through the other
   models, then the longest draft.
