@@ -66,3 +66,19 @@ test('empty responses still report billed usage before failing', async () => {
   await assert.rejects(callProvider('openai', 'key', 'model', 'system', 'input', new AbortController().signal, fetcher, value => { tokens = value; }), /No text/);
   assert.deepEqual(tokens, { input: 9, output: 8, cached: 0 });
 });
+
+test('deep council includes all revision calls in usage, saved sessions and exports', async () => {
+  const f = fixture(), events: RunEvent[] = [];
+  const result = await orchestrate({ ...f.input, mode: 'deep' }, e => events.push(e), new AbortController().signal, f.fetcher);
+  assert.equal(result.usage?.calls, 10);
+  assert.equal(result.usage?.reportedCalls, 10);
+  assert.equal(result.usage?.inputTokens, 1000);
+  assert.equal(result.usage?.outputTokens, 200);
+  assert.equal(result.usage?.byProvider.claude?.calls, 4);
+  assert.equal(events.filter(e => e.type === 'usage').length, 10);
+  const turns = [{ question: 'Usage?', mode: 'deep' as const, result }];
+  const saved = parseSessions(JSON.stringify([{ id: 'deep-usage', title: 'Usage?', time: '', turns }]));
+  assert.deepEqual(saved[0].turns[0].result, result);
+  assert.match(sessionMarkdown(turns), /1000 input \+ 200 output/);
+  assert.match(sessionMarkdown(turns), /## Claude revised answer/);
+});

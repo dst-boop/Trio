@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { orchestrate } from '@/lib/orchestrate';
 
 const connection = z.object({ key: z.string().max(1024), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
-const schema = z.object({ question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) });
+const schema = z.object({ question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) });
 export async function POST(request: Request) {
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
