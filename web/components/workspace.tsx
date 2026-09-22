@@ -18,6 +18,7 @@ import { selectResearchProvider, type ResearchChoice } from '@/lib/research';
 import { RunCoverage, RunPipeline, answerLabel } from '@/components/run-coverage';
 import { ResearchPanel } from '@/components/research-panel';
 import { ConversationHistory } from '@/components/conversation-history';
+import { readRunStream } from '@/lib/read-run-stream';
 import { applyRunEvent } from '@/lib/run-events';
 import { readImageFile, type AttachedImage } from '@/lib/images';
 import { readPdfFile, attachmentBytes, maxAttachmentBytes, type AttachedPdf } from '@/lib/pdf';
@@ -118,29 +119,24 @@ export default function Home({ account }: { account?: { userId: string; displayN
     if (!demo && webResearch) { try { researcher = selectResearchProvider(connections, researchProvider); } catch (error) { setSettings(true); toast.error(error instanceof Error ? error.message : 'Connect a research provider.'); return; } }
     setBusy(true); setRunMode(mode); setStage(!demo && webResearch ? 'research' : 'draft'); setWorking({ ...emptyResult(demo), researchRequested: !demo && webResearch, researchBy: researcher }); setRunningQuestion(question); setTab('drafts');
     const controller = new AbortController(); abortRef.current = controller;
-    let result = emptyResult(demo), completed = false;
+    let result = emptyResult(demo);
     try {
       if (demo) {
         for (let i = 0; i < providers.length; i++) { await delay(500, controller.signal); result = { ...result, drafts: { ...result.drafts, [providers[i].id]: demoDrafts[i] } }; setWorking(result); }
         if (mode === 'council' || mode === 'deep') { setStage('review'); for (let i = 0; i < providers.length; i++) { await delay(400, controller.signal); result = { ...result, reviews: { ...result.reviews, [providers[i].id]: demoReviews[i] } }; setWorking(result); } }
         if (mode === 'deep') { setStage('revision'); for (let i = 0; i < providers.length; i++) { await delay(400, controller.signal); result = { ...result, revisions: { ...result.revisions, [providers[i].id]: demoRevisions[i] } }; setWorking(result); } }
         if (mode !== 'compare') { setStage('synthesis'); setTab('answer'); await delay(700, controller.signal); result = { ...result, answer: demoFinal, by: lead }; }
-        result.seconds = mode === 'deep' ? 4.6 : mode === 'council' ? 3.4 : mode === 'fast' ? 2.2 : 1.5; completed = true;
+        result.seconds = mode === 'deep' ? 4.6 : mode === 'council' ? 3.4 : mode === 'fast' ? 2.2 : 1.5;
       } else {
         const history = conversationHistory(turns);
         const response = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, body: JSON.stringify({ personalize: Boolean(account), question, instructions: instructions.trim(), webResearch, researchProvider, context: context?.text, pdf: attachedPdf ? { mimeType: attachedPdf.mimeType, data: attachedPdf.data } : undefined, image: attachedImage ? { mimeType: attachedImage.mimeType, data: attachedImage.data } : undefined, history, connections, mode, lead }), signal: controller.signal });
         if (!response.ok) { const data = await response.json() as { error?: string }; throw new Error(data.error ?? 'Could not start this session.'); }
-        const reader = response.body!.getReader(), decoder = new TextDecoder(); let buffer = '';
-        const consume = (line: string) => {
-          if (!line.trim()) return; const event: RunEvent = JSON.parse(line);
+        result = await readRunStream(response.body, controller.signal, event => {
           if (event.type === 'stage') { setStage(event.stage!); if (event.stage === 'synthesis') setTab('answer'); }
           result = applyRunEvent(result, event);
-          if (event.type === 'final' && event.result) { completed = true; if (mode !== 'compare') setTab('answer'); }
+          if (event.type === 'final' && mode !== 'compare') setTab('answer');
           setWorking({ ...result });
-        };
-        while (true) { const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); const lines = buffer.split('\n'); buffer = lines.pop()!; lines.forEach(consume); }
-        buffer += decoder.decode(); if (buffer.trim()) consume(buffer);
-        if (!completed) throw new Error(result.errors.at(-1) ?? 'Connection interrupted. Try again.');
+        });
       }
       saveTurn(question, result); setWorking(null); setRunningQuestion(''); if (!demo) setPrompt(''); setStage('done');
     } catch (error) { if (controller.signal.aborted) { toast('Session stopped. No result was saved.'); setWorking({ ...result, errors: [...result.errors, 'Session stopped. Partial contributions are shown below.'] }); } else { const text = error instanceof Error ? error.message : 'Something went wrong.'; toast.error(text); setWorking({ ...result, errors: [...result.errors, text] }); } setStage('failed'); }

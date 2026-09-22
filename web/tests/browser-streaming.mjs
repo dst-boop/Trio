@@ -14,6 +14,7 @@ try {
       window.trioRequest = JSON.parse(init.body);
       return new Response(new ReadableStream({
         start(controller) { window.trioStream = controller; init.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')), { once: true }); },
+        cancel() { window.trioCancelled = (window.trioCancelled || 0) + 1; return new Promise(() => {}); },
       }), { headers: { 'Content-Type': 'application/x-ndjson' } });
     };
   });
@@ -40,10 +41,10 @@ try {
   await page.getByText('Partial combined answer', { exact: true }).waitFor();
   const result = { drafts: { openai: 'Completed draft' }, reviews: {}, answer: 'Completed combined answer', by: 'openai', errors: [], seconds: 2, demo: false };
   await emit({ type: 'final', result });
-  await page.evaluate(() => window.trioStream.close());
   await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor();
   await page.getByText('Completed combined answer', { exact: true }).waitFor();
   assert.equal(await page.locator('.session-list .session-open').count(), 1);
+  assert.equal(await page.evaluate(() => window.trioCancelled), 1, 'Final result saves without EOF or waiting for cleanup');
   const saved = await page.evaluate(() => localStorage.getItem('trio-sessions'));
   assert.ok(saved.includes('Completed combined answer')); assert.ok(!saved.includes('Partial combined answer')); assert.ok(!saved.includes('streaming-fake-key'));
   await page.getByRole('textbox', { name: 'Your question' }).fill('Cancel this follow-up');
@@ -62,4 +63,4 @@ try {
   assert.equal(await page.getByText('Unfinished follow-up', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
 } finally { await browser.close(); }
-console.log('Streaming browser checks passed: incremental text, clean restarts, synthesis transition, completed-only persistence, cancellation, key privacy, mobile.');
+console.log('Streaming browser checks passed: incremental text, clean restarts, synthesis transition, save on final without EOF, nonblocking cleanup, completed-only persistence, cancellation, key privacy, mobile.');
