@@ -3,13 +3,16 @@ import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { orchestrate } from '@/lib/orchestrate';
 import { selectResearchProvider } from '@/lib/research';
 import { instructionsSchema } from '@/lib/instructions';
+import { env } from 'cloudflare:workers';
+import { readMemory } from '@/lib/memory-store';
 import { imageSchema } from '@/lib/images';
 import { pdfSchema, attachmentBytes, maxAttachmentBytes } from '@/lib/pdf';
 
 const connection = z.object({ key: z.string().max(1024), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
-const schema = z.object({ instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
+const schema = z.object({ personalize: z.boolean().optional(), instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
 export async function POST(request: Request) {
-  if (!await getChatGPTUser()) return Response.json({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, { status: 401, headers: { 'Cache-Control': 'private, no-store' } });
+  const user = await getChatGPTUser();
+  if (!user) return Response.json({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, { status: 401, headers: { 'Cache-Control': 'private, no-store' } });
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
   if (!request.headers.get('content-type')?.includes('application/json')) return Response.json({ error: 'Expected JSON.' }, { status: 415 });
@@ -24,6 +27,12 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: 'Check your prompt, session instructions (up to 6,000 characters), model IDs, context length, image format (PNG, JPEG, or WebP), and PDF format. Images and PDFs together must be under 4 MB.' }, { status: 400 });
   if (!Object.values(parsed.data.connections).some(c => c.enabled && c.key.trim())) return Response.json({ error: 'Connect at least one model.' }, { status: 400 });
   if (parsed.data.webResearch) { try { selectResearchProvider(parsed.data.connections, parsed.data.researchProvider); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Connect a research provider.' }, { status: 400 }); } }
+  let memory: string | undefined;
+  if (parsed.data.personalize) {
+    if (request.headers.get('x-trio-account') !== user.userId) return Response.json({ error: 'Your account changed. Reload before starting a personalized answer.' }, { status: 401 });
+    try { if (!env.DB) throw new Error(); const profile = await readMemory(env.DB, user.userId); if (profile.enabled) memory = profile.notes; }
+    catch { return Response.json({ error: 'Personal memory could not be checked. Retry before running your models.' }, { status: 503 }); }
+  }
   const abort = new AbortController();
   const cancel = () => abort.abort();
   if (request.signal.aborted) cancel();
@@ -32,7 +41,7 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     start(controller) {
       const emit = (event: unknown) => { if (!abort.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event) + '\n')); };
-      orchestrate(parsed.data, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted) controller.close(); });
+      orchestrate({ ...parsed.data, memory }, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted) controller.close(); });
     },
     cancel() { abort.abort(); },
   });

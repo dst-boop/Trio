@@ -7,7 +7,7 @@ export function searchSessions(sessions: Session[], query: string): Session[] {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return sessions;
   return sessions.filter(session => {
-    const text = [session.title, session.instructions, ...session.turns.flatMap(turn => [turn.question, turn.instructions, turn.imageName, turn.pdfName, turn.result.answer, ...turn.result.errors, ...Object.values(turn.result.drafts), ...Object.values(turn.result.reviews), ...Object.values(turn.result.revisions ?? {}), turn.result.research?.text, ...(turn.result.research?.sources ?? []).flatMap(source => [source.title, source.url])])].filter(Boolean).join('\n').toLowerCase();
+    const text = [session.title, session.instructions, ...session.turns.flatMap(turn => [turn.question, turn.result.memory, turn.instructions, turn.imageName, turn.pdfName, turn.result.answer, ...turn.result.errors, ...Object.values(turn.result.drafts), ...Object.values(turn.result.reviews), ...Object.values(turn.result.revisions ?? {}), turn.result.research?.text, ...(turn.result.research?.sources ?? []).flatMap(source => [source.title, source.url])])].filter(Boolean).join('\n').toLowerCase();
     return terms.every(term => text.includes(term));
   });
 }

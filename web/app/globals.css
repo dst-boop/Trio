@@ -95,4 +95,11 @@
 .account-loading a,.sidebar-foot a { color: #c4b3ff; font-size: 12px; }
 .sidebar-foot>div { min-width: 0; overflow-wrap: anywhere; }
 .legacy-import { border-bottom: 1px solid #383442; padding-bottom: 20px; margin-bottom: 20px; }
+.memory-dialog { max-width: 620px; max-height: 88dvh; overflow-y: auto; }
+.memory-editor { display: grid; gap: 9px; font-size: 13px; }
+.memory-editor textarea { min-height: 180px; resize: vertical; width: 100%; border: 1px solid #464050; background: #17161e; border-radius: 8px; padding: 12px; line-height: 1.6; color: #eee9f7; }
+.memory-dialog small,.memory-suggest p { color: #aaa3b4; font-size: 12px; line-height: 1.65; }
+.memory-suggest { border-top: 1px solid #3b3447; padding-top: 18px; display: grid; gap: 10px; }
+.memory-suggest select { margin-left: 12px; padding: 7px; background: #24202c; border: 1px solid #494151; border-radius: 6px; }
+@media(max-width:640px) { .memory-editor textarea,.memory-suggest select { font-size: 16px; } }
 @media(max-width: 640px) { .welcome { padding: 0 22px; } .welcome-hero { padding: 55px 0; } .welcome h1 { letter-spacing: -3px; } .welcome-intro { font-size: 17px; } .welcome-council,.welcome-details { grid-template-columns: 1fr; gap: 0; } .welcome-council article,.welcome-council article:first-child { padding: 26px 0; border-right: 0; border-bottom: 1px solid #34313f; } .welcome-council article:last-child { border-bottom: 0; } .welcome-details { padding: 40px 0; gap: 30px; } .welcome-footer { gap: 20px; align-items: flex-start; } }

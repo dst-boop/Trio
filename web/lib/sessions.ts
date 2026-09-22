@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { instructionsSchema } from './instructions.ts';
+import { memoryNotesSchema } from './memory.ts';
 import { researchSchema, researchProviderName } from './research.ts';
 import { providers, type Mode, type Result } from './trio.ts';
 
@@ -11,7 +12,7 @@ const nonnegative = z.number().finite().nonnegative();
 const usageCounts = { calls: nonnegative.int(), reportedCalls: nonnegative.int(), inputTokens: nonnegative.int(), outputTokens: nonnegative.int(), costUSD: nonnegative.nullable() };
 const providerUsage = z.object({ ...usageCounts, model: z.string().max(100) });
 const usage = z.object({ ...usageCounts, byProvider: z.object({ openai: providerUsage.optional(), claude: providerUsage.optional(), gemini: providerUsage.optional() }) });
-const result = z.object({ researchRequested: z.boolean().optional(), researchBy: z.enum(['openai', 'claude']).optional(), research: researchSchema.optional(), drafts: answers, reviews: answers, revisions: answers.optional(), answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: nonnegative, demo: z.boolean(), fallback: z.boolean().optional(), usage: usage.optional() });
+const result = z.object({ memory: memoryNotesSchema.optional(), researchRequested: z.boolean().optional(), researchBy: z.enum(['openai', 'claude']).optional(), research: researchSchema.optional(), drafts: answers, reviews: answers, revisions: answers.optional(), answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: nonnegative, demo: z.boolean(), fallback: z.boolean().optional(), usage: usage.optional() });
 export const sessionSchema = z.object({ instructions: instructionsSchema.optional(), id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ instructions: instructionsSchema.optional(), question: z.string().min(1).max(20000), mode: z.enum(['council', 'deep', 'fast', 'compare']), imageName: z.string().max(255).optional(), pdfName: z.string().max(255).optional(), result })).min(1) });
 const maxStoredCharacters = 5_000_000;
 
@@ -49,6 +50,7 @@ export function sessionMarkdown(turns: Turn[]): string {
   return turns.map(t => [
     `# ${t.question}`,
     t.instructions ? `## Session instructions used\n\n${t.instructions}` : '',
+    t.result.memory ? `## Personal memory used\n\n${t.result.memory}` : '',
     t.imageName ? '> An image was attached to this question. Image data is not included in this export; reattach the original to revisit visual details.' : '',
     t.pdfName ? '> A PDF was attached to this question. PDF data is not included in this export; reattach the original to revisit document details.' : '',
     t.result.researchRequested ? `> Web research requested via ${researchProviderName(t.result.research?.provider ?? t.result.researchBy)}. Search charges are excluded from cost estimates.` : '',
