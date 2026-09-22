@@ -51,6 +51,14 @@ Research adds one OpenAI response (plus at most one retry), with at most three b
 
 Citations come from provider metadata, not URLs guessed from prose. The research panel shows clickable inline references and a source list; only HTTP(S) URLs without embedded credentials are accepted. Briefs and citations survive opt-in local history and Markdown exports. Research text is displayed only after its complete citation metadata arrives. A new `research` event carries the completed brief; partial research text is never shared or saved. Follow-ups search again only while the toggle is on. No search results are fabricated in demo mode.
 
+## Portable session backups
+
+Use **Back up & restore** in the sidebar to download a versioned Trio JSON file or preview one from another device. Backups include complete questions, answers, all model contributions, citations, and usage. API connection settings and original attachment bytes are stripped; conversations themselves may contain private information, so keep the file private. Markdown exports remain available for reading and sharing.
+
+Import validates every record before making changes, then lets you select conversations. Identical content is skipped, even if another device assigned it a different ID. Changed versions with matching IDs are kept as separate copies. Existing sessions, the active conversation, and an unsent prompt remain intact. An import that would exceed the 30-session limit is blocked until fewer conversations are selected; it never silently evicts existing history.
+
+Backups may be up to 20 MB and can recover conversations larger than the 5-million-character local-history limit. The preview warns when imported sessions cannot fit local history. Import does not enable persistence or make any model requests. With local history off, imported sessions remain in tab memory until you enable it in Connections; storage failures retain the existing warning and export controls. Corrupt files and unsupported backup versions are rejected as a whole. The file is parsed locally and never uploaded by the restore workflow.
+
 ## Data and limits
 
 - Prompts, attached text and images, and recent live conversation context are sent to enabled providers. Drafts and reviews are shared among participating providers. Image bytes use each provider's native image part, never a base64 string embedded in text prompts. Only local uploads are accepted; the app does not fetch arbitrary image URLs.
@@ -80,6 +88,7 @@ node tests/browser-storage.mjs
 node tests/browser-streaming.mjs
 node tests/browser-images.mjs
 node tests/browser-research.mjs
+node tests/browser-backups.mjs
 ```
 
 The scripts default to Microsoft Edge and http://localhost:5173. Set TRIO_BASE_URL to test a server on another port, PLAYWRIGHT_CHANNEL for another installed Chromium channel, and optionally PLAYWRIGHT_MODULE to a module URL if using a bundled Playwright installation.
