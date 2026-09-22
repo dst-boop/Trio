@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trio</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='4' width='6' height='24' rx='3' fill='%23B45309'/><rect x='13' y='4' width='6' height='24' rx='3' fill='%230F766E'/><rect x='22' y='4' width='6' height='24' rx='3' fill='%234338CA'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+:root {
+  --bg: #EDF0F3; --surface: #FFFFFF; --ink: #14213D; --muted: #5B6577; --line: #D5DAE1;
+  --claude: #B45309; --openai: #0F766E; --gemini: #4338CA; --danger: #B42318;
+  --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0F1626; --surface: #182238; --ink: #E6EAF2; --muted: #9AA6BA; --line: #2A3650;
+    --claude: #F2A541; --openai: #3CC2B3; --gemini: #9AA0FF; --danger: #FF8A7A;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.6 var(--body);
+  padding: env(safe-area-inset-top) 0 0;
+}
+.wrap { max-width: 46rem; margin: 0 auto; padding: 0 1.1rem; min-height: 100dvh; display: flex; flex-direction: column; }
+
+header { padding: 2rem 0 1.25rem; }
+h1 { font: 700 2.6rem/1 var(--display); letter-spacing: -0.03em; margin: 0 0 .6rem; }
+.lede { margin: 0; color: var(--muted); max-width: 34rem; }
+.roster { display: flex; flex-wrap: wrap; gap: .4rem 1rem; margin: 1rem 0 0; padding: 0; list-style: none; font-size: .9rem; }
+.roster li { display: flex; align-items: center; gap: .45rem; }
+.roster li.off { color: var(--muted); text-decoration: line-through; }
+.dot { width: .65rem; height: .65rem; border-radius: 50%; background: var(--c); flex: none; }
+[data-m="claude"] { --c: var(--claude); } [data-m="openai"] { --c: var(--openai); } [data-m="gemini"] { --c: var(--gemini); }
+.banner { margin-top: 1rem; padding: .7rem .9rem; border-radius: .6rem; background: var(--surface); border: 1px solid var(--line); font-size: .92rem; }
+
+#thread { padding-bottom: 1rem; flex: 1; }
+.turn { margin: 0 0 2.25rem; }
+.q { font: 500 1.3rem/1.3 var(--display); margin: 0 0 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* three lanes, one per model */
+.lanes { display: grid; gap: .35rem; margin: 0 0 1rem; }
+.lane { display: flex; align-items: baseline; gap: .6rem; padding: .3rem 0 .3rem .75rem; border-left: 4px solid var(--c); font-size: .95rem; }
+.lane b { font-weight: 600; min-width: 4.6rem; }
+.lane span { color: var(--muted); }
+.lane.working span::after { content: ""; display: inline-block; width: 1.1em; text-align: left; animation: dots 1.2s steps(4) infinite; }
+.lane.failed span { color: var(--danger); }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+@media (prefers-reduced-motion: reduce) { .lane.working span::after { animation: none; content: "..."; } }
+
+/* the final answer: the three lanes braided into one */
+.final { background: var(--surface); border-radius: .9rem; overflow: hidden; border: 1px solid var(--line); }
+.final::before {
+  content: ""; display: block; height: 5px;
+  background: linear-gradient(90deg, var(--claude) 0 33.33%, var(--openai) 33.33% 66.66%, var(--gemini) 66.66%);
+}
+.final .body { padding: 1.1rem 1.2rem .4rem; }
+.final .meta { padding: 0 1.2rem 1rem; color: var(--muted); font-size: .85rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.note { margin: 0 1.2rem 1rem; color: var(--danger); font-size: .9rem; }
+
+.md > :first-child { margin-top: 0; }
+.md h1, .md h2, .md h3 { font-family: var(--display); line-height: 1.25; margin: 1.4em 0 .4em; }
+.md h1 { font-size: 1.35rem; } .md h2 { font-size: 1.2rem; } .md h3 { font-size: 1.05rem; }
+.md pre { background: var(--bg); padding: .8rem; border-radius: .5rem; overflow-x: auto; font-size: .85rem; }
+.md code { font-size: .9em; }
+.md table { display: block; overflow-x: auto; border-collapse: collapse; font-size: .92rem; }
+.md th, .md td { border: 1px solid var(--line); padding: .35rem .6rem; text-align: left; }
+.md a { color: var(--gemini); }
+.md blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--line); color: var(--muted); }
+
+details.work { margin-top: .75rem; }
+details.work > summary { cursor: pointer; color: var(--muted); font-size: .92rem; padding: .4rem 0; }
+.piece { border-left: 4px solid var(--c); padding: .1rem 0 .1rem .9rem; margin: 1rem 0; font-size: .95rem; }
+.piece h4 { margin: 0 0 .4rem; font: 700 1rem var(--display); color: var(--c); }
+.piece h4 small { font: 400 .8rem var(--body); color: var(--muted); }
+.piece h5 { margin: 1rem 0 .3rem; font-size: .85rem; font-weight: 600; color: var(--muted); }
+
+button { font: inherit; cursor: pointer; }
+.link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; font-size: .85rem; }
+:focus-visible { outline: 3px solid var(--gemini); outline-offset: 2px; }
+
+/* composer pinned to the bottom, thumb-reachable */
+.composer { position: sticky; bottom: 0; background: linear-gradient(transparent, var(--bg) 1.2rem); padding: 1.5rem 0 calc(.9rem + env(safe-area-inset-bottom)); }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 1rem; padding: .6rem; }
+.box:focus-within { border-color: var(--ink); }
+textarea { width: 100%; border: 0; outline: 0; resize: none; background: transparent; color: inherit; font: inherit; padding: .4rem .5rem; max-height: 40vh; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .2rem .3rem 0; }
+.toggle { display: flex; align-items: center; gap: .45rem; font-size: .88rem; color: var(--muted); }
+.toggle input { width: 1.05rem; height: 1.05rem; accent-color: var(--ink); }
+.go { background: var(--ink); color: var(--bg); border: 0; border-radius: .7rem; padding: .6rem 1.1rem; font-weight: 600; white-space: nowrap; }
+.go:disabled { opacity: .45; cursor: default; }
+.foot { display: flex; justify-content: flex-end; padding: .4rem .4rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Trio</h1>
+    <p class="lede">Claude, ChatGPT and Gemini each answer your question, check one another's work, and then one final answer is written from all three.</p>
+    <ul class="roster" id="roster" aria-label="Models in use"></ul>
+    <div class="banner" id="banner" hidden></div>
+  </header>
+
+  <main id="thread" aria-live="polite"></main>
+
+  <form class="composer" id="form">
+    <div class="box">
+      <label for="q" hidden>Your question</label>
+      <textarea id="q" rows="2" placeholder="Ask something hard" required></textarea>
+      <div class="row">
+        <label class="toggle"><input type="checkbox" id="thorough" checked> Have them review each other</label>
+        <button class="go" id="go" type="submit">Ask all three</button>
+      </div>
+    </div>
+    <div class="foot"><button type="button" class="link" id="reset" hidden>Start a new conversation</button></div>
+  </form>
+</div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+const md = (text) => { const d = el("div", "md");
+  if (window.marked && window.DOMPurify) d.innerHTML = DOMPurify.sanitize(marked.parse(text || ""));
+  else { d.textContent = text || ""; d.style.whiteSpace = "pre-wrap"; }  // CDN blocked: plain text beats a blank page
+  return d; };
+const NAMES = { claude: "Claude", openai: "ChatGPT", gemini: "Gemini" };
+
+let history = [];          // [{role, content}] of questions and final answers
+let busy = false;
+
+const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+const headers = () => ({ "Content-Type": "application/json", "X-App-Password": store.get("trio_pw") });
+
+async function loadStatus() {
+  const r = await fetch("/api/status", { headers: headers() });
+  if (r.status === 401) {
+    const pw = prompt("Password for this Trio server:");
+    if (pw == null) return;
+    store.set("trio_pw", pw);
+    return loadStatus();
+  }
+  const s = await r.json();
+  const on = new Set(s.models.map((m) => m.key));
+  const roster = $("#roster"); roster.replaceChildren();
+  for (const key of Object.keys(NAMES)) {
+    const li = el("li", on.has(key) ? "" : "off"); li.dataset.m = key;
+    const model = s.models.find((m) => m.key === key);
+    li.append(el("i", "dot"), document.createTextNode(NAMES[key] + (model ? ` (${model.model})` : " (no API key)")));
+    roster.append(li);
+  }
+  const banner = $("#banner");
+  if (s.mock) { banner.hidden = false; banner.textContent = "Demo mode: answers are fake. Add API keys to .env and remove TRIO_MOCK to go live."; }
+  else if (!on.size) { banner.hidden = false; banner.textContent = "No API keys found. Add them to the .env file and restart the server."; }
+  else if (on.size < 3) { banner.hidden = false; banner.textContent = "Running with fewer than three models. Add the missing API keys to .env to use all of them."; }
+}
+
+function newTurn(question) {
+  const turn = el("section", "turn");
+  turn.append(el("h2", "q", question));
+  const lanes = el("div", "lanes"); turn.append(lanes);
+  $("#thread").append(turn);
+  turn.scrollIntoView({ behavior: "smooth", block: "start" });
+  return { turn, lanes, lane: {}, drafts: {}, reviews: {} };
+}
+
+function setLane(ui, key, state, text) {
+  let l = ui.lane[key];
+  if (!l) {
+    l = ui.lane[key] = el("div", "lane"); l.dataset.m = key;
+    l.append(el("b", "", NAMES[key]), el("span"));
+    ui.lanes.append(l);
+  }
+  l.className = "lane " + state;
+  l.lastChild.textContent = text;
+}
+
+function showFinal(ui, ev) {
+  const card = el("article", "final");
+  const body = el("div", "body"); body.append(md(ev.text)); card.append(body);
+  if (ev.note) card.append(el("p", "note", ev.note));
+  const meta = el("div", "meta");
+  meta.append(el("span", "", `Written by ${NAMES[ev.by]} from ${Object.keys(ui.drafts).length} answers in ${ev.seconds}s`));
+  const copy = el("button", "link", "Copy answer"); copy.type = "button";
+  copy.onclick = async () => { await navigator.clipboard.writeText(ev.text); copy.textContent = "Copied"; setTimeout(() => (copy.textContent = "Copy answer"), 1500); };
+  meta.append(copy); card.append(meta);
+  ui.turn.append(card);
+
+  const work = el("details", "work");
+  work.append(el("summary", "", "See what each model said"));
+  for (const key of Object.keys(ui.drafts)) {
+    const piece = el("div", "piece"); piece.dataset.m = key;
+    const h = el("h4", "", NAMES[key] + " ");
+    if (ev.letters && ev.letters[key]) h.append(el("small", "", `Response ${ev.letters[key]} in the reviews`));
+    piece.append(h, md(ui.drafts[key]));
+    if (ui.reviews[key]) piece.append(el("h5", "", `${NAMES[key]}'s review of all the answers`), md(ui.reviews[key]));
+    work.append(piece);
+  }
+  ui.turn.append(work);
+}
+
+function handle(ui, ev) {
+  switch (ev.type) {
+    case "start":
+      ev.models.forEach((m) => setLane(ui, m.key, "working", "Writing an answer"));
+      break;
+    case "draft":
+      if (ev.text) { ui.drafts[ev.model] = ev.text; setLane(ui, ev.model, "", `Answered in ${ev.seconds}s`); }
+      else setLane(ui, ev.model, "failed", `Couldn't answer: ${ev.error}`);
+      break;
+    case "stage":
+      if (ev.stage === "review") Object.keys(ui.drafts).forEach((k) => setLane(ui, k, "working", "Reviewing all the answers"));
+      if (ev.stage === "final") { ui.writing = el("div", "lane working"); ui.writing.style.setProperty("--c", "var(--ink)"); ui.writing.append(el("b", "", "Together"), el("span", "", "Writing the final answer")); ui.lanes.append(ui.writing); }
+      break;
+    case "review":
+      if (ev.text) { ui.reviews[ev.model] = ev.text; setLane(ui, ev.model, "", "Answered and reviewed"); }
+      else setLane(ui, ev.model, "failed", `Answered, but the review failed: ${ev.error}`);
+      break;
+    case "final":
+      ui.writing?.remove();
+      showFinal(ui, ev);
+      history.push({ role: "user", content: ui.question }, { role: "assistant", content: ev.text });
+      $("#reset").hidden = false;
+      break;
+    case "error":
+      ui.writing?.remove();
+      ui.turn.append(el("p", "note", ev.message));
+      break;
+  }
+}
+
+async function ask(question) {
+  const ui = newTurn(question); ui.question = question;
+  let res;
+  try {
+    res = await fetch("/api/ask", { method: "POST", headers: headers(),
+      body: JSON.stringify({ question, history, thorough: $("#thorough").checked, stream: true }) });
+  } catch { return handle(ui, { type: "error", message: "Can't reach the server. Check that it's running and try again." }); }
+  if (res.status === 401) { store.set("trio_pw", ""); await loadStatus(); return handle(ui, { type: "error", message: "Password needed. Enter it, then ask again." }); }
+  if (!res.ok) return handle(ui, { type: "error", message: `The server returned an error (${res.status}). Try again.` });
+
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+      if (line.startsWith("data:")) handle(ui, JSON.parse(line.slice(5)));
+    }
+  }
+}
+
+const q = $("#q");
+const grow = () => { q.style.height = "auto"; q.style.height = q.scrollHeight + "px"; };
+q.addEventListener("input", grow);
+q.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("#form").requestSubmit(); });
+
+$("#form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const question = q.value.trim();
+  if (!question || busy) return;
+  busy = true; $("#go").disabled = true; $("#go").textContent = "Working"; q.value = ""; grow();
+  try { await ask(question); }
+  finally { busy = false; $("#go").disabled = false; $("#go").textContent = "Ask all three"; }
+});
+
+$("#reset").addEventListener("click", () => { if (busy) return; history = []; $("#thread").replaceChildren(); $("#reset").hidden = true; q.focus(); });
+
+loadStatus();
+</script>
+</body>
+</html>
