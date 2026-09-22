@@ -1,0 +1,23 @@
+{
+  "format": "trio-workspace",
+  "version": 1,
+  "exportedAt": "2026-09-22T00:00:00.000Z",
+  "sessions": [{
+    "id": "legacy-workspace",
+    "title": "Legacy product plan",
+    "time": "2026-09-22T00:00:00.000Z",
+    "turns": [{
+      "question": "Plan the first week",
+      "mode": "fast",
+      "result": {
+        "drafts": {"claude": "Interview customers"},
+        "reviews": {},
+        "answer": "Interview customers before building",
+        "by": "claude",
+        "errors": [],
+        "seconds": 1,
+        "demo": false
+      }
+    }]
+  }]
+}
