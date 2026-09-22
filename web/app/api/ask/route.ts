@@ -18,12 +18,14 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: 'Check your prompt, model IDs, and context length.' }, { status: 400 });
   if (!Object.values(parsed.data.connections).some(c => c.enabled && c.key.trim())) return Response.json({ error: 'Connect at least one model.' }, { status: 400 });
   const abort = new AbortController();
-  request.signal.addEventListener('abort', () => abort.abort(), { once: true });
+  const cancel = () => abort.abort();
+  if (request.signal.aborted) cancel();
+  else request.signal.addEventListener('abort', cancel, { once: true });
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
       const emit = (event: unknown) => { if (!abort.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event) + '\n')); };
-      orchestrate(parsed.data, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { if (!abort.signal.aborted) controller.close(); });
+      orchestrate(parsed.data, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted) controller.close(); });
     },
     cancel() { abort.abort(); },
   });

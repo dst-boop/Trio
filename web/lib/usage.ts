@@ -29,10 +29,12 @@ export function estimateStandardCost(model: string, tokens: Tokens, now = Date.n
 }
 
 export function summarizeUsage(byProvider: Partial<Record<ProviderId, ProviderUsage>>): Usage {
-  const entries = Object.values(byProvider);
+  const snapshot = structuredClone(byProvider);
+  for (const entry of Object.values(snapshot)) if (entry.calls !== entry.reportedCalls) entry.costUSD = null;
+  const entries = Object.values(snapshot);
   const sum = (field: 'calls' | 'reportedCalls' | 'inputTokens' | 'outputTokens') => entries.reduce((total, value) => total + value[field], 0);
   const calls = sum('calls'), reportedCalls = sum('reportedCalls');
   return { calls, reportedCalls, inputTokens: sum('inputTokens'), outputTokens: sum('outputTokens'),
     costUSD: calls > 0 && calls === reportedCalls && entries.every(value => value.costUSD !== null) ? entries.reduce((total, value) => total + value.costUSD!, 0) : null,
-    byProvider: structuredClone(byProvider) };
+    byProvider: snapshot };
 }

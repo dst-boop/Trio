@@ -35,7 +35,7 @@ try {
   await page.getByPlaceholder('Paste your API key').nth(0).fill('offline-test-key');
   await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByText('Up to 10 calls + failover', { exact: false }).waitFor();
+  await page.getByText('Up to 10 calls + retries', { exact: false }).waitFor();
   const result = { drafts: { openai: 'Original position' }, reviews: { openai: 'Check the assumption' }, revisions: { openai: 'Corrected position with remaining uncertainty' }, answer: 'A careful conclusion', errors: [], seconds: 2, demo: false, by: 'openai' };
   await page.route('**/api/ask', async route => {
     const body = route.request().postDataJSON();
