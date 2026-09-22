@@ -20,7 +20,7 @@ function Contributions({ result, bucket }: { result: Result; bucket: 'drafts' | 
   return participating.length ? <div className="history-contributions">{participating.map(provider => <section key={provider.id}><h4 style={{ color: provider.color }}>{provider.name}</h4><Answer text={answers[provider.id]!} /></section>)}</div> : <p className="muted">No {bucket === 'drafts' ? 'perspectives' : bucket} were returned for this question.</p>;
 }
 
-function PastTurn({ turn }: { turn: Turn }) {
+function PastTurn({ turn, onBranch, busy }: { turn: Turn; onBranch?: () => void; busy?: boolean }) {
   const { result } = turn;
   async function copy() {
     try { await navigator.clipboard.writeText(result.answer); toast.success('Earlier answer copied'); }
@@ -29,6 +29,7 @@ function PastTurn({ turn }: { turn: Turn }) {
   return <div className="history-turn-body">
     <div className="history-turn-meta"><span>{modeNames[turn.mode]} · {result.seconds}s{result.by ? ` · ${providers.find(provider => provider.id === result.by)?.name}` : ''}</span>{result.answer && <button className="subtle-button" onClick={() => void copy()}><Copy size={14} />Copy earlier answer</button>}</div>
     {result.demo && <p className="demo-notice">ILLUSTRATIVE DEMO · No model APIs were called.</p>}
+    {onBranch && <button className="subtle-button branch-turn" disabled={busy} onClick={onBranch}>Continue from here ↗</button>}
     <InstructionsUsed value={turn.instructions} />
     <MemoryUsed value={turn.result.memory} />
     {turn.imageName && <p className="revision-note">Image used: {turn.imageName}. Reattach it to revisit visual details; image data is not saved.</p>}
@@ -54,12 +55,12 @@ function PastTurn({ turn }: { turn: Turn }) {
 }
 
 /** Accordion content mounts on expansion so long threads do not render every answer. */
-export function ConversationHistory({ turns }: { turns: Turn[] }) {
+export function ConversationHistory({ turns, onBranch, busy }: { turns: Turn[]; onBranch?: (index: number) => void; busy?: boolean }) {
   if (!turns.length) return null;
   return <details className="previous-turns"><summary>{turns.length} earlier {turns.length === 1 ? 'question' : 'questions'} in this session</summary>
     <Accordion type="single" collapsible className="history-accordion">{turns.map((turn, index) => <AccordionItem key={index} value={String(index)} data-history-turn={index}>
       <AccordionTrigger><span className="history-question"><span>Question {index + 1}</span>{turn.question}</span></AccordionTrigger>
-      <AccordionContent><PastTurn turn={turn} /></AccordionContent>
+      <AccordionContent><PastTurn turn={turn} busy={busy} onBranch={onBranch ? () => onBranch(index) : undefined} /></AccordionContent>
     </AccordionItem>)}</Accordion>
   </details>;
 }

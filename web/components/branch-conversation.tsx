@@ -1,0 +1,11 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { maxSessionTitle } from '@/lib/session-library';
+import type { Session } from '@/lib/sessions';
+
+export function BranchConversation({ source, turnIndex, count, busy, hasUnsent, onClose, onCreate }: { source?: Session; turnIndex: number | null; count: number; busy: boolean; hasUnsent: boolean; onClose: () => void; onCreate: (name: string) => void }) {
+  const [name, setName] = useState('');
+  useEffect(() => { setName(source ? `${source.title.slice(0, 90)} · alternative` : ''); }, [source?.id, turnIndex]);
+  return <Dialog open={!!source && turnIndex !== null} onOpenChange={open => { if (!open) onClose(); }}><DialogContent className="session-action-dialog branch-dialog"><DialogTitle>Continue in a new conversation</DialogTitle><DialogDescription>Copy the questions and answers up to this point. Your original conversation stays intact, and the new one can go in a different direction.</DialogDescription><p className="branch-context">{(turnIndex ?? 0) + 1} completed {(turnIndex ?? 0) === 0 ? 'question' : 'questions'} will be copied. The instructions saved with the chosen answer will apply. Reattach any files you want the models to use; personal memory uses your current settings.</p>{hasUnsent && <p className="branch-warning">Your unsent prompt and current attachments will be cleared. Cancel to keep editing them.</p>}{count >= 30 && <p className="branch-warning" role="alert">Your workspace has 30 conversations. Export and remove one before creating another.</p>}<form onSubmit={event => { event.preventDefault(); if (!busy && count < 30 && name.trim()) onCreate(name); }}><label htmlFor="branch-name">New conversation name</label><input id="branch-name" value={name} onChange={event => setName(event.target.value)} maxLength={maxSessionTitle} autoComplete="off" disabled={busy} /><small>{name.length} / {maxSessionTitle} characters</small><div className="dialog-actions"><button type="button" className="subtle-button" onClick={onClose}>Cancel</button><button type="submit" className="run-button" disabled={busy || count >= 30 || !name.trim()}>Create conversation</button></div></form></DialogContent></Dialog>;
+}
