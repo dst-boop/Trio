@@ -5,7 +5,11 @@ export type Turn = { question: string; result: Result; mode: Mode };
 export type Session = { id: string; title: string; turns: Turn[]; time: string };
 const provider = z.enum(['openai', 'claude', 'gemini']);
 const answers = z.object({ openai: z.string().max(120000).optional(), claude: z.string().max(120000).optional(), gemini: z.string().max(120000).optional() });
-const result = z.object({ drafts: answers, reviews: answers, answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: z.number().finite().nonnegative(), demo: z.boolean(), fallback: z.boolean().optional() });
+const nonnegative = z.number().finite().nonnegative();
+const usageCounts = { calls: nonnegative.int(), reportedCalls: nonnegative.int(), inputTokens: nonnegative.int(), outputTokens: nonnegative.int(), costUSD: nonnegative.nullable() };
+const providerUsage = z.object({ ...usageCounts, model: z.string().max(100) });
+const usage = z.object({ ...usageCounts, byProvider: z.object({ openai: providerUsage.optional(), claude: providerUsage.optional(), gemini: providerUsage.optional() }) });
+const result = z.object({ drafts: answers, reviews: answers, answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: nonnegative, demo: z.boolean(), fallback: z.boolean().optional(), usage: usage.optional() });
 const session = z.object({ id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ question: z.string().min(1).max(20000), mode: z.enum(['council', 'fast', 'compare']), result })).min(1).max(200) });
 
 /** Restore only well-formed records; strip unknown fields, including injected credentials. */
@@ -35,6 +39,7 @@ export function sessionMarkdown(turns: Turn[]): string {
     `# ${t.question}`,
     t.result.demo ? '> Illustrative demo — no live models were called.' : '',
     `Mode: ${t.mode} · ${t.result.seconds}s`,
+    t.result.usage ? `Reported usage: ${t.result.usage.inputTokens} input + ${t.result.usage.outputTokens} output tokens across ${t.result.usage.reportedCalls}/${t.result.usage.calls} calls. Standard-rate cost estimate: ${t.result.usage.costUSD === null ? 'unavailable' : '$' + t.result.usage.costUSD.toFixed(4)} (excludes discounts and taxes).` : '',
     t.result.fallback ? '> Synthesis failed. This is a single-model draft fallback.' : '',
     t.result.answer ? `## ${t.result.fallback ? 'Fallback answer' : 'Combined answer'}\n\n${t.result.answer}` : '',
     ...providers.filter(p => t.result.drafts[p.id]).map(p => `## ${p.name} draft\n\n${t.result.drafts[p.id]}`),
