@@ -50,6 +50,7 @@ try {
   await page.locator('.prompt-section').screenshot({ path: 'test-output/images-mobile.png' });
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.getByRole('button', { name: 'New session', exact: false }).click();
+  await page.getByRole('button', { name: 'Discard and start new', exact: true }).click();
   assert.equal(await page.getByAltText('Attached image preview').count(), 0);
   await page.getByLabel('Choose image').setInputFiles({ name: 'bad.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg></svg>') });
   await page.getByText('Choose a PNG, JPEG, or WebP image with a matching file type.').waitFor();
@@ -59,6 +60,7 @@ try {
   await page.getByLabel('Choose image').setInputFiles(file);
   await page.waitForFunction(() => !!window.finishImageDecode);
   await page.getByRole('button', { name: 'New session', exact: false }).click();
+  await page.getByRole('button', { name: 'Discard and start new', exact: true }).click();
   await page.evaluate(async () => { window.finishImageDecode(); await new Promise(requestAnimationFrame); });
   assert.equal(await page.getByAltText('Attached image preview').count(), 0);
   await page.reload({ waitUntil: 'networkidle' });
