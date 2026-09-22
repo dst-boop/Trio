@@ -49,13 +49,28 @@ def test_quick_mode_skips_reviews(client):
     assert out["answer"]
 
 
+def _sse_events(body: str) -> list[dict]:
+    import json
+    return [json.loads(line[5:]) for line in body.split("\n\n") if line.startswith("data:")]
+
+
 def test_ask_streams_events(client):
     with client.stream("POST", "/api/ask", json={"question": "hi", "stream": True}) as r:
         assert r.headers["content-type"].startswith("text/event-stream")
         body = "".join(r.iter_text())
-    for kind in ('"type": "start"', '"type": "draft"', '"type": "review"',
-                 '"type": "final"', '"type": "done"'):
-        assert kind in body.replace('"type":"', '"type": "')
+    kinds = [e["type"] for e in _sse_events(body)]
+    for kind in ("start", "draft", "review", "final_start", "final_delta", "final", "done"):
+        assert kind in kinds, f"missing {kind!r} event"
+
+
+def test_final_answer_streams_in_chunks(client):
+    with client.stream("POST", "/api/ask", json={"question": "hi", "stream": True}) as r:
+        events = _sse_events("".join(r.iter_text()))
+    deltas = [e for e in events if e["type"] == "final_delta"]
+    final = next(e for e in events if e["type"] == "final")
+    assert len(deltas) > 3, "final answer should arrive in many chunks"
+    assert "".join(d["text"] for d in deltas).strip() == final["text"]
+    assert all(d["by"] == final["by"] for d in deltas)
 
 
 def test_rejects_bad_history_role(client):

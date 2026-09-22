@@ -135,16 +135,31 @@ async def run(
         )
     prompt += "\n\nNow write the final answer to the user's question."
 
+    final_msgs = [{"role": "user", "content": prompt}]
     last_err = None
     for p in _synth_order(providers, set(drafts)):
-        _, text, err, _ = await _timed(p, p.ask(client, FINAL_SYSTEM, [{"role": "user", "content": prompt}]))
+        streamed = ""
+        if p.stream_fn:
+            yield {"type": "final_start", "by": p.key}
+            try:
+                async for piece in p.stream(client, FINAL_SYSTEM, final_msgs):
+                    streamed += piece
+                    yield {"type": "final_delta", "by": p.key, "text": piece}
+            except Exception as e:
+                last_err = str(e) or e.__class__.__name__
+                streamed = ""  # a broken stream may be cut mid-thought; retry below without streaming
+        text = streamed.strip()
+        if not text:
+            _, full, err, _ = await _timed(p, p.ask(client, FINAL_SYSTEM, final_msgs))
+            if err:
+                last_err = err
+            text = (full or "").strip()
         if text:
             yield {
                 "type": "final", "text": text, "by": p.key,
                 "letters": letters, "seconds": round(time.monotonic() - t_start, 1),
             }
             return
-        last_err = err
 
     # Every synthesiser failed: fall back to the longest draft rather than nothing.
     best = max(drafts, key=lambda k: len(drafts[k]))
