@@ -1,9 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSessions, conversationHistory, sessionMarkdown, type Turn } from '../lib/sessions.ts';
+import { parseSessions, serializeSessions, conversationHistory, sessionMarkdown, type Turn } from '../lib/sessions.ts';
 
 const turn: Turn = { question: 'Which option?', mode: 'compare', result: { drafts: { openai: 'Choose A', claude: 'Choose B', gemini: 'Test both' }, reviews: {}, answer: '', errors: [], seconds: 2, demo: false } };
 const session = { id: 'session-1', title: turn.question, turns: [turn], time: '2026-09-22T00:00:00Z' };
+
+test('long conversations survive the same storage limits used when saving', () => {
+  const long = { ...session, turns: Array.from({ length: 205 }, (_, i) => ({ ...turn, question: `Question ${i}` })) };
+  assert.deepEqual(parseSessions(serializeSessions([long])), [long]);
+});
+
+test('saving rejects unreadable snapshots without truncating answers', () => {
+  const largeTurn = { ...turn, result: { ...turn.result, answer: 'a'.repeat(120000) } };
+  assert.throws(() => serializeSessions([{ ...session, turns: Array(43).fill(largeTurn) }]), /storage limits/);
+  assert.throws(() => serializeSessions([{ ...session, turns: [{ ...turn, result: { ...turn.result, answer: 'a'.repeat(120001) } }] }]));
+  assert.throws(() => serializeSessions(Array.from({ length: 31 }, (_, i) => ({ ...session, id: String(i) }))));
+});
+
+test('saving strips unknown fields before they reach browser storage', () => {
+  const snapshot = serializeSessions([{ ...session, ...{ connections: { openai: { key: 'not-for-storage' } } }, turns: [{ ...turn, result: { ...turn.result, ...{ key: 'not-for-storage' } } }] }]);
+  assert.ok(!snapshot.includes('not-for-storage'));
+  assert.deepEqual(parseSessions(snapshot), [session]);
+});
 test('history restoration rejects corrupted records without losing valid sessions', () => {
   const saved = [null, { id: 'broken', turns: [null] }, session, session];
   assert.deepEqual(parseSessions(JSON.stringify(saved)), [session]);
