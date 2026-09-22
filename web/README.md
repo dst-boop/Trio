@@ -161,6 +161,8 @@ Backups may be up to 20 MB and can recover conversations larger than the 5-milli
 
 ## Validation
 
+An opt-in [live quality evaluator](evaluation/README.md) compares individual models and Trio's combined answer on six synthetic, locally scored cases. `pnpm eval:quality` previews its cases and call budget without networking. Explicit `--run` plus configured provider environment keys enables billed checks with a hard HTTP-call limit and deadline. It distinguishes wrong values, formatting failures, missing responses, degraded/fallback phases, and unrun cases; no model judges another model's accuracy. This small suite does not establish general accuracy or freedom from bias, and offline evaluator tests are not live model-quality evidence.
+
 Deterministic tests cover the pipeline, critique-driven revisions, cancellation, provider failures, synthesis failover, shared context, comparison, no-key rejection, error-message redaction, saved-record validation, exports, vendor usage normalization, partial totals, cache handling, and price expiration. Browser tests cover desktop/mobile layout, the demo, tabs, connection controls, key non-persistence, history restoration, request validation, Markdown safety, code copying, attachment isolation, and usage details.
 
 Run browser checks with Playwright installed separately and a local dev server running:
