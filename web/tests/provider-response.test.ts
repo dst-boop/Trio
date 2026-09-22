@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { readProviderJson, maxProviderResponseBytes, maxAnswerCharacters } from '../lib/provider-response.ts';
 import { callProvider, orchestrate } from '../lib/orchestrate.ts';
 import { freshConnections, type ProviderId, type RunEvent } from '../lib/trio.ts';
@@ -11,6 +13,50 @@ function answer(id: ProviderId, text: unknown) {
   return { status: 'completed', stop_reason: 'end_turn', ...(id === 'openai' ? { output: [{ content }] } : id === 'claude' ? { content } : { steps: [{ type: 'model_output', content }] }), usage: { input_tokens: 4, output_tokens: 2, total_input_tokens: 4, total_output_tokens: 2 } };
 }
 const fetchJSON = (data: unknown) => (async () => Response.json(data)) as typeof fetch;
+
+test('generation never follows redirects carrying prompts or provider credentials', { timeout: 3000 }, async () => {
+  let redirected = 0;
+  const server = createServer((request, response) => {
+    if (request.url === '/upstream') { response.writeHead(307, { Location: '/unexpected' }); response.end(); }
+    else { redirected++; response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(answer('openai', 'Redirected answer'))); }
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  try {
+    for (const id of ['openai', 'claude', 'gemini'] as ProviderId[]) {
+      const fetcher = (async (_url, init) => fetch(`http://127.0.0.1:${address.port}/upstream`, init)) as typeof fetch;
+      await assert.rejects(callProvider(id, 'fake-private-key', 'model', 'system', 'private prompt', signal(), fetcher), /Could not reach the provider/);
+      assert.equal(redirected, 0, 'The redirected endpoint must receive neither headers nor body');
+    }
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test('HTTP errors allow failover even when vendor body cancellation never resolves', { timeout: 1000 }, async () => {
+  const connections = freshConnections(); connections.openai.key = 'fake-key'; connections.claude.key = 'fake-key';
+  let cancelled = false;
+  const fetcher = (async url => String(url).includes('openai') ? new Response(new ReadableStream({ cancel() { cancelled = true; return new Promise(() => {}); } }), { status: 429 }) : Response.json(answer('claude', 'Recovered answer'))) as typeof fetch;
+  const result = await orchestrate({ question: 'q', connections, mode: 'fast', lead: 'openai' }, () => {}, signal(), fetcher);
+  assert.ok(cancelled); assert.equal(result.by, 'claude'); assert.equal(result.answer, 'Recovered answer'); assert.match(result.errors.join(), /429/);
+});
+
+test('completed and broken SSE responses release their reader without waiting for cleanup', { timeout: 1000 }, async () => {
+  for (const complete of [true, false]) {
+    let cancelled = false;
+    const event = complete ? { type: 'response.completed', response: answer('openai', 'Completed answer') } : { type: 'error', message: 'private diagnostic' };
+    const body = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(encoder.encode('data: ' + JSON.stringify(event) + '\n\n')); }, cancel() { cancelled = true; return new Promise(() => {}); } });
+    const pending = callProvider('openai', 'k', 'm', 's', 'q', signal(), (async () => new Response(body, { headers: { 'Content-Type': 'text/event-stream' } })) as typeof fetch, undefined, () => {});
+    if (complete) assert.equal(await pending, 'Completed answer'); else await assert.rejects(pending, /interrupted/);
+    assert.ok(cancelled); assert.equal(body.locked, false);
+  }
+});
+
+test('Stop cancels SSE without waiting for a stalled vendor cleanup', { timeout: 1000 }, async () => {
+  const controller = new AbortController(); let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; return new Promise(() => {}); } });
+  const pending = callProvider('openai', 'k', 'm', 's', 'q', controller.signal, (async () => new Response(body, { headers: { 'Content-Type': 'text/event-stream' } })) as typeof fetch, undefined, () => {});
+  setTimeout(() => controller.abort(), 5);
+  await assert.rejects(pending, /abort/i); assert.ok(cancelled); assert.equal(body.locked, false);
+});
 
 test('bounded JSON preserves split UTF-8 and accepts the exact byte boundary', async () => {
   const bytes = encoder.encode(JSON.stringify({ text: 'Hello 🌍, 日本語' })); let offset = 0;
