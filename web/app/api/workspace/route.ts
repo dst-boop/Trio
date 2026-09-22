@@ -17,7 +17,7 @@ export async function PUT(request: Request) {
   if (!user) return reply({ error: 'Your sign-in expired. Export unsaved work, then sign in again.' }, 401);
   if (request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'The signed-in account changed. Download your unsaved work, then reload.' }, 401);
   if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
-  if (request.headers.get('x-trio-workspace-version') !== '3') return reply({ error: 'Trio has updated its saved history format. Download any unsaved work, then reload this page before saving.' }, 409);
+  if (request.headers.get('x-trio-workspace-version') !== '4') return reply({ error: 'Trio has updated its saved history format. Download any unsaved work, then reload this page before saving.' }, 409);
   if (!request.headers.get('content-type')?.includes('application/json')) return reply({ error: 'Expected JSON.' }, 415);
   const reader = request.body?.getReader();
   if (!reader) return reply({ error: 'Request body required.' }, 400);

@@ -7,7 +7,7 @@ try {
   const context=await browser.newContext({viewport:{width:1440,height:1050}}); const page=await context.newPage(); const errors=[];page.on('pageerror',e=>errors.push(e.message));
   assert.equal((await page.request.get(baseUrl+'/api/memory')).status(),401);
   await page.goto(baseUrl+'/signin-with-chatgpt?return_to=%2Fworkspace'); await page.getByText('Saved to your account',{exact:true}).waitFor();
-  const workspace=await(await page.request.get(baseUrl+'/api/workspace')).json();await context.setExtraHTTPHeaders({'X-Trio-Account':workspace.accountId,'X-Trio-Workspace-Version':'3'});
+  const workspace=await(await page.request.get(baseUrl+'/api/workspace')).json();await context.setExtraHTTPHeaders({'X-Trio-Account':workspace.accountId,'X-Trio-Workspace-Version':'4'});
   const memory=await(await page.request.get(baseUrl+'/api/memory')).json();
   const put=async(url,data,headers={})=>page.request.put(baseUrl+url,{headers:{origin:baseUrl,...headers},data});
   assert.equal((await put('/api/memory',{revision:memory.revision,enabled:false,notes:''})).status(),200);

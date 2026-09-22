@@ -26,14 +26,14 @@ test('memory is account-scoped, initially disabled, revision protected and remov
     assert.equal(memoryProfileSchema.safeParse({...first,notes:'x'.repeat(4001)}).success,false);
   } finally { sql.close(); }
 });
-test('every stage receives approved memory as user context with evidence safeguards; snapshots export in V3', async () => {
+test('every stage receives approved memory as user context with evidence safeguards; snapshots export in V4', async () => {
   for(const mode of ['council','deep','fast','compare'] as Mode[]) {
     const connections=freshConnections(); Object.values(connections).forEach(c=>c.key='fake-key');
     const fetcher=(async(url,init)=>{ const id:ProviderId=String(url).includes('openai')?'openai':String(url).includes('anthropic')?'claude':'gemini'; const body=JSON.parse(init!.body as string), system=body.instructions??body.system??body.system_instruction; const input=JSON.parse(body.input??body.messages[0].content); assert.equal((input.task??input).personal_memory,'Prefers short examples'); assert.ok(!system.includes('Prefers short examples')); assert.match(system,/not verified evidence/); assert.match(system,/never standards of evidence/); return response(id); }) as typeof fetch;
     const result=await orchestrate({question:'What should I do?',memory:'Prefers short examples',connections,mode,lead:'claude'},()=>{},new AbortController().signal,fetcher);
     assert.equal(result.memory,'Prefers short examples'); const record={...session,turns:[{...session.turns[0],result}]};
     assert.deepEqual(parseSessions(serializeSessions([record])), [record]);
-    const backup=exportBackup([record]); assert.equal(JSON.parse(backup).version,3); assert.deepEqual(parseBackup(backup),[record]); assert.match(sessionMarkdown(record.turns),/Personal memory used\n\nPrefers short examples/);
+    const backup=exportBackup([record]); assert.equal(JSON.parse(backup).version,4); assert.deepEqual(parseBackup(backup),[record]); assert.match(sessionMarkdown(record.turns),/Personal memory used\n\nPrefers short examples/);
     assert.ok(!JSON.stringify(conversationHistory(record.turns)).includes('Prefers short examples'),'Old memory must not re-enter later conversations as current preferences');
     const old={...JSON.parse(backup),version:2}; delete old.sessions[0].turns[0].result.memory; assert.equal(parseBackup(JSON.stringify(old))[0].turns[0].result.memory,undefined);
   }
