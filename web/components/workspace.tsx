@@ -22,7 +22,7 @@ import { branchConversation } from '@/lib/branch-conversation';
 import { AnswerFeedback } from '@/components/answer-feedback';
 import { setAnswerFeedback, type AnswerFeedback as Feedback } from '@/lib/answer-feedback';
 import { ConversationHistory } from '@/components/conversation-history';
-import { readRunStream } from '@/lib/read-run-stream';
+import { runLiveRequest } from '@/lib/run-live-request';
 import { applyRunEvent } from '@/lib/run-events';
 import { readImageFile, type AttachedImage } from '@/lib/images';
 import { readPdfFile, attachmentBytes, maxAttachmentBytes, type AttachedPdf } from '@/lib/pdf';
@@ -155,9 +155,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
         result.seconds = mode === 'deep' ? 4.6 : mode === 'council' ? 3.4 : mode === 'fast' ? 2.2 : 1.5;
       } else {
         const history = conversationHistory(turns);
-        const response = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, body: JSON.stringify({ personalize: Boolean(account), question, instructions: instructions.trim(), webResearch, researchProvider, context: context?.text, pdf: attachedPdf ? { mimeType: attachedPdf.mimeType, data: attachedPdf.data } : undefined, image: attachedImage ? { mimeType: attachedImage.mimeType, data: attachedImage.data } : undefined, history, connections, mode, lead }), signal: controller.signal });
-        if (!response.ok) { const data = await response.json() as { error?: string }; throw new Error(data.error ?? 'Could not start this session.'); }
-        result = await readRunStream(response.body, controller.signal, event => {
+        result = await runLiveRequest(JSON.stringify({ personalize: Boolean(account), question, instructions: instructions.trim(), webResearch, researchProvider, context: context?.text, pdf: attachedPdf ? { mimeType: attachedPdf.mimeType, data: attachedPdf.data } : undefined, image: attachedImage ? { mimeType: attachedImage.mimeType, data: attachedImage.data } : undefined, history, connections, mode, lead }), { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, controller.signal, event => {
           if (event.type === 'stage') { setStage(event.stage!); if (event.stage === 'synthesis') setTab('answer'); }
           result = applyRunEvent(result, event);
           if (event.type === 'final' && mode !== 'compare') setTab('answer');
