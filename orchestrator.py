@@ -45,9 +45,9 @@ FINAL_SYSTEM = (
 )
 
 
-def _synth_order(providers: list[Provider], succeeded: set[str]) -> list[Provider]:
+def _synth_order(providers: list[Provider], succeeded: set[str], preferred: str | None = None) -> list[Provider]:
     """Preferred synthesiser first, then the rest; models whose draft failed go last."""
-    preferred = os.getenv("SYNTHESIZER", "claude").lower()
+    preferred = preferred or os.getenv("SYNTHESIZER", "claude").lower()
     return sorted(providers, key=lambda p: (p.key not in succeeded, p.key != preferred))
 
 
@@ -157,9 +157,13 @@ async def run(
     question: str,
     history: list[dict] | None = None,
     thorough: bool = True,
+    model_keys: list[str] | None = None,
+    synthesizer: str | None = None,
 ) -> AsyncIterator[dict]:
     t_start = time.monotonic()
     providers = active_providers()
+    if model_keys is not None:
+        providers = [provider for provider in providers if provider.key in model_keys]
     if not providers:
         yield {"type": "error", "message": "No API keys are set. Add at least one key to .env and restart."}
         return
@@ -169,6 +173,7 @@ async def run(
         "type": "start",
         "thorough": thorough and len(providers) > 1,
         "models": [{"key": p.key, "label": p.label, "model": p.model} for p in providers],
+        "synthesizer": synthesizer or os.getenv("SYNTHESIZER", "claude").lower(),
     }
 
     # ---- 1. Draft -------------------------------------------------------
@@ -235,7 +240,7 @@ async def run(
 
     final_msgs = [{"role": "user", "content": prompt}]
     last_err = None
-    for p in _synth_order(providers, set(drafts)):
+    for p in _synth_order(providers, set(drafts), synthesizer):
         streamed = ""
         emitted = False
         stream_failed = False

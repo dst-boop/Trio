@@ -83,6 +83,7 @@ def collect_event(out: dict, event: dict) -> None:
     kind = event["type"]
     if kind == "start":
         out["models"] = event["models"]
+        out["synthesizer"] = event.get("synthesizer")
     elif kind in ("draft", "review"):
         if event.get("text"):
             out["drafts" if kind == "draft" else "reviews"][event["model"]] = event["text"]

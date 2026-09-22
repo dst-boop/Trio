@@ -9,6 +9,7 @@ Progress goes to stderr, the final answer to stdout, so you can pipe it:
 from __future__ import annotations
 
 import asyncio
+import argparse
 import os
 import sys
 
@@ -21,6 +22,7 @@ except ImportError:
     pass
 
 from orchestrator import run
+from providers import active_providers
 
 NAMES = {"claude": "Claude", "openai": "ChatGPT", "gemini": "Gemini"}
 
@@ -30,19 +32,24 @@ def note(msg: str) -> None:
 
 
 async def main() -> int:
-    args = sys.argv[1:]
-    thorough = "--quick" not in args
-    words = [a for a in args if not a.startswith("--")]
-    if not words:
-        note(__doc__.strip())
-        return 2
-
-    question = " ".join(words)
+    parser = argparse.ArgumentParser(description='Ask selected AI models to collaborate on a question.')
+    parser.add_argument('--quick', action='store_true', help='Skip peer review')
+    parser.add_argument('--models', help='Comma-separated subset: claude,openai,gemini')
+    parser.add_argument('--synthesizer', choices=NAMES, help='Preferred final-answer model (must be selected)')
+    parser.add_argument('question', nargs='+')
+    args = parser.parse_args()
+    selected = [key.strip() for key in args.models.split(',')] if args.models is not None else None
+    configured = {provider.key for provider in active_providers()}
+    if selected is not None and (not selected or len(set(selected)) != len(selected) or not set(selected) <= configured):
+        parser.error('--models must contain unique configured model keys: claude,openai,gemini')
+    if args.synthesizer and args.synthesizer not in (set(selected) if selected is not None else configured):
+        parser.error('--synthesizer must be one of the selected, configured models')
+    question = " ".join(args.question)
     exit_code = 1
     printed = 0  # final-answer chunks already written to stdout
     timeout = httpx.Timeout(float(os.getenv("MODEL_TIMEOUT_SECONDS", "240")), connect=10)
     async with httpx.AsyncClient(timeout=timeout) as client:
-        async for ev in run(client, question, thorough=thorough):
+        async for ev in run(client, question, thorough=not args.quick, model_keys=selected, synthesizer=args.synthesizer):
             t = ev["type"]
             if t == "start":
                 note("Asking " + ", ".join(m["label"] for m in ev["models"]) + "...")
