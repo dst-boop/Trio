@@ -1,3 +1,5 @@
+import { readJsonBody, JsonBodyError } from '@/lib/request-json';
+import { accountReply as reply } from '@/lib/account-api';
 import { z } from 'zod';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { orchestrate } from '@/lib/orchestrate';
@@ -12,26 +14,22 @@ const connection = z.object({ key: z.string().max(1024), model: z.string().min(1
 const schema = z.object({ personalize: z.boolean().optional(), instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, { status: 401, headers: { 'Cache-Control': 'private, no-store' } });
+  if (!user) return reply({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, 401);
   const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
-  if (!request.headers.get('content-type')?.includes('application/json')) return Response.json({ error: 'Expected JSON.' }, { status: 415 });
-  // Keys are supplied per request, used only with fixed vendor endpoints, and never logged or persisted.
-  const reader = request.body?.getReader();
-  if (!reader) return Response.json({ error: 'Request body required.' }, { status: 400 });
-  let length = 0; const chunks: Uint8Array[] = [];
-  while (true) { const { value, done } = await reader.read(); if (done) break; length += value.length; if (length > 8000000) { await reader.cancel(); return Response.json({ error: 'Request too large.' }, { status: 413 }); } chunks.push(value); }
-  const bytes = new Uint8Array(length); let offset = 0; for (const c of chunks) { bytes.set(c, offset); offset += c.length; }
-  let body; try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { return Response.json({ error: 'Invalid JSON.' }, { status: 400 }); }
+  if (origin && origin !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
+  // Keys remain request-scoped. Reject bad uploads before checking memory or calling providers.
+  let body;
+  try { body = await readJsonBody(request, 8_000_000); }
+  catch (error) { return reply({ error: error instanceof JsonBodyError ? error.message : 'Could not read the request.' }, error instanceof JsonBodyError ? error.status : 400); }
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return Response.json({ error: 'Check your prompt, session instructions (up to 6,000 characters), model IDs, context length, image format (PNG, JPEG, or WebP), and PDF format. Images and PDFs together must be under 4 MB.' }, { status: 400 });
-  if (!Object.values(parsed.data.connections).some(c => c.enabled && c.key.trim())) return Response.json({ error: 'Connect at least one model.' }, { status: 400 });
-  if (parsed.data.webResearch) { try { selectResearchProvider(parsed.data.connections, parsed.data.researchProvider); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Connect a research provider.' }, { status: 400 }); } }
+  if (!parsed.success) return reply({ error: 'Check your prompt, session instructions (up to 6,000 characters), model IDs, context length, image format (PNG, JPEG, or WebP), and PDF format. Images and PDFs together must be under 4 MB.' }, 400);
+  if (!Object.values(parsed.data.connections).some(c => c.enabled && c.key.trim())) return reply({ error: 'Connect at least one model.' }, 400);
+  if (parsed.data.webResearch) { try { selectResearchProvider(parsed.data.connections, parsed.data.researchProvider); } catch (error) { return reply({ error: error instanceof Error ? error.message : 'Connect a research provider.' }, 400); } }
   let memory: string | undefined;
   if (parsed.data.personalize) {
-    if (request.headers.get('x-trio-account') !== user.userId) return Response.json({ error: 'Your account changed. Reload before starting a personalized answer.' }, { status: 401 });
+    if (request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Your account changed. Reload before starting a personalized answer.' }, 401);
     try { if (!env.DB) throw new Error(); const profile = await readMemory(env.DB, user.userId); if (profile.enabled) memory = profile.notes; }
-    catch { return Response.json({ error: 'Personal memory could not be checked. Retry before running your models.' }, { status: 503 }); }
+    catch { return reply({ error: 'Personal memory could not be checked. Retry before running your models.' }, 503); }
   }
   const abort = new AbortController();
   const cancel = () => abort.abort();
@@ -45,5 +43,5 @@ export async function POST(request: Request) {
     },
     cancel() { abort.abort(); },
   });
-  return new Response(stream, { headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+  return new Response(stream, { headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', 'X-Content-Type-Options': 'nosniff' } });
 }
