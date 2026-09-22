@@ -59,7 +59,8 @@ def test_ask_streams_events(client):
         assert r.headers["content-type"].startswith("text/event-stream")
         body = "".join(r.iter_text())
     kinds = [e["type"] for e in _sse_events(body)]
-    for kind in ("start", "draft", "review", "final_start", "final_delta", "final", "done"):
+    for kind in ("start", "draft_start", "draft_delta", "draft", "review",
+                 "final_start", "final_delta", "final", "done"):
         assert kind in kinds, f"missing {kind!r} event"
 
 
@@ -95,6 +96,55 @@ def test_no_providers_yields_helpful_error(client, monkeypatch):
         monkeypatch.delenv(var, raising=False)
     out = client.post("/api/ask", json={"question": "hi", "stream": False}).json()
     assert "No API keys" in out["error"]
+
+
+def test_draft_deltas_reassemble_into_each_draft(client):
+    with client.stream("POST", "/api/ask", json={"question": "hi", "stream": True}) as r:
+        events = _sse_events("".join(r.iter_text()))
+    drafts = {e["model"]: e["text"] for e in events if e["type"] == "draft" and e["text"]}
+    assert len(drafts) == 3
+    for model, text in drafts.items():
+        chunks = [e["text"] for e in events if e["type"] == "draft_delta" and e["model"] == model]
+        assert len(chunks) > 3, f"{model}'s draft should arrive in many chunks"
+        assert "".join(chunks).strip() == text
+
+
+def test_broken_draft_stream_restarts_and_recovers(monkeypatch):
+    """A draft stream that dies after emitting chunks re-emits draft_start and
+    the non-streaming retry's text becomes the draft (issue #3 acceptance)."""
+    import asyncio
+
+    import orchestrator
+    from providers import Provider
+
+    async def ask(client, model, key, system, messages):
+        return "recovered draft" if "reviewer" not in system.lower() else "review"
+
+    async def dying_stream(client, model, key, system, messages):
+        yield "doomed "
+        raise RuntimeError("stream died")
+
+    async def fine_stream(client, model, key, system, messages):
+        yield "fine "
+        yield "answer"
+
+    providers = [
+        Provider("claude", "Claude", "m", "k", ask, dying_stream),
+        Provider("openai", "ChatGPT", "m", "k", ask, fine_stream),
+    ]
+    monkeypatch.setattr(orchestrator, "active_providers", lambda: providers)
+
+    async def collect():
+        return [ev async for ev in orchestrator.run(None, "q", thorough=False)]
+
+    events = asyncio.run(collect())
+    claude = [e for e in events if e.get("model") == "claude"]
+    starts = [e for e in claude if e["type"] == "draft_start"]
+    draft = next(e for e in claude if e["type"] == "draft")
+    assert len(starts) == 2, "the abandoned draft stream must signal a restart"
+    assert draft["text"] == "recovered draft" and draft["error"] is None
+    openai_draft = next(e for e in events if e.get("model") == "openai" and e["type"] == "draft")
+    assert openai_draft["text"] == "fine answer"
 
 
 def test_broken_stream_restarts_the_final_answer(monkeypatch):

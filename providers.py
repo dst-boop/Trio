@@ -204,7 +204,11 @@ def _mock(label: str):
 
 def _mock_stream(label: str):
     async def stream(client, model, key, system: str, messages: list[Message]) -> AsyncIterator[str]:
-        text = f"**Mock final answer** streamed by {label}, combining all three drafts."
+        if "final answer" in system.lower():
+            text = f"**Mock final answer** streamed by {label}, combining all three drafts."
+        else:
+            q = messages[-1]["content"]
+            text = f"Mock streamed draft from **{label}** for: _{q[:60]}_"
         for word in text.split(" "):
             await asyncio.sleep(0.05)
             yield word + " "

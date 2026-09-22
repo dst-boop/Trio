@@ -24,9 +24,11 @@ async generator of plain dict events that drives all three frontends.
 
 - **Run `pytest` before pushing.** Tests must pass offline with no API keys
   (they run under `TRIO_MOCK=1`). CI runs them on every PR.
-- **The event stream is the contract.** Events: `start`, `draft`, `stage`,
-  `review`, `final_start`, `final_delta`, `final`, `error`, plus the SSE-only
-  `done`. Three consumers must stay in sync when you touch them:
+- **The event stream is the contract.** Events: `start`, `draft_start`,
+  `draft_delta`, `draft`, `stage`, `review`, `final_start`, `final_delta`,
+  `final`, `error`, plus the SSE-only `done`. A repeated `draft_start` or
+  `final_start` means that answer restarts from scratch (a stream broke and
+  a non-streaming retry is replacing it). Three consumers must stay in sync when you touch them:
   `static/index.html` (`handle()`), `cli.py`, and `run_to_completion()` in
   `orchestrator.py`. Unknown event types must be ignored gracefully by every
   consumer, so *adding* a type is cheap; renaming or removing one is a
