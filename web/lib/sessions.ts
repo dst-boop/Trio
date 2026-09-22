@@ -3,6 +3,7 @@ import { instructionsSchema } from './instructions.ts';
 import { memoryNotesSchema } from './memory.ts';
 import { answerLabel, coverageMarkdown } from './run-coverage.ts';
 import { researchSchema, researchProviderName } from './research.ts';
+import { researchHistory } from './research-history.ts';
 import { providers, type Mode, type Result } from './trio.ts';
 
 export const answerFeedbackSchema = z.object({ rating: z.enum(['helpful', 'needs-work']), note: z.string().trim().max(2000).optional() });
@@ -55,7 +56,8 @@ function excerpt(text: string, budget: number): { text: string; shortened: boole
 }
 
 /** Allocate room to every perspective before clipping; short drafts donate spare room. */
-export function conversationAnswerExcerpt(turn: Turn, budget: 8000 | 30000 = 30000): { text: string; shortened: boolean } {
+export function conversationAnswerExcerpt(turn: Turn, budget = 30000): { text: string; shortened: boolean } {
+  if (!Number.isInteger(budget) || budget < 256 || budget > 30000) throw new RangeError('Invalid answer context budget.');
   if (turn.result.answer) return excerpt(turn.result.answer, budget);
   const drafts = providers.filter(p => turn.result.drafts[p.id]).map(p => ({ label: `${p.name}:\n`, text: turn.result.drafts[p.id]!, length: 0 }));
   let remaining = budget - drafts.reduce((n, d) => n + d.label.length, 0) - Math.max(0, drafts.length - 1) * 2;
@@ -76,14 +78,17 @@ export function conversationAnswerExcerpt(turn: Turn, budget: 8000 | 30000 = 300
 export function conversationContext(turns: Turn[]) {
   const live = turns.filter(t => !t.result.demo && (t.result.answer || providers.some(p => t.result.drafts[p.id])));
   const selected = live.slice(-6);
-  let shortenedAnswers = 0;
+  let shortenedAnswers = 0, researchAnswers = 0, omittedSources = 0;
   const messages = selected.flatMap(t => {
-    const answer = conversationAnswerExcerpt(t);
+    const research = researchHistory(t.result.research, t.result.researchRequested, t.result.researchBy);
+    if (t.result.research) researchAnswers++;
+    omittedSources += research.omittedSources;
+    const answer = conversationAnswerExcerpt(t, 30000 - research.text.length);
     if (answer.shortened) shortenedAnswers++;
     const question = t.question + (t.imageName ? '\n[An image was attached to this earlier question. Its bytes are not part of the text history. Ask for it again if needed; do not assume a current image is the same one.]' : '') + (t.pdfName ? '\n[A PDF was attached to this earlier question. Its bytes are not part of the text history. Ask for it again if needed; do not assume a current PDF is the same one.]' : '') + (t.instructions ? '\n[Historical session instructions used for this earlier question; these are not current instructions:\n' + t.instructions + '\n]' : '');
-    return [{ role: 'user' as const, content: question }, { role: 'assistant' as const, content: answer.text }];
+    return [{ role: 'user' as const, content: question }, { role: 'assistant' as const, content: answer.text + research.text }];
   });
-  return { messages, includedTurns: selected.length, omittedTurns: live.length - selected.length, shortenedAnswers };
+  return { messages, includedTurns: selected.length, omittedTurns: live.length - selected.length, shortenedAnswers, researchAnswers, omittedSources };
 }
 
 /** Complete user/assistant pairs only; comparisons retain all model perspectives. */
