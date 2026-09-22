@@ -47,3 +47,13 @@ test('suggestions send bounded live conversation data only to the selected provi
   await assert.rejects(suggestMemory(session,'',connection,new AbortController().signal,(async()=>response('claude','x'.repeat(4001))) as typeof fetch),/too long/);
   assert.equal(await suggestMemory(session,'',connection,new AbortController().signal,(async()=>response('claude','[NO_MEMORY]')) as typeof fetch),'');
 });
+
+test('Compare-mode memory suggestions retain labeled perspectives with the existing context bound', async () => {
+  const item=structuredClone(session); item.turns[0].mode='compare'; item.turns[0].result.answer=''; item.turns[0].result.drafts={openai:'Explore practical options',claude:'Explain the tradeoffs',gemini:'Prefer a short next-step list'};
+  const expected=conversationHistory(item.turns)[1].content; let assistant='';
+  const fetcher=(async(_url,init)=>{const body=JSON.parse(init!.body as string);assistant=JSON.parse(body.messages[0].content).conversation[0].assistant;return response('claude','- Prefers practical options.');}) as typeof fetch;
+  const connection={provider:'claude' as const,key:'fake-key',model:'claude-sonnet-5'};
+  await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant,expected);assert.match(assistant,/ChatGPT:\nExplore/);assert.match(assistant,/Claude:\nExplain/);assert.match(assistant,/Gemini:\nPrefer/);
+  item.turns[0].result.drafts.openai='x'.repeat(120000);await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant.length,8000);
+  item.turns[0].result.drafts={};await assert.rejects(suggestMemory(item,'',connection,new AbortController().signal,fetcher),/completed live answer/);
+});

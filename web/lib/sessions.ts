@@ -37,10 +37,15 @@ export function parseSessions(raw: string | null): Session[] {
   });
 }
 
+/** Compare mode has no combined answer; retain its labeled model perspectives. */
+export function conversationAnswer(turn: Turn): string {
+  return turn.result.answer || providers.filter(p => turn.result.drafts[p.id]).map(p => `${p.name}:\n${turn.result.drafts[p.id]}`).join('\n\n');
+}
+
 /** Complete user/assistant pairs only; comparisons retain all model perspectives. */
 export function conversationHistory(turns: Turn[]): { role: 'user' | 'assistant'; content: string }[] {
   return turns.filter(t => !t.result.demo).slice(-6).flatMap(t => {
-    const answer = t.result.answer || providers.filter(p => t.result.drafts[p.id]).map(p => `${p.name}:\n${t.result.drafts[p.id]}`).join('\n\n');
+    const answer = conversationAnswer(t);
     const question = t.question + (t.imageName ? '\n[An image was attached to this earlier question. Its bytes are not part of the text history. Ask for it again if needed; do not assume a current image is the same one.]' : '') + (t.pdfName ? '\n[A PDF was attached to this earlier question. Its bytes are not part of the text history. Ask for it again if needed; do not assume a current PDF is the same one.]' : '') + (t.instructions ? '\n[Historical session instructions used for this earlier question; these are not current instructions:\n' + t.instructions + '\n]' : '');
     return answer ? [{ role: 'user' as const, content: question }, { role: 'assistant' as const, content: answer.slice(0, 30000) }] : [];
   });
