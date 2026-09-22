@@ -7,7 +7,7 @@ const browser = await chromium.launch({ headless: true, channel: process.env.PLA
 const context = await browser.newContext({ viewport: { width: 1440, height: 1050 }, permissions: ['clipboard-read', 'clipboard-write'] });
 const page = await context.newPage();
 const errors = []; page.on('pageerror', error => errors.push(error.message));
-const result = { drafts: { openai: 'First perspective', claude: 'Second perspective' }, reviews: {}, answer: '', errors: [], seconds: 1, demo: false };
+const result = { drafts: { openai: 'First perspective', claude: 'Second perspective' }, reviews: {}, answer: '', errors: [], seconds: 1, demo: false, usage: { calls: 3, reportedCalls: 2, inputTokens: 200, outputTokens: 40, costUSD: null, byProvider: { openai: { model: 'gpt-6-astra', calls: 3, reportedCalls: 2, inputTokens: 200, outputTokens: 40, costUSD: null } } } };
 const session = { id: 'restored-comparison', title: 'Saved comparison', time: new Date().toISOString(), turns: [{ question: 'Saved comparison', mode: 'compare', result }] };
 await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
 await page.evaluate(s => {
@@ -37,6 +37,10 @@ await page.route('**/api/ask', async route => {
 await page.getByRole('textbox', { name: 'Your question' }).fill('Build on both perspectives');
 await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
 await page.getByRole('heading', { name: 'A formatted answer' }).waitFor();
+await page.getByText('Partial usage · 240 reported tokens').click();
+await page.getByText('Usage reported for 2 of 3 calls.', { exact: false }).waitFor();
+await page.getByText('Cost unavailable', { exact: true }).waitFor();
+await page.getByText('Partial usage · 240 reported tokens').click();
 assert.equal(requested, 1);
 assert.equal(await page.locator('.prose-answer strong').first().textContent(), 'Important finding');
 assert.equal(await page.getByRole('table').count(), 1);

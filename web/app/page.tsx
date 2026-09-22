@@ -8,6 +8,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Switch } from '@/components/ui/switch';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Answer as Prose } from '@/components/answer';
+import { UsageSummary } from '@/components/usage-summary';
 import { parseSessions, conversationHistory, sessionMarkdown, type Turn, type Session } from '@/lib/sessions';
 import { Toaster, toast } from 'sonner';
 import { providers, freshConnections, type Connections, type Mode, type ProviderId, type Result, type RunEvent } from '@/lib/trio';
@@ -86,6 +87,7 @@ export default function Home() {
           if (event.type === 'stage') setStage(event.stage!);
           if ((event.type === 'draft' || event.type === 'review' || event.type === 'revision') && event.provider) { const bucket = event.type === 'draft' ? 'drafts' : event.type === 'review' ? 'reviews' : 'revisions'; result = { ...result, [bucket]: { ...result[bucket], [event.provider]: event.text } }; }
           if (event.type === 'error') result = { ...result, errors: [...result.errors, event.text!] };
+          if (event.type === 'usage' && event.usage) result = { ...result, usage: event.usage };
           if (event.type === 'final' && event.result) { result = event.result; completed = true; }
           setWorking({ ...result });
         };
@@ -133,6 +135,7 @@ export default function Home() {
           <TabsContent value="reviews"><div className="perspective-grid">{Object.keys(displayed.reviews).length ? providers.filter(p => displayed.reviews[p.id]).map(p => <article key={p.id} className="perspective-card"><div><Mark small id={p.id} /><strong>{p.name}’s review</strong></div><Prose text={displayed.reviews[p.id]!} /></article>) : <p className="muted">{['council', 'deep'].includes(displayMode) ? 'Reviews appear after at least two models finish their drafts.' : 'Choose Council or Deep Council to include peer review in your next run.'}</p>}</div></TabsContent>
           {displayMode === 'deep' && <TabsContent value="revisions"><p className="revision-note">Revised answers respond to the peer critiques. Original answers remain in Perspectives; agreement still needs verification.</p><div className="perspective-grid">{providers.filter(p => displayed.drafts[p.id]).map(p => <article key={p.id} className="perspective-card"><div><Mark small id={p.id} /><strong>{p.name}'s revision</strong></div>{displayed.revisions?.[p.id] ? <Prose text={displayed.revisions[p.id]!} /> : <p className="muted">{busy ? 'Revisions follow the peer reviews…' : 'No revised answer returned. The original perspective remains available.'}</p>}</article>)}</div></TabsContent>}
           </Tabs>
+          {displayed.usage && !displayed.demo && <UsageSummary usage={displayed.usage} />}
           {displayed.errors.length > 0 && <div className="error-box" role="alert"><strong>Some steps could not finish</strong>{Array.from(new Set(displayed.errors)).map((e, i) => <p key={i}>{e}</p>)}<button onClick={() => setSettings(true)}>Check connections</button></div>}
           {turns.length > 1 && <details className="previous-turns"><summary>{turns.length - 1} earlier {turns.length === 2 ? 'question' : 'questions'} in this session</summary>{turns.slice(0, -1).map((t, i) => <article key={i}><h3>{t.question}</h3><Prose text={t.result.answer || 'Independent answers available in the session export.'} /></article>)}</details>}
         </section>}
