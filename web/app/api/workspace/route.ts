@@ -1,3 +1,4 @@
+import { readJsonBody, JsonBodyError } from '@/lib/request-json';
 import { env } from 'cloudflare:workers';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { readWorkspace, writeWorkspace, workspaceWriteSchema } from '@/lib/account-store';
@@ -18,22 +19,14 @@ export async function PUT(request: Request) {
   if (request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'The signed-in account changed. Download your unsaved work, then reload.' }, 401);
   if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
   if (request.headers.get('x-trio-workspace-version') !== '4') return reply({ error: 'Trio has updated its saved history format. Download any unsaved work, then reload this page before saving.' }, 409);
-  if (!request.headers.get('content-type')?.includes('application/json')) return reply({ error: 'Expected JSON.' }, 415);
-  const reader = request.body?.getReader();
-  if (!reader) return reply({ error: 'Request body required.' }, 400);
-  let raw = ''; let size = 0; const decoder = new TextDecoder('utf-8', { fatal: true });
-  try {
-    while (true) {
-      const { value, done } = await reader.read(); if (done) break;
-      size += value.byteLength;
-      if (size > 20_000_000) { void reader.cancel().catch(() => {}); return reply({ error: 'Workspace is too large. Export a backup and remove older sessions.' }, 413); }
-      raw += decoder.decode(value, { stream: true });
-    }
-    raw += decoder.decode();
-  } catch { return reply({ error: 'Could not read the workspace.' }, 400); }
-  finally { reader.releaseLock(); }
+  let body;
+  try { body = await readJsonBody(request, 20_000_000); }
+  catch (error) {
+    const status = error instanceof JsonBodyError ? error.status : 400;
+    return reply({ error: status === 413 ? 'Workspace is too large. Export a backup and remove older sessions.' : error instanceof JsonBodyError ? error.message : 'Could not read the workspace.' }, status);
+  }
   let input;
-  try { input = workspaceWriteSchema.parse(JSON.parse(raw)); }
+  try { input = workspaceWriteSchema.parse(body); }
   catch { return reply({ error: 'Invalid workspace backup.' }, 400); }
   try {
     if (!env.DB) throw new Error('Database unavailable');
