@@ -26,13 +26,24 @@ test('council makes 3 drafts, 3 reviews and 1 synthesis with shared context', as
   assert.deepEqual(events.filter(e => e.type === 'stage').map(e => e.stage), ['draft', 'review', 'synthesis']);
   assert.equal(result.answer, 'claude final response');
   assert.ok(JSON.stringify(s.calls[0].body).includes('Reference context'));
-  for (const call of s.calls.filter(c => c.stage === 'review')) { const prompt = call.body.input ?? call.body.messages[0].content; const context = JSON.parse(prompt); assert.equal(context.drafts.length, 3); assert.ok(context.drafts.every((d: any) => /^[ABC]$/.test(d.label))); }
+  const reviews = s.calls.filter(c => c.stage === 'review');
+  const systems = reviews.map(c => c.body.instructions ?? c.body.system ?? c.body.system_instruction);
+  assert.equal(new Set(systems).size, 3, 'Reviewers receive distinct priorities rather than identical instructions');
+  const contexts = reviews.map(call => JSON.parse(call.body.input ?? call.body.messages[0].content));
+  for (const context of contexts) {
+    assert.equal(context.drafts.length, 3); assert.ok(context.drafts.every((d: any) => /^[ABC]$/.test(d.label)));
+    assert.deepEqual(context, contexts[0], 'Different review priorities must not change the shared evidence or reveal provider mappings');
+    assert.ok(context.drafts.every((d: any) => Object.keys(d).sort().join(',') === 'answer,label'));
+  }
   assert.equal(s.calls[0].body.store, false);
 });
 test('provider draft outage is isolated and synthesis fails over', async () => {
   const s = setup((id, stage) => id === 'gemini' || id === 'claude' && stage === 'final');
   const result = await orchestrate(s.input, () => {}, new AbortController().signal, s.fetcher);
   assert.equal(result.by, 'openai'); assert.equal(Object.keys(result.drafts).length, 2); assert.equal(result.errors.length, 2);
+  const reviews = s.calls.filter(c => c.stage === 'review');
+  assert.equal(reviews.length, 2);
+  assert.notEqual(reviews[0].body.instructions ?? reviews[0].body.system, reviews[1].body.instructions ?? reviews[1].body.system, 'Remaining reviewers retain distinct priorities during a provider outage');
 });
 test('compare never reviews or synthesizes', async () => {
   const s = setup(); const result = await orchestrate({ ...s.input, mode: 'compare' }, () => {}, new AbortController().signal, s.fetcher);
