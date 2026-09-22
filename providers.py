@@ -55,8 +55,14 @@ async def _post(client: httpx.AsyncClient, url: str, headers: dict, body: dict) 
     raise ProviderError(last)
 
 
-async def _sse(client: httpx.AsyncClient, url: str, headers: dict, body: dict) -> AsyncIterator[dict]:
-    """POST a streaming request and yield each SSE data payload as a dict."""
+async def _sse(client: httpx.AsyncClient, url: str, headers: dict, body: dict) -> AsyncIterator[str]:
+    """POST a streaming request and yield each SSE data payload string.
+
+    Callers parse the payloads themselves and must verify their vendor's
+    completion marker arrived: an HTTP-clean close mid-answer looks like a
+    normal end of iteration here, and a truncated answer must never pass
+    as a complete one.
+    """
     async with client.stream("POST", url, headers=headers, json=body) as r:
         if r.status_code >= 300:
             detail = (await r.aread()).decode(errors="replace")[:300]
@@ -65,8 +71,8 @@ async def _sse(client: httpx.AsyncClient, url: str, headers: dict, body: dict) -
             if not line.startswith("data:"):
                 continue
             data = line[5:].strip()
-            if data and data != "[DONE]":
-                yield json.loads(data)
+            if data:
+                yield data
 
 
 # --------------------------------------------------------------------------
@@ -93,13 +99,20 @@ async def stream_claude(client, model, key, system: str, messages: list[Message]
         {"model": model, "max_tokens": _max_tokens(), "system": system,
          "messages": messages, "stream": True},
     )
-    async for ev in events:
-        if ev.get("type") == "content_block_delta":
+    done = False
+    async for data in events:
+        ev = json.loads(data)
+        kind = ev.get("type")
+        if kind == "content_block_delta":
             delta = ev.get("delta") or {}
             if delta.get("type") == "text_delta" and delta.get("text"):
                 yield delta["text"]
-        elif ev.get("type") == "error":
+        elif kind == "message_stop":
+            done = True
+        elif kind == "error":
             raise ProviderError((ev.get("error") or {}).get("message") or "stream error")
+    if not done:
+        raise ProviderError("stream ended before message_stop; answer may be truncated")
 
 
 # --------------------------------------------------------------------------
@@ -133,10 +146,17 @@ async def stream_openai(client, model, key, system: str, messages: list[Message]
         {"model": model, "max_completion_tokens": _max_tokens() * 3,
          "messages": [{"role": "developer", "content": system}, *messages], "stream": True},
     )
-    async for ev in events:
+    done = False
+    async for data in events:
+        if data == "[DONE]":
+            done = True
+            break
+        ev = json.loads(data)
         piece = ((ev.get("choices") or [{}])[0].get("delta") or {}).get("content")
         if piece:
             yield piece
+    if not done:
+        raise ProviderError("stream ended before [DONE]; answer may be truncated")
 
 
 # --------------------------------------------------------------------------
@@ -181,10 +201,17 @@ async def stream_gemini(client, model, key, system: str, messages: list[Message]
             "generationConfig": {"maxOutputTokens": _max_tokens() * 3},
         },
     )
-    async for ev in events:
-        for p in ((ev.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []:
+    done = False
+    async for data in events:
+        ev = json.loads(data)
+        cand = (ev.get("candidates") or [{}])[0]
+        for p in (cand.get("content") or {}).get("parts") or []:
             if p.get("text") and not p.get("thought"):
                 yield p["text"]
+        if cand.get("finishReason"):  # the last chunk carries it, like non-streaming
+            done = True
+    if not done:
+        raise ProviderError("stream ended without a finishReason; answer may be truncated")
 
 
 # --------------------------------------------------------------------------

@@ -109,6 +109,41 @@ def test_draft_deltas_reassemble_into_each_draft(client):
         assert "".join(chunks).strip() == text
 
 
+def test_streams_require_their_completion_marker():
+    """An HTTP-clean close before the vendor's completion marker must raise,
+    never pass a truncated answer off as complete (Codex review, PR #7)."""
+    import asyncio
+
+    import httpx
+
+    from providers import ProviderError, stream_claude, stream_gemini, stream_openai
+
+    def collect(fn, body: str):
+        async def go():
+            transport = httpx.MockTransport(lambda req: httpx.Response(200, content=body.encode()))
+            async with httpx.AsyncClient(transport=transport) as client:
+                return [p async for p in fn(client, "m", "k", "sys", [{"role": "user", "content": "q"}])]
+        return asyncio.run(go())
+
+    cases = [
+        (stream_claude,
+         'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hi "}}\n\n'
+         'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"there"}}\n\n',
+         'data: {"type":"message_stop"}\n\n'),
+        (stream_openai,
+         'data: {"choices":[{"delta":{"content":"hi "}}]}\n\n'
+         'data: {"choices":[{"delta":{"content":"there"}}]}\n\n',
+         'data: [DONE]\n\n'),
+        (stream_gemini,
+         'data: {"candidates":[{"content":{"parts":[{"text":"hi "}]}}]}\n\n',
+         'data: {"candidates":[{"content":{"parts":[{"text":"there"}]},"finishReason":"STOP"}]}\n\n'),
+    ]
+    for fn, deltas, marker in cases:
+        assert collect(fn, deltas + marker) == ["hi ", "there"], fn.__name__
+        with pytest.raises(ProviderError, match="truncated"):
+            collect(fn, deltas)
+
+
 def test_broken_draft_stream_restarts_and_recovers(monkeypatch):
     """A draft stream that dies after emitting chunks re-emits draft_start and
     the non-streaming retry's text becomes the draft (issue #3 acceptance)."""
