@@ -2,9 +2,10 @@ import { z } from 'zod';
 import { orchestrate } from '@/lib/orchestrate';
 import { selectResearchProvider } from '@/lib/research';
 import { imageSchema } from '@/lib/images';
+import { pdfSchema, attachmentBytes, maxAttachmentBytes } from '@/lib/pdf';
 
 const connection = z.object({ key: z.string().max(1024), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
-const schema = z.object({ webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) });
+const schema = z.object({ webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
 export async function POST(request: Request) {
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   const bytes = new Uint8Array(length); let offset = 0; for (const c of chunks) { bytes.set(c, offset); offset += c.length; }
   let body; try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { return Response.json({ error: 'Invalid JSON.' }, { status: 400 }); }
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return Response.json({ error: 'Check your prompt, model IDs, context length, and image format (PNG, JPEG, or WebP under 4 MB).' }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: 'Check your prompt, model IDs, context length, image format (PNG, JPEG, or WebP), and PDF format. Images and PDFs together must be under 4 MB.' }, { status: 400 });
   if (!Object.values(parsed.data.connections).some(c => c.enabled && c.key.trim())) return Response.json({ error: 'Connect at least one model.' }, { status: 400 });
   if (parsed.data.webResearch) { try { selectResearchProvider(parsed.data.connections, parsed.data.researchProvider); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Connect a research provider.' }, { status: 400 }); } }
   const abort = new AbortController();

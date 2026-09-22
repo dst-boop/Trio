@@ -28,6 +28,7 @@ function PastTurn({ turn }: { turn: Turn }) {
     <div className="history-turn-meta"><span>{modeNames[turn.mode]} · {result.seconds}s{result.by ? ` · ${providers.find(provider => provider.id === result.by)?.name}` : ''}</span>{result.answer && <button className="subtle-button" onClick={() => void copy()}><Copy size={14} />Copy earlier answer</button>}</div>
     {result.demo && <p className="demo-notice">ILLUSTRATIVE DEMO · No model APIs were called.</p>}
     {turn.imageName && <p className="revision-note">Image used: {turn.imageName}. Reattach it to revisit visual details; image data is not saved.</p>}
+    {turn.pdfName && <p className="revision-note">PDF used: {turn.pdfName}. Reattach it to revisit document details; PDF data is not saved.</p>}
     {result.fallback && <p className="revision-note">Single-model fallback · Synthesis did not complete.</p>}
     <Tabs defaultValue={turn.mode === 'compare' ? 'drafts' : 'answer'}>
       <TabsList className="result-tabs history-tabs" aria-label="Earlier question contributions">
