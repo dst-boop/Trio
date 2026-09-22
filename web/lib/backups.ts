@@ -38,7 +38,7 @@ export type ImportPlan = { sessions: Session[]; added: number; skipped: number; 
 export function planImport(existing: Session[], incoming: Session[]): ImportPlan {
   const sessions = [...existing], ids = new Set(existing.map(s => s.id));
   // Time and identity can differ across devices while the actual conversation is identical.
-  const fingerprint = (s: Session) => { const parsed = sessionSchema.safeParse(s); const normalized = parsed.success ? parsed.data : s; return JSON.stringify({ title: normalized.title, turns: normalized.turns }); };
+  const fingerprint = (s: Session) => { const parsed = sessionSchema.safeParse(s); const normalized = parsed.success ? parsed.data : s; return JSON.stringify({ title: normalized.title, instructions: normalized.instructions ?? '', turns: normalized.turns }); };
   const seen = new Set(existing.map(fingerprint));
   let added = 0, skipped = 0, copies = 0;
   for (const candidate of incoming) {
