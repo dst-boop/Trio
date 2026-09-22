@@ -21,7 +21,7 @@ def client(monkeypatch):
 def pipeline(monkeypatch):
     requests = []
 
-    async def fake_run(client, question, history, thorough):
+    async def fake_run(client, question, history, thorough, **options):
         requests.append({"question": question, "history": history})
         yield {"type": "start", "models": [{"key": "claude", "model": "test", "label": "Claude"}]}
         yield {"type": "draft", "model": "claude", "text": "A draft", "seconds": 1}
@@ -96,7 +96,7 @@ def test_storage_failure_keeps_answer_and_returns_no_false_link(client, pipeline
 
 
 def test_failed_run_creates_no_conversation(client, monkeypatch):
-    async def fail(*args):
+    async def fail(*args, **options):
         yield {'type': 'error', 'message': 'No models available'}
 
     monkeypatch.setattr(main, 'run', fail)

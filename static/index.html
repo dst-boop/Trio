@@ -38,6 +38,10 @@ h1 { font: 700 2.6rem/1 var(--display); letter-spacing: -0.03em; margin: 0 0 .6r
 .lede { margin: 0; color: var(--muted); max-width: 34rem; }
 .roster { display: flex; flex-wrap: wrap; gap: .4rem 1rem; margin: 1rem 0 0; padding: 0; list-style: none; font-size: .9rem; }
 .roster li { display: flex; align-items: center; gap: .45rem; }
+.roster label { display: flex; align-items: center; gap: .4rem; cursor: pointer; }
+.roster input { accent-color: var(--ink); }
+.model-options { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; color: var(--muted); font-size: .88rem; margin-top: .9rem; }
+.model-options select { background: var(--surface); color: var(--ink); border: 1px solid var(--line); padding: .35rem; border-radius: .4rem; max-width: 100%; }
 .roster li.off { color: var(--muted); text-decoration: line-through; }
 .dot { width: .65rem; height: .65rem; border-radius: 50%; background: var(--c); flex: none; }
 [data-m="claude"] { --c: var(--claude); } [data-m="openai"] { --c: var(--openai); } [data-m="gemini"] { --c: var(--gemini); }
@@ -109,6 +113,7 @@ textarea { width: 100%; border: 0; outline: 0; resize: none; background: transpa
     <h1>Trio</h1>
     <p class="lede">Claude, ChatGPT and Gemini each answer your question, check one another's work, and then one final answer is written from all three.</p>
     <ul class="roster" id="roster" aria-label="Models in use"></ul>
+    <div class="model-options"><label for="synthesizer">Final answer by</label><select id="synthesizer"><option value="">Server preference</option></select><span id="selection-note"></span></div>
     <div class="banner" id="banner" hidden></div>
     <div class="saved-tools" id="saved-tools" hidden><span id="saved-label">Saved on this server</span><button class="link" id="share" type="button">Copy conversation link</button><button class="link" id="continue" type="button" hidden>Continue conversation</button><button class="link" id="delete" type="button">Delete this conversation</button><a class="link" href="/">New conversation</a></div>
   </header>
@@ -121,7 +126,7 @@ textarea { width: 100%; border: 0; outline: 0; resize: none; background: transpa
       <textarea id="q" rows="2" placeholder="Ask something hard" required></textarea>
       <div class="row">
         <label class="toggle"><input type="checkbox" id="thorough" checked> Have them review each other</label>
-        <button class="go" id="go" type="submit">Ask all three</button>
+        <button class="go" id="go" type="submit">Ask Trio</button>
       </div>
     </div>
     <div class="foot"><button type="button" class="link" id="reset" hidden>Start a new conversation</button></div>
@@ -141,6 +146,7 @@ let history = [];          // [{role, content}] of questions and final answers
 let busy = false;
 let conversationId = location.pathname.startsWith('/c/') ? location.pathname.slice(3) : null;
 let turnCount = 0, saveFailed = false;
+let availableModels = [], selectedModels = [], preferredSynthesizer = '';
 if (conversationId) $('#form').hidden = true;
 
 const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
@@ -157,19 +163,41 @@ async function loadStatus() {
   }
   const s = await r.json();
   const on = new Set(s.models.map((m) => m.key));
+  availableModels = [...on]; selectedModels = [...on];
+  try {
+    const preferences = JSON.parse(store.get('trio_model_preferences') || 'null');
+    if (preferences && Array.isArray(preferences.models)) selectedModels = [...new Set(preferences.models.filter(key => on.has(key)))];
+    if (preferences && selectedModels.includes(preferences.synthesizer)) preferredSynthesizer = preferences.synthesizer;
+  } catch {}
   const roster = $("#roster"); roster.replaceChildren();
   for (const key of Object.keys(NAMES)) {
     const li = el("li", on.has(key) ? "" : "off"); li.dataset.m = key;
     const model = s.models.find((m) => m.key === key);
-    li.append(el("i", "dot"), document.createTextNode(NAMES[key] + (model ? ` (${model.model})` : " (no API key)")));
+    const label = el('label'), toggle = el('input'); toggle.type = 'checkbox'; toggle.checked = selectedModels.includes(key); toggle.disabled = !on.has(key); toggle.dataset.model = key; toggle.setAttribute('aria-label', `Use ${NAMES[key]}`);
+    toggle.addEventListener('change', () => { selectedModels = toggle.checked ? [...selectedModels, key] : selectedModels.filter(value => value !== key); syncModelSelection(true); });
+    label.append(toggle, el("i", "dot"), document.createTextNode(NAMES[key] + (model ? ` (${model.model})` : " (no API key)"))); li.append(label);
     roster.append(li);
   }
+  syncModelSelection();
   const banner = $("#banner");
   if (s.mock) { banner.hidden = false; banner.textContent = "Demo mode: answers are fake. Add API keys to .env and remove TRIO_MOCK to go live."; }
   else if (!on.size) { banner.hidden = false; banner.textContent = "No API keys found. Add them to the .env file and restart the server."; }
   else if (on.size < 3) { banner.hidden = false; banner.textContent = "Running with fewer than three models. Add the missing API keys to .env to use all of them."; }
   return true;
 }
+
+function syncModelSelection(save = false) {
+  if (!selectedModels.includes(preferredSynthesizer)) preferredSynthesizer = '';
+  const select = $('#synthesizer'); select.replaceChildren();
+  const automatic = el('option', '', 'Server preference'); automatic.value = ''; select.append(automatic);
+  for (const key of selectedModels) { const option = el('option', '', NAMES[key]); option.value = key; select.append(option); }
+  select.value = preferredSynthesizer; select.disabled = busy || selectedModels.length < 2;
+  for (const toggle of document.querySelectorAll('[data-model]')) toggle.disabled = busy || !availableModels.includes(toggle.dataset.model);
+  $('#go').disabled = busy || saveFailed || selectedModels.length === 0;
+  $('#selection-note').textContent = !selectedModels.length ? 'Select at least one model' : selectedModels.length === 1 ? 'One model · Direct answer, no review or synthesis' : `${selectedModels.length} models selected`;
+  if (save) store.set('trio_model_preferences', JSON.stringify({ models: selectedModels, synthesizer: preferredSynthesizer }));
+}
+$('#synthesizer').addEventListener('change', event => { preferredSynthesizer = event.target.value; syncModelSelection(true); });
 
 async function restoreConversation() {
   if (!conversationId) return;
@@ -315,7 +343,7 @@ async function ask(question) {
   let res;
   try {
     res = await fetch("/api/ask", { method: "POST", headers: headers(),
-      body: JSON.stringify({ question, history: conversationId ? [] : history.slice(-40), conversation_id: conversationId, expected_turns: conversationId ? turnCount : null, thorough: $("#thorough").checked, stream: true }) });
+      body: JSON.stringify({ question, history: conversationId ? [] : history.slice(-40), conversation_id: conversationId, expected_turns: conversationId ? turnCount : null, models: selectedModels, synthesizer: preferredSynthesizer || null, thorough: $("#thorough").checked, stream: true }) });
   } catch { return handle(ui, { type: "error", message: "Can't reach the server. Check that it's running and try again." }); }
   if (res.status === 401) { store.set("trio_pw", ""); await loadStatus(); return handle(ui, { type: "error", message: "Password needed. Enter it, then ask again." }); }
   if (res.status === 409) return handle(ui, { type: 'save_error', message: 'This conversation changed in another tab. Reload before continuing.' });
@@ -343,14 +371,15 @@ q.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.
 $("#form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const question = q.value.trim();
-  if (!question || busy || saveFailed) return;
+  if (!question || busy || saveFailed || !selectedModels.length) return;
   busy = true; $("#go").disabled = true; $("#go").textContent = "Working"; q.value = ""; grow();
+  syncModelSelection();
   try { await ask(question); }
   catch { handle({ turn: $('#thread').lastElementChild }, { type: 'save_error', message: 'The connection was interrupted. Your latest answer may not be saved.' }); }
-  finally { busy = false; $("#go").disabled = saveFailed; $("#go").textContent = "Ask all three"; }
+  finally { busy = false; syncModelSelection(); $("#go").textContent = "Ask Trio"; }
 });
 
-$("#reset").addEventListener("click", () => { if (busy) return; history = []; conversationId = null; turnCount = 0; saveFailed = false; window.history.replaceState(null, '', '/'); $("#thread").replaceChildren(); $("#reset").hidden = true; $('#saved-tools').hidden = true; $('#share').hidden = false; $('#go').disabled = false; q.focus(); });
+$("#reset").addEventListener("click", () => { if (busy) return; history = []; conversationId = null; turnCount = 0; saveFailed = false; window.history.replaceState(null, '', '/'); $("#thread").replaceChildren(); $("#reset").hidden = true; $('#saved-tools').hidden = true; $('#share').hidden = false; syncModelSelection(); q.focus(); });
 $('#continue').addEventListener('click', () => { $('#form').hidden = false; $('#continue').hidden = true; $('#reset').hidden = false; $('#saved-label').textContent = 'Continuing saved conversation'; q.focus(); });
 $('#share').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(new URL(`/c/${conversationId}`, location.origin).href); $('#saved-label').textContent = 'Link copied · Anyone with the link and server password can read or continue'; }

@@ -52,6 +52,7 @@ There is also a command line:
 ```bash
 python cli.py "Should I refinance at 5.1% with 22 years left?"
 python cli.py --quick "..."     # skip the peer-review round
+python cli.py --models claude,gemini --synthesizer gemini "Compare the options"
 ```
 
 ## Configuration
@@ -74,6 +75,15 @@ see [.env.example](.env.example) for the full list.
 ## API
 
 `POST /api/ask` with `{"question": "...", "history": [], "thorough": true, "stream": true}`.
+Optional `models` selects a nonempty subset of configured providers (for example,
+`["claude", "gemini"]`), and `synthesizer` selects the preferred final-answer
+writer for that run. The writer must be selected and configured; unknown,
+duplicate, empty, or unavailable selections return 422. Omit these fields to
+use every configured provider and the server's `SYNTHESIZER` preference.
+The Python web roster has model checkboxes and a final-answer selector; these
+preferences are saved on the viewer's device. One selected model returns its
+draft directly without a review or synthesis round. Saved answers retain the
+models that actually participated, even if preferences change later.
 With `stream: true` (what the UI uses) the response is Server-Sent Events:
 `start`, then per model `draft_start` + `draft_delta` chunks ending in a
 `draft` event with the complete text, a `review` per model, then the final

@@ -15,6 +15,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
@@ -64,6 +65,8 @@ class AskRequest(BaseModel):
     stream: bool = True
     conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{32}$")
     expected_turns: int | None = Field(default=None, ge=1)
+    models: list[Literal['claude', 'openai', 'gemini']] | None = Field(default=None, min_length=1, max_length=3)
+    synthesizer: Literal['claude', 'openai', 'gemini'] | None = None
 
 
 def check_password(supplied: str | None) -> None:
@@ -121,6 +124,11 @@ async def status(x_app_password: str | None = Header(default=None)):
 @app.post("/api/ask")
 async def ask(req: AskRequest, x_app_password: str | None = Header(default=None)):
     check_password(x_app_password)
+    configured = {provider.key for provider in active_providers()}
+    if req.models is not None and (len(set(req.models)) != len(req.models) or not set(req.models) <= configured):
+        raise HTTPException(422, "Choose unique models from the configured roster.")
+    if req.synthesizer and req.synthesizer not in (set(req.models) if req.models is not None else configured):
+        raise HTTPException(422, "The preferred synthesizer must be one of the selected, configured models.")
     history = [t.model_dump() for t in req.history]
     client = app.state.http
     expected_turns = 0
@@ -135,7 +143,7 @@ async def ask(req: AskRequest, x_app_password: str | None = Header(default=None)
 
     async def saved_run():
         out = {"drafts": {}, "reviews": {}, "errors": {}}
-        async for event in run(client, req.question, history, req.thorough):
+        async for event in run(client, req.question, history, req.thorough, model_keys=req.models, synthesizer=req.synthesizer):
             collect_event(out, event)
             yield event
             if event["type"] == "final":
