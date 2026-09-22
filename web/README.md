@@ -18,6 +18,8 @@ Production provisioning uses .openai/hosting.json with d1=DB and the checked-in 
 
 Provider generation, research, memory suggestions, and access checks reject HTTP redirects so prompts and API keys cannot be forwarded to a different endpoint. Provider requests bypass caches. Closing a failed or completed provider response never waits for its cleanup handshake; a stuck connection cannot prevent failover or completion.
 
+The browser finishes and saves a live run as soon as its first valid final event arrives, without waiting for the network connection to close. Stream events and final results are validated; unknown event types are ignored for compatibility, unexpected fields are stripped, and malformed or oversized records stop the run without saving partial output. UTF-8 decoding preserves split characters and rejects damaged text. Stream cleanup does not delay completion or Stop.
+
 ## Review and evidence
 
 Completed live answers show **Review & evidence**, derived from the contributions that actually returned. The progress display marks partial, skipped, and unavailable steps separately: one model cannot earn a peer-review completion mark, a failed synthesis remains unavailable when a fallback is shown, and demo steps are labeled Sample. Interrupted streaming text never receives completed coverage.
