@@ -32,14 +32,15 @@ export async function callProvider(id: ProviderId, key: string, model: string, i
   requestSignal.throwIfAborted();
   let response: Response;
   try {
-    response = await fetcher(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body as object, ...(streaming ? { stream: true } : {}) }), signal: requestSignal });
+    response = await fetcher(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body as object, ...(streaming ? { stream: true } : {}) }), signal: requestSignal, redirect: 'error', cache: 'no-store' });
   } catch {
     signal.throwIfAborted();
     if (streaming) throw new StreamInterrupted();
     throw new Error(`${id}: Could not reach the provider. Try again.`);
   }
   if (!response.ok) {
-    await response.body?.cancel().catch(() => {});
+    // Cleanup must not hold up failover if the provider leaves the connection open.
+    void response.body?.cancel().catch(() => {});
     const reason = response.status === 401 || response.status === 403 ? 'Check your API key and account access.' : response.status === 429 ? 'Rate limit or API credit limit reached.' : response.status === 404 ? 'Model unavailable. Check the model ID in Connections.' : response.status === 400 && onResearch ? 'The model rejected the research request. Check web-search access, the model ID, and any attached image or PDF.' : response.status === 400 && pdf ? 'The model rejected the PDF or request. Check PDF support, page limits, and file size; use an unencrypted PDF.' : response.status === 400 && image ? 'The model rejected the image or request. Check image support, file size, and the model ID.' : 'The provider could not complete this request. Try again.';
     throw new Error(`${providers.find(p => p.id === id)?.name}: ${reason} (${response.status})`);
   }

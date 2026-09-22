@@ -16,6 +16,8 @@ Existing browser history is never uploaded automatically. Open **Back up & resto
 
 Production provisioning uses .openai/hosting.json with d1=DB and the checked-in Drizzle migration; the Sites build copies migrations into dist/.openai/drizzle. Apply that same SQL to the local D1 binding before account browser tests. Tests use the scaffold's local mock sign-in; real ChatGPT OAuth is provided by Sites.
 
+Provider generation, research, memory suggestions, and access checks reject HTTP redirects so prompts and API keys cannot be forwarded to a different endpoint. Provider requests bypass caches. Closing a failed or completed provider response never waits for its cleanup handshake; a stuck connection cannot prevent failover or completion.
+
 ## Provider access checks
 
 Connections checks the provider's model metadata endpoint: [OpenAI Models](https://developers.openai.com/api/reference/resources/models/methods/retrieve), [Claude Models](https://platform.claude.com/docs/en/api/models/retrieve), or [Gemini Models](https://ai.google.dev/api/models). It makes one GET request without generating text, sending prompts, or saving credentials. Only the selected key goes to its own fixed vendor endpoint; redirects are rejected. Checks require sign-in and a same-origin JSON request, with bounded input and response bodies, cancellation, a 15-second vendor timeout, and fixed errors that never expose vendor diagnostics.

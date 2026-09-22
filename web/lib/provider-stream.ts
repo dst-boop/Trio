@@ -35,7 +35,8 @@ async function* events(body: ReadableStream<Uint8Array>, signal: AbortSignal): A
     }
   } finally {
     signal.removeEventListener('abort', cancel);
-    await reader.cancel().catch(() => {}); reader.releaseLock();
+    // Completion, errors and Stop must not wait for a remote cleanup handshake.
+    cancel(); reader.releaseLock();
   }
 }
 
