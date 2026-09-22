@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescripti
 import { Answer as Prose } from '@/components/answer';
 import { UsageSummary } from '@/components/usage-summary';
 import { ConversationHistory } from '@/components/conversation-history';
-import { parseSessions, conversationHistory, sessionMarkdown, type Turn, type Session } from '@/lib/sessions';
+import { parseSessions, serializeSessions, conversationHistory, sessionMarkdown, type Turn, type Session } from '@/lib/sessions';
 import { Toaster, toast } from 'sonner';
 import { providers, freshConnections, type Connections, type Mode, type ProviderId, type Result, type RunEvent } from '@/lib/trio';
 
@@ -44,6 +44,7 @@ export default function Home() {
   const [turns, setTurns] = useState<Turn[]>([]), [busy, setBusy] = useState(false), [stage, setStage] = useState('');
   const [working, setWorking] = useState<Result | null>(null), [runningQuestion, setRunningQuestion] = useState(''), [tab, setTab] = useState('answer');
   const [remember, setRemember] = useState(false), [loaded, setLoaded] = useState(false);
+  const [storageError, setStorageError] = useState(false);
   const [clearHistory, setClearHistory] = useState(false), [runMode, setRunMode] = useState<Mode>('council');
   const abortRef = useRef<AbortController | null>(null), fileRef = useRef<HTMLInputElement>(null), promptRef = useRef<HTMLTextAreaElement>(null);
   const connected = providers.filter(p => connections[p.id].key.trim() && connections[p.id].enabled).length;
@@ -58,7 +59,16 @@ export default function Home() {
       }
     } catch {} setLoaded(true);
   }, []);
-  useEffect(() => { if (!loaded) return; try { localStorage.setItem('trio-remember', String(remember)); if (remember) { localStorage.setItem('trio-sessions', JSON.stringify(sessions)); localStorage.setItem('trio-active-session', current ?? ''); } else { localStorage.removeItem('trio-sessions'); localStorage.removeItem('trio-active-session'); } } catch { toast.error('Browser storage is full or unavailable. This session stays in memory.'); } }, [sessions, remember, loaded, current]);
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      const snapshot = remember ? serializeSessions(sessions) : null;
+      localStorage.setItem('trio-remember', String(remember));
+      if (snapshot !== null) { localStorage.setItem('trio-sessions', snapshot); localStorage.setItem('trio-active-session', current ?? ''); }
+      else { localStorage.removeItem('trio-sessions'); localStorage.removeItem('trio-active-session'); }
+      setStorageError(false);
+    } catch { setStorageError(true); }
+  }, [sessions, remember, loaded, current]);
   useEffect(() => () => abortRef.current?.abort(), []);
   function newSession() { if (busy) return; setTurns([]); setCurrent(null); setWorking(null); setPrompt(''); setContext(null); setRunningQuestion(''); promptRef.current?.focus(); }
   function saveTurn(question: string, result: Result) { const next = [...turns, { question, result, mode }]; setTurns(next); const id = current ?? crypto.randomUUID(); setCurrent(id); setSessions(prev => [{ id, title: next[0].question, turns: next, time: new Date().toISOString() }, ...prev.filter(s => s.id !== id)].slice(0, 30)); }
@@ -124,6 +134,7 @@ export default function Home() {
     <main className="workspace">
       <header className="topbar"><div className="breadcrumb"><SidebarTrigger className="mobile-menu" /><span>Workspace</span><ChevronRight size={14} /><strong>New possibilities</strong></div><div className="top-actions"><span className={`mode-badge ${demo ? '' : 'live'}`}>{demo ? 'Demo workspace' : 'Live workspace'}</span><button className="subtle-button" onClick={() => setSettings(true)}><Settings2 size={15} /><span>Connections</span></button></div></header>
       <div className="work-body">
+        {storageError && <div className="error-box" role="alert"><strong>Browser history could not be updated</strong><p>{remember ? 'Recent changes are only in this tab. Export important sessions before closing or refreshing; the previous saved copy may be older.' : 'Browser storage is unavailable. Previously saved history may still be on this device.'}</p>{turns.length > 0 && <button onClick={exportSession}>Export current session</button>}</div>}
         <div className="page-intro"><div><div className="eyebrow"><span className="mini-line" /> COLLECTIVE INTELLIGENCE</div><h1>One question. <span>Three perspectives.</span></h1><p>Bring your biggest ideas. Let the best minds work together.</p></div><span className="intro-symbol" aria-hidden>◈</span></div>
         <section className="models-grid" aria-label="Your AI team">{providers.map(p => <button key={p.id} className={`model-card ${!connections[p.id].enabled && !demo ? 'muted-card' : ''}`} onClick={() => setSettings(true)} style={{ '--model-color': p.color } as React.CSSProperties}><div className="model-card-top"><Mark id={p.id} /><span className="provider-status">{busy ? (working?.drafts[p.id] ? 'Contributed' : !demo && (!connections[p.id].enabled || !connections[p.id].key) ? 'Not participating' : 'Working…') : demo ? 'Demo' : connections[p.id].enabled && connections[p.id].key ? 'Key added' : 'Not connected'}</span></div><div className="model-name">{p.name}<span>{p.company}</span></div><p>{p.id === 'openai' ? 'Explore possibilities. Build the plan.' : p.id === 'claude' ? 'Examine the details. Challenge assumptions.' : 'Connect ideas. Find a fresh perspective.'}</p><div className="model-card-foot"><span>{demo ? 'Illustrative participant' : connections[p.id].model}</span><Plus size={14} /></div></button>)}</section>
         <section className="prompt-section"><div className="section-heading"><h2>{turns.length ? 'Keep the conversation going' : 'What are we working on?'}</h2><span>01 / ASK</span></div><div className="composer"><textarea ref={promptRef} value={prompt} maxLength={20000} disabled={busy} onChange={e => setPrompt(e.target.value)} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); void run(); } }} placeholder="A complex question, an ambitious idea, a problem worth solving…" aria-label="Your question" /><div className="composer-bottom"><input ref={fileRef} type="file" accept=".txt,.md,.csv,.json,.js,.ts,.tsx,.py,.html,.css" hidden onChange={e => { void attach(e.target.files?.[0]); e.target.value = ''; }} /><button className="attach-button" onClick={() => fileRef.current?.click()} disabled={busy} title="Attach a text file"><Paperclip size={17} /><span>Add context</span></button>{context && <span className="attachment">{context.name}<button aria-label="Remove attachment" disabled={busy} onClick={() => setContext(null)}><X size={13} /></button></span>}<span className="key-hint">⌘ / Ctrl + Enter</span>{busy ? <button className="run-button" onClick={() => abortRef.current?.abort()}><Square size={14} /> Stop</button> : <button className="run-button" disabled={!demo && !prompt.trim()} onClick={() => void run()}>{demo ? 'Run demo' : 'Ask Trio'}<ArrowUp size={17} /></button>}</div></div><div className="composer-note">{demo ? <>Demo runs a prepared product-validation example. <button onClick={() => setSettings(true)}>Connect models to ask your own question <ChevronRight size={12} /></button></> : <>Prompts and attached text go to enabled providers. {modes[mode].calls}; each provider bills separately.</>}</div></section>

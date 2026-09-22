@@ -10,11 +10,19 @@ const usageCounts = { calls: nonnegative.int(), reportedCalls: nonnegative.int()
 const providerUsage = z.object({ ...usageCounts, model: z.string().max(100) });
 const usage = z.object({ ...usageCounts, byProvider: z.object({ openai: providerUsage.optional(), claude: providerUsage.optional(), gemini: providerUsage.optional() }) });
 const result = z.object({ drafts: answers, reviews: answers, revisions: answers.optional(), answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: nonnegative, demo: z.boolean(), fallback: z.boolean().optional(), usage: usage.optional() });
-const session = z.object({ id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ question: z.string().min(1).max(20000), mode: z.enum(['council', 'deep', 'fast', 'compare']), result })).min(1).max(200) });
+const session = z.object({ id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ question: z.string().min(1).max(20000), mode: z.enum(['council', 'deep', 'fast', 'compare']), result })).min(1) });
+const maxStoredCharacters = 5_000_000;
+
+/** Only write snapshots the reader can restore. Never truncate model contributions. */
+export function serializeSessions(sessions: Session[]): string {
+  const snapshot = JSON.stringify(z.array(session).max(30).parse(sessions));
+  if (snapshot.length > maxStoredCharacters) throw new Error('Session history exceeds browser storage limits.');
+  return snapshot;
+}
 
 /** Restore only well-formed records; strip unknown fields, including injected credentials. */
 export function parseSessions(raw: string | null): Session[] {
-  if (!raw || raw.length > 5_000_000) return [];
+  if (!raw || raw.length > maxStoredCharacters) return [];
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return []; }
   if (!Array.isArray(value)) return [];
