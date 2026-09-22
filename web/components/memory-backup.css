@@ -1,0 +1,9 @@
+.memory-backup .dialog-actions{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:10px;margin:10px 0}
+.memory-backup .subtle-button{border:1px solid #62516e;background:#28212f;border-radius:7px;padding:10px 12px;line-height:1.5;font-size:13px}
+.memory-backup .subtle-button:hover{background:#382d43}
+.memory-backup .subtle-button:disabled{opacity:.45;cursor:not-allowed}
+.memory-backup .dialog-actions button{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.memory-import-preview{border:1px solid #51415d;border-radius:9px;background:#211b2a;padding:14px;display:grid;gap:10px;margin-top:14px;min-width:0}
+.memory-import-preview h4{font-weight:600;font-size:14px}
+.memory-import-filename{overflow-wrap:anywhere}
+.memory-import-preview .memory-editor textarea{min-height:100px;max-height:220px}
