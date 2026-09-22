@@ -45,11 +45,17 @@ test('research is opt-in and requires enabled OpenAI before any provider is char
   await orchestrate({ question: 'q', connections: connections(), mode: 'compare', lead: 'claude' }, () => {}, signal(), (async (_url, init) => { assert.equal(JSON.parse(init!.body as string).tools, undefined); return response(); }) as typeof fetch);
 });
 
-test('a single shared brief reaches every Deep Council stage with sources and accounts for search charges', async () => {
+test('a single shared brief reaches every Deep Council stage with sources and accounts for search charges', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-12-31T23:59:59Z') });
   const requests: any[] = [], events: RunEvent[] = [];
-  const fetcher = (async (_url, init) => { const body = JSON.parse(init!.body as string); requests.push(body); if (body.tools) return Response.json(researchResponse()); return response(); }) as typeof fetch;
+  const fetcher = (async (_url, init) => { const body = JSON.parse(init!.body as string); requests.push(body); t.mock.timers.tick(60_000); if (body.tools) return Response.json(researchResponse()); return response(); }) as typeof fetch;
   const result = await orchestrate({ question: 'Current facts?', webResearch: true, connections: connections(), mode: 'deep', lead: 'claude' }, event => events.push(event), signal(), fetcher);
   assert.equal(requests.length, 11); assert.equal(requests.filter(r => r.tools).length, 1);
+  for (const body of requests) {
+    const prompt = JSON.parse(body.input ?? body.messages[0].content);
+    assert.deepEqual((prompt.task ?? prompt).current_time, { utc: '2026-12-31T23:59:59.000Z', time_zone: 'UTC', local_date: '2026-12-31' });
+  }
+  assert.match(requests[0].instructions, /current UTC date is 2026-12-31/);
   for (const body of requests.slice(1)) { const s = JSON.stringify(body); assert.ok(s.includes('Evidence: 42')); assert.ok(s.includes(citation.url)); assert.ok(s.includes('untrusted evidence')); assert.ok(!s.includes('fake-openai')); }
   assert.equal(result.usage!.calls, 11); assert.equal(result.usage!.reportedCalls, 11); assert.equal(result.usage!.costUSD, null); assert.equal(result.usage!.byProvider.openai!.costUSD, null);
   assert.equal(events[0].stage, 'research'); assert.ok(events.some(e => e.type === 'research'));
