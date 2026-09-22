@@ -58,9 +58,10 @@ def _new_totals() -> dict:
 def _tally(totals: dict, key: str, u: dict, lost_stream: bool = False) -> None:
     """Add one call's token usage to a model's running total.
 
-    lost_stream=True means a stream emitted (billed) content but died before
-    its usage frame arrived, so this attempt's tokens are missing: the totals
-    are an undercount and must never be presented as a complete bill.
+    lost_stream=True means a stream failed before its usage frame arrived.
+    The request may have been accepted and billed even when no delta was
+    seen, so this attempt's tokens are potentially missing: the totals are
+    an undercount and must never be presented as a complete bill.
     """
     if u:
         t = totals["models"].setdefault(key, {"input": 0, "output": 0})
@@ -86,6 +87,8 @@ def _usage_summary(providers: list[Provider], totals: dict) -> dict | None:
         c = estimate_cost(model_of.get(k, ""), v["input"], v["output"])
         if c is None:
             cost_known = False
+        elif totals["incomplete"]:
+            pass  # undercounted tokens: a per-model price would also read as exact
         else:
             v["cost"] = round(c, 4)
             cost += c
@@ -137,7 +140,7 @@ async def _draft_one(client: httpx.AsyncClient, p: Provider, convo: list[dict],
                 await queue.put({"type": "draft_delta", "model": p.key, "text": piece})
         except Exception:
             text, stream_failed = "", True  # cut mid-thought; retry below without streaming
-        _tally(totals, p.key, u, lost_stream=stream_failed and emitted)
+        _tally(totals, p.key, u, lost_stream=stream_failed)
     text, err = text.strip(), None
     if not text:
         if emitted:
@@ -256,7 +259,7 @@ async def run(
                 last_err = str(e) or e.__class__.__name__
                 streamed = ""  # a broken stream may be cut mid-thought; retry below without streaming
                 stream_failed = True
-            _tally(usage_totals, p.key, u, lost_stream=stream_failed and emitted)
+            _tally(usage_totals, p.key, u, lost_stream=stream_failed)
         text = streamed.strip()
         if not text:
             if emitted:

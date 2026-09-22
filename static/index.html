@@ -379,21 +379,27 @@ $("#form").addEventListener("submit", async (e) => {
   finally { busy = false; syncModelSelection(); $("#go").textContent = "Ask Trio"; }
 });
 
-$("#reset").addEventListener("click", () => { if (busy) return; history = []; conversationId = null; turnCount = 0; saveFailed = false; window.history.replaceState(null, '', '/'); $("#thread").replaceChildren(); $("#reset").hidden = true; $('#saved-tools').hidden = true; $('#share').hidden = false; syncModelSelection(); q.focus(); });
+$("#reset").addEventListener("click", () => { if (busy) return; history = []; conversationId = null; turnCount = 0; saveFailed = false; disarmDelete(); window.history.replaceState(null, '', '/'); $("#thread").replaceChildren(); $("#reset").hidden = true; $('#saved-tools').hidden = true; $('#share').hidden = false; syncModelSelection(); q.focus(); });
 $('#continue').addEventListener('click', () => { $('#form').hidden = false; $('#continue').hidden = true; $('#reset').hidden = false; $('#saved-label').textContent = 'Continuing saved conversation'; q.focus(); });
 $('#share').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(new URL(`/c/${conversationId}`, location.origin).href); $('#saved-label').textContent = 'Link copied · Anyone with the link and server password can read or continue'; }
   catch { $('#saved-label').textContent = 'Copy the conversation URL from the address bar'; }
 });
-let deleteArmed = 0;
+let deleteArmed = 0, deleteArmedFor = null;
+function disarmDelete() {
+  clearTimeout(deleteArmed); deleteArmed = 0; deleteArmedFor = null;
+  $('#delete').textContent = 'Delete this conversation';
+}
 $('#delete').addEventListener('click', async () => {  // two clicks: arm, then delete
   if (busy || !conversationId) return;
-  if (!deleteArmed) {
+  if (!deleteArmed || deleteArmedFor !== conversationId) {  // never confirm a different conversation
+    disarmDelete();
+    deleteArmedFor = conversationId;
     $('#delete').textContent = 'Really delete? Click again';
-    deleteArmed = setTimeout(() => { deleteArmed = 0; $('#delete').textContent = 'Delete this conversation'; }, 4000);
+    deleteArmed = setTimeout(disarmDelete, 4000);
     return;
   }
-  clearTimeout(deleteArmed); deleteArmed = 0;
+  disarmDelete();
   let r;
   try { r = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, { method: 'DELETE', headers: headers() }); }
   catch { $('#saved-label').textContent = 'Could not reach the server to delete. Try again.'; $('#delete').textContent = 'Delete this conversation'; return; }
