@@ -35,7 +35,11 @@ pnpm typecheck
 pnpm build
 ```
 
-The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/ask endpoint streams stage updates as newline-delimited JSON. Provider calls happen server-side to fixed vendor endpoints; API keys are never sent to another vendor, logged, or saved by the app. Production access is controlled by the private Sites deployment.
+The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/ask endpoint streams stage updates and visible answer text as newline-delimited JSON. Provider calls happen server-side to fixed vendor endpoints; API keys are never sent to another vendor, logged, or saved by the app. Production access is controlled by the private Sites deployment.
+
+Live drafts, reviews, revisions, and synthesis stream as they are written. The workspace initially shows Perspectives and switches to Answer when synthesis starts. A broken stream retries once without streaming, clearing its previous partial text. Partial output never enters peer-review prompts or saved turns. Stop cancels provider reads and preserves completed questions; the interrupted contribution remains visible only in the current tab.
+
+The hosted event contract adds `contribution_start` and `contribution_delta` with a `provider` and `phase` (`draft`, `review`, `revision`, or `synthesis`). Start clears that contribution; delta appends visible text. Existing complete `draft`, `review`, `revision`, and `final` events remain authoritative. `lib/run-events.ts` handles client state separately from the Python SSE contract. Provider parsers require a terminal completion event and ignore thought/tool content. See the official [OpenAI Responses](https://developers.openai.com/api/docs/guides/streaming-responses), [Claude Messages](https://platform.claude.com/docs/en/build-with-claude/streaming), and [Gemini Interactions](https://ai.google.dev/gemini-api/docs/streaming) streaming specifications.
 
 ## Data and limits
 
@@ -44,7 +48,7 @@ The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/as
 - Sessions live in browser memory unless you explicitly enable local history. Local history is device-specific, includes prompts and answers, and does not include API keys or the original attachments (answers may quote them). Refresh restores the active session after validating saved records. Clear history with the sidebar trash button and confirmation.
 - Each follow-up includes at most six recent live question/answer pairs, including the model perspectives from Compare runs; demo content is excluded. Prior answers are capped at 30,000 characters per turn.
 - Each question is limited to 20,000 characters; attached text to 60,000 characters. Provider timeouts are 120 seconds per call.
-- Three connected models use ten calls in Deep Council, seven in Council, four in Quick synthesis, or three in Compare. Synthesis failover can add up to two calls. Each vendor bills its own usage.
+- Three connected models normally use ten calls in Deep Council, seven in Council, four in Quick synthesis, or three in Compare. Synthesis can try up to two alternate models. Each broken streaming call can add one non-streaming retry, including failover attempts. Retries can incur extra charges; attempted calls and incomplete usage are reported. Each vendor bills its own usage.
 - Live results include a usage panel with attempted calls, reported input/output tokens, and a per-model breakdown. Missing provider metadata and failed requests are explicitly marked as partial usage. Gemini thinking tokens count as output; OpenAI reasoning tokens are already included in its output total. Usage is included in local history and Markdown exports.
 - Standard-rate USD estimates are shown only when every attempt reported usage and all models have a known, unexpired uncached rate. They exclude discounts and taxes. Cached usage, unknown models, missing metadata, and expired rates display no cost estimate; provider invoices remain authoritative. Current rates were checked September 22, 2026 against [OpenAI](https://developers.openai.com/api/docs/models/gpt-6-astra), [Anthropic](https://platform.claude.com/docs/en/about-claude/pricing), and [Google](https://ai.google.dev/gemini-api/docs/pricing). The table expires January 1, 2027, before using outdated introductory rates.
 - A failed provider does not stop the others. If all synthesis attempts fail, an independent draft is explicitly labeled as a fallback.
@@ -63,6 +67,7 @@ node tests/browser-quality.mjs
 node tests/browser-deep-council.mjs
 node tests/browser-history.mjs
 node tests/browser-storage.mjs
+node tests/browser-streaming.mjs
 ```
 
 The scripts default to Microsoft Edge and http://localhost:5173. Set TRIO_BASE_URL to test a server on another port, PLAYWRIGHT_CHANNEL for another installed Chromium channel, and optionally PLAYWRIGHT_MODULE to a module URL if using a bundled Playwright installation.
