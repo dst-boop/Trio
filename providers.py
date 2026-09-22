@@ -44,6 +44,21 @@ def _max_tokens() -> int:
     return int(os.getenv("MAX_OUTPUT_TOKENS", "4000"))
 
 
+def _http_error(status: int) -> str:
+    """Provider bodies can echo keys or private prompts; never expose them."""
+    if status in (401, 403):
+        hint = "Check the API key and account access."
+    elif status == 429:
+        hint = "Rate limit or API credit limit reached."
+    elif status == 404:
+        hint = "Model unavailable. Check the configured model ID."
+    elif status in (400, 422):
+        hint = "The provider rejected the request. Check model compatibility and context length."
+    else:
+        hint = "The provider could not complete the request. Try again."
+    return f"HTTP {status}: {hint}"
+
+
 async def _post(client: httpx.AsyncClient, url: str, headers: dict, body: dict) -> dict:
     """POST with backoff on rate limits and transient server errors."""
     last = "unknown error"
@@ -55,12 +70,7 @@ async def _post(client: httpx.AsyncClient, url: str, headers: dict, body: dict) 
         else:
             if r.status_code < 300:
                 return r.json()
-            try:
-                err = r.json().get("error", {})
-                detail = err.get("message") if isinstance(err, dict) else str(err)
-            except Exception:
-                detail = r.text[:300]
-            last = f"HTTP {r.status_code}: {detail}"
+            last = _http_error(r.status_code)
             if r.status_code not in RETRY_STATUS:
                 break
             retry_after = r.headers.get("retry-after")
@@ -81,8 +91,7 @@ async def _sse(client: httpx.AsyncClient, url: str, headers: dict, body: dict) -
     """
     async with client.stream("POST", url, headers=headers, json=body) as r:
         if r.status_code >= 300:
-            detail = (await r.aread()).decode(errors="replace")[:300]
-            raise ProviderError(f"HTTP {r.status_code}: {detail}")
+            raise ProviderError(_http_error(r.status_code))
         async for line in r.aiter_lines():
             if not line.startswith("data:"):
                 continue
@@ -106,7 +115,7 @@ async def ask_claude(client, model, key, system: str, messages: list[Message], u
         usage.update(input=u.get("input_tokens") or 0, output=u.get("output_tokens") or 0)
     text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
     if not text.strip():
-        raise ProviderError(f"empty response (stop_reason={data.get('stop_reason')})")
+        raise ProviderError("No text returned. The response may be blocked or its output limit exhausted.")
     return text.strip()
 
 
@@ -135,7 +144,7 @@ async def stream_claude(client, model, key, system: str, messages: list[Message]
         elif kind == "message_stop":
             done = True
         elif kind == "error":
-            raise ProviderError((ev.get("error") or {}).get("message") or "stream error")
+            raise ProviderError("The provider interrupted the response stream. Try again.")
     if not done:
         raise ProviderError("stream ended before message_stop; answer may be truncated")
 
@@ -162,7 +171,7 @@ async def ask_openai(client, model, key, system: str, messages: list[Message], u
     choice = (data.get("choices") or [{}])[0]
     text = (choice.get("message") or {}).get("content") or ""
     if not text.strip():
-        raise ProviderError(f"empty response (finish_reason={choice.get('finish_reason')})")
+        raise ProviderError("No text returned. The response may be blocked or its output limit exhausted.")
     return text.strip()
 
 
@@ -221,8 +230,7 @@ async def ask_gemini(client, model, key, system: str, messages: list[Message], u
     parts = (cand.get("content") or {}).get("parts") or []
     text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
     if not text.strip():
-        reason = cand.get("finishReason") or (data.get("promptFeedback") or {}).get("blockReason")
-        raise ProviderError(f"empty response (reason={reason})")
+        raise ProviderError("No text returned. The response may be blocked or its output limit exhausted.")
     return text.strip()
 
 
