@@ -9,6 +9,7 @@ A private online workspace for OpenAI, Claude, and Gemini. Ask once, get indepen
 3. Choose Council (drafts → reviews → synthesis), Deep Council (drafts → reviews → revisions → synthesis), Quick synthesis (drafts → synthesis), or Compare (drafts only).
 4. Ask your question. Optionally attach a text, Markdown, CSV, JSON, or code file under 60 KB.
 5. Inspect perspectives, reviews, and Deep Council revisions, copy individual code blocks, or export the session as Markdown with run notes and fallback labels. Answers render Markdown headings, lists, links, and tables; raw HTML and embedded images are disabled.
+6. Expand **earlier questions** to inspect any previous answer, original perspectives, peer reviews, revisions, usage, and run notes without changing your current question. Earlier contributions remain readable while a follow-up runs.
 
 Deep Council adds one bounded revision round. Each participating model sees the original anonymized drafts, its own draft label, and the completed peer critiques; revisions run independently. Models are asked to correct supported errors and describe substantive changes and remaining uncertainties. Synthesis receives both original and revised answers. Extra deliberation increases time and API usage; it does not verify facts or guarantee a better answer. No browsing or external tools are added.
 
@@ -59,6 +60,7 @@ Run browser checks with Playwright installed separately and a local dev server r
 node tests/browser-smoke.mjs
 node tests/browser-quality.mjs
 node tests/browser-deep-council.mjs
+node tests/browser-history.mjs
 ```
 
 The scripts default to Microsoft Edge and http://localhost:5173. Set TRIO_BASE_URL to test a server on another port, PLAYWRIGHT_CHANNEL for another installed Chromium channel, and optionally PLAYWRIGHT_MODULE to a module URL if using a bundled Playwright installation.

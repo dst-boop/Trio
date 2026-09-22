@@ -28,7 +28,7 @@ test('follow-up history preserves bounded complete turn pairs', () => {
 });
 test('exports preserve fallback and failure context', () => {
   const exported = sessionMarkdown([{ ...turn, result: { ...turn.result, answer: 'Choose A', fallback: true, errors: ['Synthesis unavailable'] } }]);
-  assert.match(exported, /single-model draft fallback/); assert.match(exported, /Synthesis unavailable/); assert.match(exported, /## Claude draft/);
+  assert.match(exported, /single-model fallback answer/); assert.match(exported, /Synthesis unavailable/); assert.match(exported, /## Claude draft/);
 });
 
 test('deep council restoration and export retain originals, reviews and revisions', () => {
