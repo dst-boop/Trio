@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import { mkdir, readFile } from 'node:fs/promises';
+import { conversationContext } from '../lib/sessions.ts';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const base = process.env.TRIO_BASE_URL || 'http://localhost:5173';
+const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
+const errors = []; page.on('pageerror', error => errors.push(error.message));
+const research = { at: '2026-09-20T12:00:00.000Z', provider: 'claude', text: 'The earlier research brief, retained in full.', sources: Array.from({ length: 60 }, (_, i) => ({ title: `Recorded report ${i + 1}`, url: `https://example.org/report/${i + 1}?detail=` + 'a'.repeat(220) })) };
+const turn = { question: 'What did the report say?', mode: 'fast', result: { answer: 'An earlier answer with caveats.', drafts: {}, reviews: {}, errors: [], seconds: 1, demo: false, researchRequested: true, researchBy: 'claude', research } };
+const fixture = { id: 'research-provenance', title: turn.question, time: '', turns: [turn] };
+const context = conversationContext([turn]); let calls = 0;
+try {
+  await page.goto(base + '/signin-with-chatgpt?return_to=%2Fdemo', { waitUntil: 'networkidle' });
+  await page.evaluate(fixture => { localStorage.setItem('trio-remember', 'true'); localStorage.setItem('trio-sessions', JSON.stringify([fixture])); localStorage.setItem('trio-active-session', fixture.id); }, fixture);
+  await page.reload({ waitUntil: 'networkidle' });
+  const panel = page.locator('details.research-panel');
+  await panel.locator('summary').getByText(/Claude · 2026-09-20 \(UTC\)/).waitFor(); assert.equal(await panel.getAttribute('open'), null);
+  await panel.locator('summary').click(); const links = panel.locator('ol a'); assert.equal(await links.count(), 60);
+  assert.equal(await links.first().getAttribute('href'), research.sources[0].url); assert.equal(await links.last().getAttribute('href'), research.sources.at(-1).url);
+  assert.equal(await links.first().getAttribute('rel'), 'noopener noreferrer'); await panel.locator('summary').click();
+  await page.getByRole('button', { name: 'Connections', exact: true }).click(); await page.getByPlaceholder('Paste your API key').first().fill('fake-research-history-key'); await page.getByRole('switch', { name: 'Demo mode', exact: true }).click(); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  const disclosure = page.locator('.followup-context'); await disclosure.locator('summary').click();
+  await disclosure.getByText(/Recorded source lists accompany 1 earlier answer/).waitFor();
+  assert.ok(context.omittedSources > 0); assert.match(await disclosure.textContent(), new RegExp(`${context.omittedSources} source links are omitted to fit`));
+  assert.match(await disclosure.textContent(), /earlier searches, not fresh verification/);
+  await page.setViewportSize({ width: 390, height: 844 }); await disclosure.scrollIntoViewIfNeeded();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await mkdir('test-output', { recursive: true }); await page.screenshot({ path: 'test-output/research-history-mobile.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  await page.route('**/api/ask', async route => {
+    calls++; const payload = route.request().postDataJSON(); assert.deepEqual(payload.history, context.messages); assert.equal(payload.webResearch, false);
+    assert.ok(payload.history[1].content.includes(research.at)); assert.ok(payload.history[1].content.includes(research.sources[0].url));
+    assert.ok(payload.history[1].content.length <= 30000); assert.ok(!payload.history[1].content.includes(research.text));
+    await route.fulfill({ contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'final', result: { answer: 'Here is the recorded source, which needs fresh verification.', drafts: {}, reviews: {}, errors: [], seconds: 1, demo: false } }) + '\n' });
+  });
+  await page.getByRole('textbox', { name: 'Your question', exact: true }).fill('Where did that come from?'); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
+  await page.getByText('Here is the recorded source, which needs fresh verification.', { exact: true }).waitFor();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('trio-sessions'))); assert.deepEqual(stored[0].turns[0], turn);
+  await page.locator('.previous-turns > summary').click(); await page.locator('.history-accordion').getByRole('button', { name: /What did the report say\?/ }).click();
+  await page.locator('.history-turn-body .research-panel summary').getByText(/Claude · 2026-09-20 \(UTC\)/).waitFor();
+  const downloadEvent = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export session as Markdown', exact: true }).click();
+  const download = await downloadEvent, markdown = await readFile(await download.path(), 'utf8');
+  assert.ok(markdown.includes(research.at)); assert.ok(markdown.includes(research.text)); assert.ok(markdown.includes(research.sources.at(-1).url)); assert.ok(!markdown.includes('fake-research-history-key'));
+  assert.equal(calls, 1); assert.deepEqual(errors, []);
+  console.log('Research history passed: visible recorded date, 60 complete safe links, exact omission disclosure, actual follow-up provenance without fresh research, mobile, unchanged originals and complete Markdown export; one mocked model request.');
+} finally { await browser.close(); }

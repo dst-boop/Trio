@@ -73,7 +73,7 @@ test('context counts the latest six usable live answers, excluding demo and empt
   assert.equal(context.includedTurns, 6); assert.equal(context.omittedTurns, 2); assert.equal(context.shortenedAnswers, 0);
   assert.equal(context.messages.length, 12); assert.equal(context.messages[0].content, 'Live 2');
   assert.equal(context.messages.at(-2)?.content, 'Live 7');
-  assert.deepEqual(conversationContext([empty, demo]), { messages: [], includedTurns: 0, omittedTurns: 0, shortenedAnswers: 0 });
+  assert.deepEqual(conversationContext([empty, demo]), { messages: [], includedTurns: 0, omittedTurns: 0, shortenedAnswers: 0, researchAnswers: 0, omittedSources: 0 });
 });
 
 test('excerpt boundaries preserve Unicode and full answers that already fit for both context budgets', () => {
