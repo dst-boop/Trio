@@ -18,6 +18,12 @@ Production provisioning uses .openai/hosting.json with d1=DB and the checked-in 
 
 Provider generation, research, memory suggestions, and access checks reject HTTP redirects so prompts and API keys cannot be forwarded to a different endpoint. Provider requests bypass caches. Closing a failed or completed provider response never waits for its cleanup handshake; a stuck connection cannot prevent failover or completion.
 
+## Review and evidence
+
+Completed live answers show **Review & evidence**, derived from the contributions that actually returned. The progress display marks partial, skipped, and unavailable steps separately: one model cannot earn a peer-review completion mark, a failed synthesis remains unavailable when a fallback is shown, and demo steps are labeled Sample. Interrupted streaming text never receives completed coverage.
+
+The same details appear with earlier questions and in Markdown exports, using each saved result rather than today's model settings. Counts describe the work performed; they are not confidence scores. Peer critiques and a shared cited brief do not independently verify every final claim, and model agreement does not guarantee accuracy or freedom from bias. Review cited sources and unresolved disagreements before relying on important claims.
+
 ## Provider access checks
 
 Connections checks the provider's model metadata endpoint: [OpenAI Models](https://developers.openai.com/api/reference/resources/models/methods/retrieve), [Claude Models](https://platform.claude.com/docs/en/api/models/retrieve), or [Gemini Models](https://ai.google.dev/api/models). It makes one GET request without generating text, sending prompts, or saving credentials. Only the selected key goes to its own fixed vendor endpoint; redirects are rejected. Checks require sign-in and a same-origin JSON request, with bounded input and response bodies, cancellation, a 15-second vendor timeout, and fixed errors that never expose vendor diagnostics.
@@ -134,6 +140,7 @@ Run browser checks with Playwright installed separately and a local dev server r
 ```sh
 node tests/browser-smoke.mjs
 node tests/browser-quality.mjs
+node tests/browser-coverage.mjs
 node tests/browser-connections.mjs
 node tests/browser-deep-council.mjs
 node tests/browser-history.mjs

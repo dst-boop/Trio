@@ -6,6 +6,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Answer } from '@/components/answer';
 import { ResearchPanel } from '@/components/research-panel';
+import { RunCoverage } from '@/components/run-coverage';
 import { InstructionsUsed, MemoryUsed } from '@/components/session-instructions';
 import { UsageSummary } from '@/components/usage-summary';
 import { providers, type Result } from '@/lib/trio';
@@ -33,6 +34,7 @@ function PastTurn({ turn }: { turn: Turn }) {
     {turn.imageName && <p className="revision-note">Image used: {turn.imageName}. Reattach it to revisit visual details; image data is not saved.</p>}
     {turn.pdfName && <p className="revision-note">PDF used: {turn.pdfName}. Reattach it to revisit document details; PDF data is not saved.</p>}
     {result.fallback && <p className="revision-note">Single-model fallback · Synthesis did not complete.</p>}
+    <RunCoverage result={result} mode={turn.mode} />
     <Tabs defaultValue={turn.mode === 'compare' ? 'drafts' : 'answer'}>
       <TabsList className="result-tabs history-tabs" aria-label="Earlier question contributions">
         <TabsTrigger value="answer">Answer</TabsTrigger>
