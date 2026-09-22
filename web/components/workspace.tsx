@@ -227,7 +227,9 @@ export default function Home({ account }: { account?: { userId: string; displayN
   const question = runningQuestion || turns.at(-1)?.question;
   const displayMode = working ? runMode : turns.at(-1)?.mode ?? mode;
 
-  if (account && !cloud.ready) return <main className="account-loading"><h1>Your Trio workspace</h1><p role="status">{cloud.status}</p>{cloud.error && <><p role="alert">{cloud.error}</p><button className="run-button" onClick={cloud.reload}>Retry loading</button></>}<a href="/signout-with-chatgpt?return_to=%2F">Sign out</a></main>;
+  // Do not expose editable server-rendered controls before event handlers and
+  // saved sessions are ready: hydration can otherwise erase an early question.
+  if (!loaded || (account && !cloud.ready)) return <main className="account-loading"><h1>Your Trio workspace</h1><p role="status">{account ? cloud.status : 'Getting your workspace ready…'}</p>{account && cloud.error ? <><p role="alert">{cloud.error}</p><button className="run-button" onClick={cloud.reload}>Retry loading</button></> : <p>If loading does not finish, <a href={account ? '/workspace' : '/demo'}>reload your workspace</a>.</p>}<noscript><p>Trio needs JavaScript to run. Enable it in your browser, then reload this page.</p></noscript>{account && <a href="/signout-with-chatgpt?return_to=%2F">Sign out</a>}</main>;
   return <SidebarProvider style={{ '--sidebar-width': '248px' } as React.CSSProperties}>
     <Sidebar className="trio-sidebar">
       <SidebarHeader className="brand"><span className="brand-symbol">◈</span><span>trio<span className="brand-period">.</span></span><span className="brand-caption">WORKSPACE</span></SidebarHeader>

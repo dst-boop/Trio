@@ -197,6 +197,8 @@ node tests/browser-session-library.mjs
 
 The scripts default to Microsoft Edge and http://localhost:5173. Set TRIO_BASE_URL to test a server on another port, PLAYWRIGHT_CHANNEL for another installed Chromium channel, and optionally PLAYWRIGHT_MODULE to a module URL if using a bundled Playwright installation.
 
+The workspace keeps editable controls behind its initial loading screen until event handlers and saved sessions are ready. This prevents questions typed into server-rendered HTML from being erased during hydration. A native reload link remains available before JavaScript starts, and a no-script message explains the browser requirement. Account-load failures retain the explicit retry action. With a local production Worker on port 8787, `node tests/browser-startup.mjs` checks delayed scripts, complete and partial script failures, reload recovery, disabled JavaScript, and account-history retry without provider calls or account writes.
+
 For raw upload validation, build the app, start the local Worker with `pnpm start --port 8787`, and run `node tests/worker-request-bodies.mjs`. This test defaults to http://127.0.0.1:8787, refuses non-local hosts, and uses a synthetic local identity without writing account data or calling model providers. It exercises actual Worker request handling in addition to the direct reader unit tests.
 
 Real paid API calls have not been verified without user-provided keys. Model availability depends on each account; model IDs are editable in Connections.
