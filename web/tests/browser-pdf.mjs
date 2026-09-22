@@ -52,12 +52,13 @@ try {
   await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'fake.pdf', buffer: Buffer.from('<html>not PDF</html>') });
   await page.getByText('This file does not have a supported PDF header. Choose another PDF.', { exact: true }).waitFor(); assert.equal(await page.locator('.pdf-context').count(), 0);
   await page.getByLabel('Choose PDF', { exact: true }).setInputFiles(file);
-  await page.getByRole('button', { name: 'New session', exact: false }).click(); assert.equal(await page.locator('.pdf-context').count(), 0);
+  await page.getByRole('button', { name: 'New session', exact: false }).click(); await page.getByRole('button', { name: 'Discard and start new', exact: true }).click(); assert.equal(await page.locator('.pdf-context').count(), 0);
   // A file selected in an earlier conversation must never appear after a late read.
   await page.evaluate(() => { const original = File.prototype.arrayBuffer; File.prototype.arrayBuffer = async function () { const bytes = await original.call(this); if (this.name.startsWith('slow-')) await new Promise(resolve => window.finishPdf = resolve); return bytes; }; });
   await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'slow-new.pdf' });
   await page.waitForFunction(() => !!window.finishPdf); assert.equal(await page.getByRole('button', { name: 'Ask Trio', exact: true }).isDisabled(), true);
   await page.getByRole('button', { name: 'New session', exact: false }).click();
+  await page.getByRole('button', { name: 'Discard and start new', exact: true }).click();
   await page.evaluate(async () => { window.finishPdf(); await new Promise(requestAnimationFrame); }); assert.equal(await page.locator('.pdf-context').count(), 0);
   await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'slow-replace.pdf' });
   await page.getByText('Loading PDF…', { exact: true }).waitFor();
@@ -68,6 +69,7 @@ try {
   await page.evaluate(async () => { window.finishPdf(); await new Promise(requestAnimationFrame); }); assert.equal(await page.locator('.pdf-context').count(), 0);
   await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'slow-switch.pdf' });
   await page.getByText('Loading PDF…', { exact: true }).waitFor(); await page.locator('.session-list').getByRole('button').first().click();
+  await page.getByRole('button', { name: 'Discard and switch', exact: true }).click();
   await page.evaluate(async () => { window.finishPdf(); await new Promise(requestAnimationFrame); }); assert.equal(await page.locator('.pdf-context').count(), 0);
   await page.reload({ waitUntil: 'networkidle' }); assert.equal(await page.locator('.pdf-context').count(), 0);
   await page.locator('.session-list').getByRole('button').first().click();

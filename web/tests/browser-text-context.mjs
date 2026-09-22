@@ -58,11 +58,13 @@ try {
   // Switching to a saved conversation invalidates a pending read, including a late failure.
   await upload('slow-switch.txt');
   await page.locator('.session-list').getByRole('button', { name: 'Existing conversation', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard and switch', exact: true }).click();
   await settle('slow-switch.txt', true); assert.equal(await attachment.count(), 0);
   await submit('Follow up without attachment'); assert.equal(requests[2].context, undefined);
 
   // Starting a new conversation also cancels the pending load.
   await upload('slow-new.txt'); await page.getByRole('button', { name: 'New session', exact: false }).click();
+  await page.getByRole('button', { name: 'Discard and start new', exact: true }).click();
   await settle('slow-new.txt'); assert.equal(await attachment.count(), 0);
 
   // A rejected replacement invalidates older reads without deleting the last usable attachment.
