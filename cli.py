@@ -73,7 +73,8 @@ async def main() -> int:
                 u = ev.get("usage")
                 if u:
                     cost = f" (~${u['cost']:.2f})" if u.get("cost") is not None else ""
-                    note(f"Tokens: {u['input']:,} in / {u['output']:,} out{cost}")
+                    plus = "+" if u.get("incomplete") else ""
+                    note(f"Tokens: {u['input']:,}{plus} in / {u['output']:,}{plus} out{cost}")
                 if ev.get("note"):
                     note(ev["note"])
                 exit_code = 0

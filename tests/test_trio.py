@@ -223,6 +223,41 @@ def test_final_event_reports_usage(client):
     assert u["input"] == sum(m["input"] for m in u["models"].values()) > 0
     assert u["output"] == sum(m["output"] for m in u["models"].values()) > 0
     assert u["cost"] is None  # mock "models" are not in the price table
+    assert u["incomplete"] is False
+
+
+def test_lost_stream_usage_never_prices_as_complete(monkeypatch):
+    """A stream that emits billed content but dies before its usage frame
+    (e.g. OpenAI's totals ride the final chunk) must mark the tally
+    incomplete and withhold the cost (Codex review, PR #8)."""
+    import asyncio
+
+    import orchestrator
+    from providers import Provider
+
+    async def ask(client, model, key, system, messages, usage=None):
+        if usage is not None:
+            usage.update(input=100, output=50)
+        return "recovered answer"
+
+    async def dying_stream(client, model, key, system, messages, usage=None):
+        yield "billed but uncounted "  # dies before the usage frame arrives
+        raise RuntimeError("stream died")
+
+    providers = [
+        Provider("claude", "Claude", "claude-opus-5", "k", ask, dying_stream),
+        Provider("openai", "ChatGPT", "claude-opus-5", "k", ask, None),
+    ]
+    monkeypatch.setattr(orchestrator, "active_providers", lambda: providers)
+
+    async def collect():
+        return [ev async for ev in orchestrator.run(None, "q", thorough=False)]
+
+    events = asyncio.run(collect())
+    usage = next(e for e in events if e["type"] == "final")["usage"]
+    assert usage["incomplete"] is True
+    assert usage["cost"] is None, "an undercounted bill must not be priced as exact"
+    assert usage["models"]["claude"]["input"] > 0  # the counted attempts still show
 
 
 def test_cost_estimate_uses_price_table():
