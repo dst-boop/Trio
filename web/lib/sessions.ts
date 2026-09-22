@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { instructionsSchema } from './instructions.ts';
 import { memoryNotesSchema } from './memory.ts';
+import { answerLabel, coverageMarkdown } from './run-coverage.ts';
 import { researchSchema, researchProviderName } from './research.ts';
 import { providers, type Mode, type Result } from './trio.ts';
 
@@ -62,9 +63,10 @@ export function sessionMarkdown(turns: Turn[]): string {
     t.result.research ? `## Shared web research\n\nResearched: ${t.result.research.at}\n\n${t.result.research.text}\n\n### Sources cited in the research brief\n\n${t.result.research.sources.map((s, i) => `${i + 1}. <${s.url}>`).join('\n')}` : t.result.researchRequested ? '> No cited research brief was available. This answer still needs current-source verification.' : '',
     t.result.demo ? '> Illustrative demo — no live models were called.' : '',
     `Mode: ${t.mode} · ${t.result.seconds}s`,
+    coverageMarkdown(t.result, t.mode),
     t.result.usage ? `Reported usage: ${t.result.usage.inputTokens} input + ${t.result.usage.outputTokens} output tokens across ${t.result.usage.reportedCalls}/${t.result.usage.calls} calls. Standard-rate cost estimate: ${t.result.usage.costUSD === null ? 'unavailable' : '$' + t.result.usage.costUSD.toFixed(4)} (excludes discounts and taxes).` : '',
     t.result.fallback ? '> Synthesis failed. This is a single-model fallback answer.' : '',
-    t.result.answer ? `## ${t.result.fallback ? 'Fallback answer' : 'Combined answer'}\n\n${t.result.answer}` : '',
+    t.result.answer ? `## ${answerLabel(t.result)}\n\n${t.result.answer}` : '',
     ...providers.filter(p => t.result.drafts[p.id]).map(p => `## ${p.name} draft\n\n${t.result.drafts[p.id]}`),
     ...providers.filter(p => t.result.reviews[p.id]).map(p => `## ${p.name} review\n\n${t.result.reviews[p.id]}`),
     ...providers.filter(p => t.result.revisions?.[p.id]).map(p => `## ${p.name} revised answer\n\n${t.result.revisions![p.id]}`),
