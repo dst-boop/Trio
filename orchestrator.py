@@ -70,6 +70,36 @@ async def _fan_out(jobs):
             t.cancel()
 
 
+async def _draft_one(client: httpx.AsyncClient, p: Provider, convo: list[dict], queue: asyncio.Queue):
+    """Draft with one model, streaming deltas onto the shared queue.
+
+    Mirrors the synthesis rules: a stream that dies mid-answer re-emits
+    draft_start (the answer restarts from scratch) and retries without
+    streaming; only the terminal draft event decides success or failure.
+    """
+    t0 = time.monotonic()
+    text, emitted = "", False
+    if p.stream_fn:
+        await queue.put({"type": "draft_start", "model": p.key})
+        try:
+            async for piece in p.stream(client, DRAFT_SYSTEM, convo):
+                text += piece
+                emitted = True
+                await queue.put({"type": "draft_delta", "model": p.key, "text": piece})
+        except Exception:
+            text = ""  # cut mid-thought; retry below without streaming
+    text, err = text.strip(), None
+    if not text:
+        if emitted:
+            await queue.put({"type": "draft_start", "model": p.key})
+        try:
+            text = await p.ask(client, DRAFT_SYSTEM, convo)
+        except Exception as e:
+            err = str(e) or e.__class__.__name__
+    await queue.put({"type": "draft", "model": p.key, "text": text or None, "error": err,
+                     "seconds": round(time.monotonic() - t0, 1)})
+
+
 async def run(
     client: httpx.AsyncClient,
     question: str,
@@ -91,10 +121,20 @@ async def run(
 
     # ---- 1. Draft -------------------------------------------------------
     drafts: dict[str, str] = {}
-    async for p, text, err, secs in _fan_out(_timed(p, p.ask(client, DRAFT_SYSTEM, convo)) for p in providers):
-        if text:
-            drafts[p.key] = text
-        yield {"type": "draft", "model": p.key, "text": text, "error": err, "seconds": secs}
+    queue: asyncio.Queue = asyncio.Queue()
+    tasks = [asyncio.create_task(_draft_one(client, p, convo, queue)) for p in providers]
+    pending = len(tasks)
+    try:
+        while pending:
+            ev = await queue.get()
+            if ev["type"] == "draft":
+                pending -= 1
+                if ev["text"]:
+                    drafts[ev["model"]] = ev["text"]
+            yield ev
+    finally:
+        for t in tasks:  # client disconnected: stop paying for unfinished calls
+            t.cancel()
 
     if not drafts:
         yield {"type": "error", "message": "All three models failed. Check your API keys and model names in .env."}

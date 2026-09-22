@@ -50,7 +50,7 @@ h1 { font: 700 2.6rem/1 var(--display); letter-spacing: -0.03em; margin: 0 0 .6r
 .lanes { display: grid; gap: .35rem; margin: 0 0 1rem; }
 .lane { display: flex; align-items: baseline; gap: .6rem; padding: .3rem 0 .3rem .75rem; border-left: 4px solid var(--c); font-size: .95rem; }
 .lane b { font-weight: 600; min-width: 4.6rem; }
-.lane span { color: var(--muted); }
+.lane span { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lane.working span::after { content: ""; display: inline-block; width: 1.1em; text-align: left; animation: dots 1.2s steps(4) infinite; }
 .lane.failed span { color: var(--danger); }
 @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
@@ -212,6 +212,16 @@ function handle(ui, ev) {
     case "start":
       ev.models.forEach((m) => setLane(ui, m.key, "working", "Writing an answer"));
       break;
+    case "draft_start":                      // (re)starts this model's live draft
+      (ui.draftText ||= {})[ev.model] = "";
+      setLane(ui, ev.model, "working", "Writing an answer");
+      break;
+    case "draft_delta": {
+      const t = ((ui.draftText ||= {})[ev.model] || "") + ev.text;
+      ui.draftText[ev.model] = t;
+      setLane(ui, ev.model, "working", "…" + t.replace(/\s+/g, " ").trimEnd().slice(-90));
+      break;
+    }
     case "draft":
       if (ev.text) { ui.drafts[ev.model] = ev.text; setLane(ui, ev.model, "", `Answered in ${ev.seconds}s`); }
       else setLane(ui, ev.model, "failed", `Couldn't answer: ${ev.error}`);
