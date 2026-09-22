@@ -40,7 +40,7 @@ export function sessionMarkdown(turns: Turn[]): string {
     t.result.demo ? '> Illustrative demo — no live models were called.' : '',
     `Mode: ${t.mode} · ${t.result.seconds}s`,
     t.result.usage ? `Reported usage: ${t.result.usage.inputTokens} input + ${t.result.usage.outputTokens} output tokens across ${t.result.usage.reportedCalls}/${t.result.usage.calls} calls. Standard-rate cost estimate: ${t.result.usage.costUSD === null ? 'unavailable' : '$' + t.result.usage.costUSD.toFixed(4)} (excludes discounts and taxes).` : '',
-    t.result.fallback ? '> Synthesis failed. This is a single-model draft fallback.' : '',
+    t.result.fallback ? '> Synthesis failed. This is a single-model fallback answer.' : '',
     t.result.answer ? `## ${t.result.fallback ? 'Fallback answer' : 'Combined answer'}\n\n${t.result.answer}` : '',
     ...providers.filter(p => t.result.drafts[p.id]).map(p => `## ${p.name} draft\n\n${t.result.drafts[p.id]}`),
     ...providers.filter(p => t.result.reviews[p.id]).map(p => `## ${p.name} review\n\n${t.result.reviews[p.id]}`),

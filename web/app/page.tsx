@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Answer as Prose } from '@/components/answer';
 import { UsageSummary } from '@/components/usage-summary';
+import { ConversationHistory } from '@/components/conversation-history';
 import { parseSessions, conversationHistory, sessionMarkdown, type Turn, type Session } from '@/lib/sessions';
 import { Toaster, toast } from 'sonner';
 import { providers, freshConnections, type Connections, type Mode, type ProviderId, type Result, type RunEvent } from '@/lib/trio';
@@ -137,7 +138,7 @@ export default function Home() {
           </Tabs>
           {displayed.usage && !displayed.demo && <UsageSummary usage={displayed.usage} />}
           {displayed.errors.length > 0 && <div className="error-box" role="alert"><strong>Some steps could not finish</strong>{Array.from(new Set(displayed.errors)).map((e, i) => <p key={i}>{e}</p>)}<button onClick={() => setSettings(true)}>Check connections</button></div>}
-          {turns.length > 1 && <details className="previous-turns"><summary>{turns.length - 1} earlier {turns.length === 2 ? 'question' : 'questions'} in this session</summary>{turns.slice(0, -1).map((t, i) => <article key={i}><h3>{t.question}</h3><Prose text={t.result.answer || 'Independent answers available in the session export.'} /></article>)}</details>}
+          <ConversationHistory key={current ?? 'new'} turns={working ? turns : turns.slice(0, -1)} />
         </section>}
         <footer className="workspace-footer"><span><ShieldCheck size={13} /> Your keys. Your workspace.</span><span>Different models can make the same mistake. Verify important answers.</span></footer>
       </div>
