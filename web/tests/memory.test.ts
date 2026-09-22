@@ -54,6 +54,8 @@ test('Compare-mode memory suggestions retain labeled perspectives with the exist
   const fetcher=(async(_url,init)=>{const body=JSON.parse(init!.body as string);assistant=JSON.parse(body.messages[0].content).conversation[0].assistant;return response('claude','- Prefers practical options.');}) as typeof fetch;
   const connection={provider:'claude' as const,key:'fake-key',model:'claude-sonnet-5'};
   await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant,expected);assert.match(assistant,/ChatGPT:\nExplore/);assert.match(assistant,/Claude:\nExplain/);assert.match(assistant,/Gemini:\nPrefer/);
-  item.turns[0].result.drafts.openai='x'.repeat(120000);await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant.length,8000);
+  item.turns[0].result.drafts.openai='x'.repeat(120000);await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant.length,8000);assert.match(assistant,/Claude:\nExplain the tradeoffs/);assert.match(assistant,/Gemini:\nPrefer a short next-step list/);
+  item.turns[0].result.drafts={openai:'x'.repeat(120000),claude:'y'.repeat(120000),gemini:'z'.repeat(120000)};await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant.length,8000);for(const character of ['x','y','z'])assert.ok(assistant.split(character).length>2600,'Each long perspective gets a fair share');
+  item.turns[0].result.drafts={gemini:'Only surviving perspective'};await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant,'Gemini:\nOnly surviving perspective');
   item.turns[0].result.drafts={};await assert.rejects(suggestMemory(item,'',connection,new AbortController().signal,fetcher),/completed live answer/);
 });
