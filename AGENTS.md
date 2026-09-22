@@ -19,6 +19,10 @@ async generator of plain dict events that drives all three frontends.
 | `static/index.html` | the whole web UI, one file, no build step |
 | `cli.py` | terminal frontend |
 | `tests/test_trio.py` | end-to-end tests in mock mode |
+| `web/` | Hosted React/TypeScript workspace; Cloudflare Workers-compatible Vinext app |
+| `web/lib/orchestrate.ts` | Hosted multi-provider pipeline with request-scoped API keys |
+| `web/app/api/ask/route.ts` | Hosted NDJSON endpoint; distinct from the Python SSE API |
+| `web/tests/` | Offline orchestration tests and browser smoke checks |
 
 ## Rules of the road
 
@@ -45,6 +49,27 @@ async generator of plain dict events that drives all three frontends.
 - Work on a branch, open a PR to `main`, keep PRs focused. If another
   agent's PR is open, don't duplicate its scope — build on it or pick a
   different issue.
+
+## Hosted workspace
+
+- Run commands from `web/`: `pnpm install --frozen-lockfile`, `pnpm test`,
+  `pnpm typecheck`, and `pnpm build`. Use Node 24 and the pnpm version in
+  `web/package.json`. GitHub Actions checks the Python and hosted apps.
+- The hosted app is independently deployable. Keep the Python CLI, server,
+  and Docker setup working when changing it. Changes under `web/` must not
+  overwrite the Python app at the repository root.
+- The hosted endpoint streams NDJSON, while Python streams SSE. Do not
+  assume their event shapes are interchangeable. Update the relevant
+  consumer and tests when changing either contract.
+- Hosted demo mode uses explicitly labeled prepared examples and no API
+  keys; it is separate from the Python `TRIO_MOCK=1` environment setting.
+- Never persist browser API keys in localStorage, sessionStorage, history,
+  logs, or source. Keys are request-scoped and go only to their own vendor.
+  Keep demo answers out of live conversation context.
+- `web/.openai/hosting.json` identifies the deployed private Site. Reuse
+  its identity, preserve its audience, and publish through the Sites
+  workflow after hosted app changes. Repository CI checks builds; it does
+  not automatically deploy. Verify the published source matches `web/`.
 
 ## Running things
 

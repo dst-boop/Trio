@@ -1,5 +1,12 @@
 # Trio
 
+## Hosted web workspace
+
+[Open the private Trio app](https://trio-intelligence-workspace.treads77.chatgpt.site). The React/TypeScript app lives in [web/](web/README.md), with Council, Quick synthesis, Compare, connection settings, and a no-key demo. For local development, run `cd web`, `pnpm install`, then `pnpm dev`.
+
+## Python application
+
+
 Ask one question, get one answer written by three AIs working together.
 
 Claude, ChatGPT and Gemini each answer your question independently, then
@@ -97,3 +104,4 @@ pytest
 ```
 
 The tests run the whole pipeline in mock mode — no keys, no network.
+
