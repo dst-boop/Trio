@@ -70,7 +70,7 @@ export async function readProviderStream(id: ProviderId, body: ReadableStream<Ui
         if (type === 'message_delta') {
           usage = { ...usage, ...event.usage };
           if (event.usage?.output_tokens !== undefined) finalClaudeUsage = true;
-          if (event.delta?.stop_reason === 'max_tokens') {
+          if (['max_tokens', 'model_context_window_exceeded'].includes(event.delta?.stop_reason)) {
             onUsage?.(readUsage(id, { usage })); throw new StreamInterrupted();
           }
         }

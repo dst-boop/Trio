@@ -52,7 +52,7 @@ assert.match(await page.evaluate(() => navigator.clipboard.readText()), /console
 assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('only-a-test-key'));
 await page.reload({ waitUntil: 'networkidle' });
 await page.getByRole('heading', { name: 'A formatted answer' }).waitFor();
-await page.locator('input[type=file]').setInputFiles({ name: 'private-context.txt', mimeType: 'text/plain', buffer: Buffer.from('Do not leak across sessions') });
+await page.getByLabel('Choose text context').setInputFiles({ name: 'private-context.txt', mimeType: 'text/plain', buffer: Buffer.from('Do not leak across sessions') });
 await page.getByText('private-context.txt').waitFor();
 await page.locator('.session-list button').click();
 assert.equal(await page.getByText('private-context.txt').count(), 0);

@@ -56,6 +56,13 @@ test('Claude initial usage alone does not masquerade as final token totals', asy
   assert.equal(usage, null);
 });
 
+test('Claude context-window truncations are rejected in streaming and regular responses', async () => {
+  const stop_reason = 'model_context_window_exceeded';
+  const streamed = fixture('claude').map((e: any) => e.delta?.stop_reason ? { ...e, delta: { stop_reason } } : e);
+  await assert.rejects(callProvider('claude', 'k', 'm', 's', 'q', signal(), (async () => sse(streamed)) as typeof fetch, undefined, () => {}), /interrupted/);
+  await assert.rejects(callProvider('claude', 'k', 'm', 's', 'q', signal(), (async () => Response.json({ stop_reason, content: [{ type: 'text', text: 'Cut off' }] })) as typeof fetch), /did not complete/);
+});
+
 test('explicitly truncated non-streaming responses are never treated as completed answers', async () => {
   for (const id of ['openai', 'claude', 'gemini'] as const) {
     const body = { status: 'incomplete', stop_reason: 'max_tokens', output: [{ content: [{ type: 'output_text', text: 'Cut off' }] }], content: [{ type: 'text', text: 'Cut off' }], steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Cut off' }] }] };

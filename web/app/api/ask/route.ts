@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { orchestrate } from '@/lib/orchestrate';
+import { imageSchema } from '@/lib/images';
 
 const connection = z.object({ key: z.string().max(1024), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
-const schema = z.object({ question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) });
+const schema = z.object({ question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) });
 export async function POST(request: Request) {
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
@@ -11,11 +12,11 @@ export async function POST(request: Request) {
   const reader = request.body?.getReader();
   if (!reader) return Response.json({ error: 'Request body required.' }, { status: 400 });
   let length = 0; const chunks: Uint8Array[] = [];
-  while (true) { const { value, done } = await reader.read(); if (done) break; length += value.length; if (length > 600000) { await reader.cancel(); return Response.json({ error: 'Request too large.' }, { status: 413 }); } chunks.push(value); }
+  while (true) { const { value, done } = await reader.read(); if (done) break; length += value.length; if (length > 8000000) { await reader.cancel(); return Response.json({ error: 'Request too large.' }, { status: 413 }); } chunks.push(value); }
   const bytes = new Uint8Array(length); let offset = 0; for (const c of chunks) { bytes.set(c, offset); offset += c.length; }
   let body; try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { return Response.json({ error: 'Invalid JSON.' }, { status: 400 }); }
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return Response.json({ error: 'Check your prompt, model IDs, and context length.' }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: 'Check your prompt, model IDs, context length, and image format (PNG, JPEG, or WebP under 4 MB).' }, { status: 400 });
   if (!Object.values(parsed.data.connections).some(c => c.enabled && c.key.trim())) return Response.json({ error: 'Connect at least one model.' }, { status: 400 });
   const abort = new AbortController();
   const cancel = () => abort.abort();
