@@ -12,7 +12,9 @@ export async function checkConnection(input: unknown, signal: AbortSignal, fetch
   const combined = AbortSignal.any([signal, timeout]);
   try {
     combined.throwIfAborted();
-    const response = await fetcher(endpoints[provider] + encodeURIComponent(model), { method: 'GET', headers, signal: combined, redirect: 'error', cache: 'no-store' });
+    // Workers requires manual redirect handling; the non-2xx branch rejects it
+    // without forwarding the API key to another destination.
+    const response = await fetcher(endpoints[provider] + encodeURIComponent(model), { method: 'GET', headers, signal: combined, redirect: 'manual', cache: 'no-store' });
     if (!response.ok) {
       // Vendor diagnostics can contain credentials. Never read or forward them.
       void response.body?.cancel().catch(() => {});

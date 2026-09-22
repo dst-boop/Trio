@@ -25,7 +25,7 @@ test('generation never follows redirects carrying prompts or provider credential
   try {
     for (const id of ['openai', 'claude', 'gemini'] as ProviderId[]) {
       const fetcher = (async (_url, init) => fetch(`http://127.0.0.1:${address.port}/upstream`, init)) as typeof fetch;
-      await assert.rejects(callProvider(id, 'fake-private-key', 'model', 'system', 'private prompt', signal(), fetcher), /Could not reach the provider/);
+      await assert.rejects(callProvider(id, 'fake-private-key', 'model', 'system', 'private prompt', signal(), fetcher), /\(307\)/);
       assert.equal(redirected, 0, 'The redirected endpoint must receive neither headers nor body');
     }
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
