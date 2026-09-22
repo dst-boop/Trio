@@ -8,6 +8,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Switch } from '@/components/ui/switch';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Answer as Prose } from '@/components/answer';
+import { UsageSummary } from '@/components/usage-summary';
 import { parseSessions, conversationHistory, sessionMarkdown, type Turn, type Session } from '@/lib/sessions';
 import { Toaster, toast } from 'sonner';
 import { providers, freshConnections, type Connections, type Mode, type ProviderId, type Result, type RunEvent } from '@/lib/trio';
@@ -80,6 +81,7 @@ export default function Home() {
           if (event.type === 'stage') setStage(event.stage!);
           if ((event.type === 'draft' || event.type === 'review') && event.provider) { const bucket = event.type === 'draft' ? 'drafts' : 'reviews'; result = { ...result, [bucket]: { ...result[bucket], [event.provider]: event.text } }; }
           if (event.type === 'error') result = { ...result, errors: [...result.errors, event.text!] };
+          if (event.type === 'usage' && event.usage) result = { ...result, usage: event.usage };
           if (event.type === 'final' && event.result) { result = event.result; completed = true; }
           setWorking({ ...result });
         };
@@ -125,6 +127,7 @@ export default function Home() {
           <TabsContent value="answer"><div className="answer-card"><div className="answer-heading"><Mark small /><div><strong>{displayed.fallback ? 'Single-model fallback' : 'The collective answer'}</strong><small>{busy ? 'Your team is working on it…' : displayed.by ? `${displayed.fallback ? 'Answered' : 'Combined'} by ${providers.find(p => p.id === displayed.by)?.name} · ${displayed.seconds}s${displayed.demo ? ' · sample' : ''}` : 'Independent perspectives'}</small></div><span className="answer-tag">{displayed.demo ? 'DEMO' : 'TRIO'}</span></div>{displayed.answer ? <Prose text={displayed.answer} /> : <div className="answer-empty">{busy ? <><span className="loading-bar" />{stage === 'draft' ? 'Gathering independent perspectives…' : stage === 'review' ? 'Checking the answers for gaps and disagreements…' : 'Combining the strongest ideas…'}</> : displayMode === 'compare' ? <>Compare mode keeps each perspective independent. <button onClick={() => setTab('drafts')}>Read the perspectives →</button></> : 'No combined answer yet. Check the messages below, then retry.'}</div>}</div></TabsContent>
           <TabsContent value="drafts"><div className="perspective-grid">{providers.map(p => <article key={p.id} className="perspective-card"><div><Mark small id={p.id} /><strong>{p.name}</strong></div>{displayed.drafts[p.id] ? <Prose text={displayed.drafts[p.id]!} /> : <p className="muted">{busy ? 'Waiting for this perspective…' : 'No contribution from this model.'}</p>}</article>)}</div></TabsContent>
           <TabsContent value="reviews"><div className="perspective-grid">{Object.keys(displayed.reviews).length ? providers.filter(p => displayed.reviews[p.id]).map(p => <article key={p.id} className="perspective-card"><div><Mark small id={p.id} /><strong>{p.name}’s review</strong></div><Prose text={displayed.reviews[p.id]!} /></article>) : <p className="muted">{displayMode === 'council' ? 'Reviews appear after at least two models finish their drafts.' : 'Choose Council mode to include peer review in your next run.'}</p>}</div></TabsContent></Tabs>
+          {displayed.usage && !displayed.demo && <UsageSummary usage={displayed.usage} />}
           {displayed.errors.length > 0 && <div className="error-box" role="alert"><strong>Some steps could not finish</strong>{Array.from(new Set(displayed.errors)).map((e, i) => <p key={i}>{e}</p>)}<button onClick={() => setSettings(true)}>Check connections</button></div>}
           {turns.length > 1 && <details className="previous-turns"><summary>{turns.length - 1} earlier {turns.length === 2 ? 'question' : 'questions'} in this session</summary>{turns.slice(0, -1).map((t, i) => <article key={i}><h3>{t.question}</h3><Prose text={t.result.answer || 'Independent answers available in the session export.'} /></article>)}</details>}
         </section>}

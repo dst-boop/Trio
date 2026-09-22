@@ -1,7 +1,8 @@
-import { providers, type Connections, type Mode, type ProviderId, type Result, type RunEvent } from './trio.ts';
+import { providers, type Connections, type Mode, type ProviderId, type ProviderUsage, type Result, type RunEvent } from './trio.ts';
+import { readUsage, estimateStandardCost, summarizeUsage, type Tokens } from './usage.ts';
 
 type Input = { question: string; context?: string; history?: { role: 'user' | 'assistant'; content: string }[]; connections: Connections; mode: Mode; lead: ProviderId };
-export async function callProvider(id: ProviderId, key: string, model: string, instructions: string, input: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<string> {
+export async function callProvider(id: ProviderId, key: string, model: string, instructions: string, input: string, signal: AbortSignal, fetcher: typeof fetch = fetch, onUsage?: (tokens: Tokens | null) => void): Promise<string> {
   let url: string, headers: Record<string, string>, body: unknown;
   if (id === 'openai') {
     url = 'https://api.openai.com/v1/responses'; headers = { Authorization: `Bearer ${key}` };
@@ -19,6 +20,7 @@ export async function callProvider(id: ProviderId, key: string, model: string, i
     throw new Error(`${providers.find(p => p.id === id)?.name}: ${reason} (${response.status})`);
   }
   const data: any = await response.json();
+  onUsage?.(readUsage(id, data));
   let text = '';
   if (id === 'openai') text = (data.output ?? []).flatMap((v: { content?: { type: string; text?: string }[] }) => v.content ?? []).filter((v: { type: string }) => v.type === 'output_text').map((v: { text: string }) => v.text).join('\n');
   if (id === 'claude') text = (data.content ?? []).filter((v: { type: string }) => v.type === 'text').map((v: { text: string }) => v.text).join('\n');
@@ -33,9 +35,22 @@ export async function orchestrate(input: Input, emit: (event: RunEvent) => void,
   const result: Result = { drafts: {}, reviews: {}, errors: [], answer: '', seconds: 0, demo: false };
   if (!active.length) throw new Error('Connect at least one provider to start a live session.');
   const context = JSON.stringify({ conversation: input.history ?? [], reference_text: input.context ?? '', question: input.question });
+  const usage: Partial<Record<ProviderId, ProviderUsage>> = {};
   const ask = async (id: ProviderId, system: string, prompt: string) => {
     const c = input.connections[id];
-    return callProvider(id, c.key, c.model, system, prompt, signal, fetcher);
+    const total = usage[id] ??= { model: c.model, calls: 0, reportedCalls: 0, inputTokens: 0, outputTokens: 0, costUSD: 0 };
+    total.calls++;
+    try {
+      return await callProvider(id, c.key, c.model, system, prompt, signal, fetcher, tokens => {
+        if (!tokens) return;
+        total.reportedCalls++; total.inputTokens += tokens.input; total.outputTokens += tokens.output;
+        const cost = estimateStandardCost(c.model, tokens);
+        total.costUSD = cost === null || total.costUSD === null ? null : total.costUSD + cost;
+      });
+    } finally {
+      if (total.calls !== total.reportedCalls) total.costUSD = null;
+      result.usage = summarizeUsage(usage); emit({ type: 'usage', usage: result.usage });
+    }
   };
   const report = (id: ProviderId, stage: string, error: unknown) => {
     if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
