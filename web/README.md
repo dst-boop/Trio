@@ -91,6 +91,8 @@ The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/as
 
 Live drafts, reviews, revisions, and synthesis stream as they are written. The workspace initially shows Perspectives and switches to Answer when synthesis starts. A broken stream retries once without streaming, clearing its previous partial text. Partial output never enters peer-review prompts or saved turns. Stop cancels provider reads and preserves completed questions; the interrupted contribution remains visible only in the current tab.
 
+The browser allows 30 seconds to start a live request (including reading a bounded app-error response), then 150 seconds between validated stream events. Each model attempt has its own 120-second provider limit, so ordinary timeout/failover events can still arrive before the browser gives up. Active multi-stage work has no total-time cap. A stalled connection cancels the request, keeps the prompt and partial text, and never saves an unfinished answer or automatically starts another billed run. The user can retry explicitly; earlier provider work may still have incurred charges. Blank or unknown stream records do not indefinitely extend the inactivity window.
+
 The hosted event contract adds `contribution_start` and `contribution_delta` with a `provider` and `phase` (`research`, `draft`, `review`, `revision`, or `synthesis`). Start clears that contribution; delta appends visible text. Existing complete `draft`, `review`, `revision`, and `final` events remain authoritative. `lib/run-events.ts` handles client state separately from the Python SSE contract. Provider parsers require a terminal completion event and ignore thought/tool content. See the official [OpenAI Responses](https://developers.openai.com/api/docs/guides/streaming-responses), [Claude Messages](https://platform.claude.com/docs/en/build-with-claude/streaming), and [Gemini Interactions](https://ai.google.dev/gemini-api/docs/streaming) streaming specifications.
 
 ## Shared web research
@@ -164,6 +166,7 @@ node tests/browser-deep-council.mjs
 node tests/browser-history.mjs
 node tests/browser-storage.mjs
 node tests/browser-streaming.mjs
+node tests/browser-timeouts.mjs
 node tests/browser-images.mjs
 node tests/browser-pdf.mjs
 node tests/browser-text-context.mjs
