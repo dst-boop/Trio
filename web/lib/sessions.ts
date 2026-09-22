@@ -11,12 +11,12 @@ const usageCounts = { calls: nonnegative.int(), reportedCalls: nonnegative.int()
 const providerUsage = z.object({ ...usageCounts, model: z.string().max(100) });
 const usage = z.object({ ...usageCounts, byProvider: z.object({ openai: providerUsage.optional(), claude: providerUsage.optional(), gemini: providerUsage.optional() }) });
 const result = z.object({ researchRequested: z.boolean().optional(), research: researchSchema.optional(), drafts: answers, reviews: answers, revisions: answers.optional(), answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: nonnegative, demo: z.boolean(), fallback: z.boolean().optional(), usage: usage.optional() });
-const session = z.object({ id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ question: z.string().min(1).max(20000), mode: z.enum(['council', 'deep', 'fast', 'compare']), imageName: z.string().max(255).optional(), result })).min(1) });
+export const sessionSchema = z.object({ id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ question: z.string().min(1).max(20000), mode: z.enum(['council', 'deep', 'fast', 'compare']), imageName: z.string().max(255).optional(), result })).min(1) });
 const maxStoredCharacters = 5_000_000;
 
 /** Only write snapshots the reader can restore. Never truncate model contributions. */
 export function serializeSessions(sessions: Session[]): string {
-  const snapshot = JSON.stringify(z.array(session).max(30).parse(sessions));
+  const snapshot = JSON.stringify(z.array(sessionSchema).max(30).parse(sessions));
   if (snapshot.length > maxStoredCharacters) throw new Error('Session history exceeds browser storage limits.');
   return snapshot;
 }
@@ -29,7 +29,7 @@ export function parseSessions(raw: string | null): Session[] {
   if (!Array.isArray(value)) return [];
   const unique = new Set<string>();
   return value.slice(0, 30).flatMap(item => {
-    const parsed = session.safeParse(item);
+    const parsed = sessionSchema.safeParse(item);
     if (!parsed.success || unique.has(parsed.data.id)) return [];
     unique.add(parsed.data.id); return [parsed.data];
   });

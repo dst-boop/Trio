@@ -104,3 +104,10 @@ test('sources and research survive history and export while unknown credentials 
   assert.ok(sessionMarkdown(turns).includes(citation.url)); assert.ok(sessionMarkdown(turns).includes('Shared web research'));
   result.research!.sources[0].url = 'javascript:alert(1)'; assert.throws(() => serializeSessions([{ id: 'x', title: 'q', time: '', turns }]));
 });
+
+test('unknown research events and unused deltas cannot erase a completed brief', () => {
+  const result: Result = { drafts: {}, reviews: {}, errors: [], answer: 'answer', seconds: 1, demo: false, researchRequested: true, research: readResearch(researchResponse()) };
+  assert.equal(applyRunEvent(result, { type: 'future_event', phase: 'research' } as unknown as RunEvent), result);
+  assert.equal(applyRunEvent(result, { type: 'contribution_delta', phase: 'research', provider: 'openai', text: 'partial' }), result);
+  assert.equal(applyRunEvent(result, { type: 'contribution_start', phase: 'research', provider: 'openai' }).research, undefined);
+});

@@ -7,7 +7,7 @@ export function applyRunEvent(result: Result, event: RunEvent): Result {
   if (event.type === 'usage' && event.usage) return { ...result, usage: event.usage };
   if (event.type === 'stage' && event.stage === 'research') return { ...result, researchRequested: true };
   if (event.type === 'research' && event.research) return { ...result, researchRequested: true, research: event.research };
-  if (event.phase === 'research') return { ...result, researchRequested: true, research: undefined };
+  if (event.phase === 'research') return event.type === 'contribution_start' ? { ...result, researchRequested: true, research: undefined } : result;
   if (!event.provider) return result;
   if (event.type === 'draft' || event.type === 'review' || event.type === 'revision') {
     const bucket = event.type === 'draft' ? 'drafts' : event.type === 'review' ? 'reviews' : 'revisions';
