@@ -5,6 +5,7 @@ import { maxSessionTitle } from './session-library.ts';
 export function branchConversation(sessions: Session[], sourceId: string, turnIndex: number, title: string, id = crypto.randomUUID(), time = new Date().toISOString()): { session: Session; sessions: Session[] } {
   const source = sessions.find(s => s.id === sourceId);
   if (!source || !Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= source.turns.length) throw new Error('Choose an answer from a saved conversation.');
+  if (source.turns[turnIndex].result.demo) throw new Error('Choose a completed live answer. Prepared demo answers are not used as model context.');
   if (sessions.length >= 30) throw new Error('Your workspace has 30 conversations. Export and remove one before creating another.');
   if (!title.trim() || title.trim().length > maxSessionTitle) throw new Error(`Use a conversation name between 1 and ${maxSessionTitle} characters.`);
   if (sessions.some(s => s.id === id)) throw new Error('Could not create a separate conversation. Try again.');
