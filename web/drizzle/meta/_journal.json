@@ -8,6 +8,13 @@
       "when": 1790060378009,
       "tag": "0000_thick_doctor_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790062090694,
+      "tag": "0001_volatile_exodus",
+      "breakpoints": true
     }
   ]
 }

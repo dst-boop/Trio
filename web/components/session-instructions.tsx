@@ -13,3 +13,7 @@ export function SessionInstructions({ value, busy, demo, onChange }: { value: st
 export function InstructionsUsed({ value }: { value?: string }) {
   return value ? <details className="instructions-used"><summary>Instructions used for this answer</summary><pre>{value}</pre></details> : null;
 }
+
+export function MemoryUsed({ value }: { value?: string }) {
+  return value ? <details className="instructions-used"><summary>Personal memory used for this answer</summary><pre>{value}</pre></details> : null;
+}
