@@ -83,6 +83,8 @@ answer streams in as `final_start` + repeated `final_delta` chunks, and one
 from scratch. The `final` event also carries `usage`: per-model and total
 tokens, with an estimated dollar `cost` when every model used is in the
 price table in [providers.py](providers.py) (otherwise `cost` is null).
+If a retried streaming call's usage could not be captured, `usage.incomplete`
+is true, the counts are a floor, and `cost` is null rather than understated.
 Consumers should ignore event types and fields they don't recognise. With
 `stream: false` you get a single JSON object with `answer`, `written_by`,
 `drafts`, `reviews`, `usage` and `seconds`.

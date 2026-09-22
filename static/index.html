@@ -217,9 +217,11 @@ function showFinal(ui, ev) {
   meta.append(el("span", "", `Written by ${NAMES[ev.by]} from ${Object.keys(ui.drafts).length} answers in ${ev.seconds}s`));
   if (ev.usage) {
     const tok = (ev.usage.input || 0) + (ev.usage.output || 0);
-    const fmt = tok >= 1000 ? (tok / 1000).toFixed(1) + "k" : String(tok);
+    const fmt = (tok >= 1000 ? (tok / 1000).toFixed(1) + "k" : String(tok)) + (ev.usage.incomplete ? "+" : "");
     const cost = ev.usage.cost == null ? "" : ` ($${ev.usage.cost.toFixed(ev.usage.cost < 0.1 ? 3 : 2)})`;
-    meta.append(el("span", "", `~${fmt} tokens${cost}`));
+    const span = el("span", "", `~${fmt} tokens${cost}`);
+    if (ev.usage.incomplete) span.title = "At least one retried call's usage was not reported, so this undercounts.";
+    meta.append(span);
   }
   const copy = el("button", "link", "Copy answer"); copy.type = "button";
   copy.onclick = async () => { await navigator.clipboard.writeText(ev.text); copy.textContent = "Copied"; setTimeout(() => (copy.textContent = "Copy answer"), 1500); };

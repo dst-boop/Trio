@@ -51,20 +51,36 @@ def _synth_order(providers: list[Provider], succeeded: set[str]) -> list[Provide
     return sorted(providers, key=lambda p: (p.key not in succeeded, p.key != preferred))
 
 
-def _tally(totals: dict, key: str, u: dict) -> None:
-    """Add one call's token usage to a model's running total."""
+def _new_totals() -> dict:
+    return {"models": {}, "incomplete": False}
+
+
+def _tally(totals: dict, key: str, u: dict, lost_stream: bool = False) -> None:
+    """Add one call's token usage to a model's running total.
+
+    lost_stream=True means a stream emitted (billed) content but died before
+    its usage frame arrived, so this attempt's tokens are missing: the totals
+    are an undercount and must never be presented as a complete bill.
+    """
     if u:
-        t = totals.setdefault(key, {"input": 0, "output": 0})
+        t = totals["models"].setdefault(key, {"input": 0, "output": 0})
         t["input"] += u.get("input", 0)
         t["output"] += u.get("output", 0)
+    if lost_stream and "output" not in u:
+        totals["incomplete"] = True
 
 
 def _usage_summary(providers: list[Provider], totals: dict) -> dict | None:
-    """Per-model and total tokens, with estimated USD when every model is priced."""
-    if not totals:
+    """Per-model and total tokens, with estimated USD when every model is priced.
+
+    An incomplete tally (a billed attempt whose usage was lost) reports
+    cost as null - an understated total presented as exact would be worse
+    than no total.
+    """
+    if not totals["models"]:
         return None
     model_of = {p.key: p.model for p in providers}
-    models = {k: dict(v) for k, v in totals.items()}
+    models = {k: dict(v) for k, v in totals["models"].items()}
     cost, cost_known = 0.0, True
     for k, v in models.items():
         c = estimate_cost(model_of.get(k, ""), v["input"], v["output"])
@@ -77,7 +93,8 @@ def _usage_summary(providers: list[Provider], totals: dict) -> dict | None:
         "models": models,
         "input": sum(v["input"] for v in models.values()),
         "output": sum(v["output"] for v in models.values()),
-        "cost": round(cost, 4) if cost_known else None,
+        "cost": round(cost, 4) if cost_known and not totals["incomplete"] else None,
+        "incomplete": totals["incomplete"],
     }
 
 
@@ -109,7 +126,7 @@ async def _draft_one(client: httpx.AsyncClient, p: Provider, convo: list[dict],
     streaming; only the terminal draft event decides success or failure.
     """
     t0 = time.monotonic()
-    text, emitted = "", False
+    text, emitted, stream_failed = "", False, False
     if p.stream_fn:
         u: dict = {}
         await queue.put({"type": "draft_start", "model": p.key})
@@ -119,8 +136,8 @@ async def _draft_one(client: httpx.AsyncClient, p: Provider, convo: list[dict],
                 emitted = True
                 await queue.put({"type": "draft_delta", "model": p.key, "text": piece})
         except Exception:
-            text = ""  # cut mid-thought; retry below without streaming
-        _tally(totals, p.key, u)
+            text, stream_failed = "", True  # cut mid-thought; retry below without streaming
+        _tally(totals, p.key, u, lost_stream=stream_failed and emitted)
     text, err = text.strip(), None
     if not text:
         if emitted:
@@ -156,7 +173,7 @@ async def run(
 
     # ---- 1. Draft -------------------------------------------------------
     drafts: dict[str, str] = {}
-    usage_totals: dict = {}
+    usage_totals = _new_totals()
     queue: asyncio.Queue = asyncio.Queue()
     tasks = [asyncio.create_task(_draft_one(client, p, convo, queue, usage_totals)) for p in providers]
     pending = len(tasks)
@@ -221,6 +238,7 @@ async def run(
     for p in _synth_order(providers, set(drafts)):
         streamed = ""
         emitted = False
+        stream_failed = False
         if p.stream_fn:
             u: dict = {}
             yield {"type": "final_start", "by": p.key}
@@ -232,7 +250,8 @@ async def run(
             except Exception as e:
                 last_err = str(e) or e.__class__.__name__
                 streamed = ""  # a broken stream may be cut mid-thought; retry below without streaming
-            _tally(usage_totals, p.key, u)
+                stream_failed = True
+            _tally(usage_totals, p.key, u, lost_stream=stream_failed and emitted)
         text = streamed.strip()
         if not text:
             if emitted:
