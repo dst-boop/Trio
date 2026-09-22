@@ -7,12 +7,14 @@ A private online workspace for OpenAI, Claude, and Gemini. Ask once, get indepen
 1. Open Connections and add API keys for the providers you want to use.
 2. Turn Demo mode off. Keys stay in the current tab's memory and are cleared on reload.
 3. Choose Council (drafts → reviews → synthesis), Deep Council (drafts → reviews → revisions → synthesis), Quick synthesis (drafts → synthesis), or Compare (drafts only).
-4. Ask your question. Optionally attach a text, Markdown, CSV, JSON, or code file under 60 KB.
+4. Ask your question. Optionally attach a text, Markdown, CSV, JSON, or code file under 60 KB, and one PNG, JPEG, or WebP image under 4 MB. Images must be no larger than 8,000 pixels on either side. The preview shows exactly which image is attached.
 5. Inspect perspectives, reviews, and Deep Council revisions, copy individual code blocks, or export the session as Markdown with run notes and fallback labels. Answers render Markdown headings, lists, links, and tables; raw HTML and embedded images are disabled.
 6. Expand **earlier questions** to inspect any previous answer, original perspectives, peer reviews, revisions, usage, and run notes without changing your current question. Earlier contributions remain readable while a follow-up runs.
 7. If browser history cannot be saved, a persistent notice offers an export. The last successful saved copy is retained; recent changes remain in the current tab. Export important sessions before closing it. Long conversations are limited by storage size rather than a 200-question cutoff.
 
 Deep Council adds one bounded revision round. Each participating model sees the original anonymized drafts, its own draft label, and the completed peer critiques; revisions run independently. Models are asked to correct supported errors and describe substantive changes and remaining uncertainties. Synthesis receives both original and revised answers. Extra deliberation increases time and API usage; it does not verify facts or guarantee a better answer. No browsing or external tools are added.
+
+An attached image is sent to each participating model at every stage, including reviews, revisions, synthesis, and recovery attempts. It remains attached for follow-ups until removed, a different session is opened, or the page is refreshed. This adds image-token usage on each call. Only the image filename is saved with a completed turn; image bytes are never stored in browser history or exports. Reattach the original when revisiting visual details. Demo ignores image attachments and remains a prepared text example.
 
 If no peer reviews succeed (including a single-provider run), revisions are skipped. A failed revision leaves its original draft available to synthesis. If every synthesizer fails, a revised answer is preferred for the explicitly labeled single-model fallback. Original answers, critiques, and revisions remain available in local history and Markdown exports.
 
@@ -43,16 +45,16 @@ The hosted event contract adds `contribution_start` and `contribution_delta` wit
 
 ## Data and limits
 
-- Prompts, attached text, and recent live conversation context are sent to enabled providers. Drafts and reviews are shared among participating providers.
+- Prompts, attached text and images, and recent live conversation context are sent to enabled providers. Drafts and reviews are shared among participating providers. Image bytes use each provider's native image part, never a base64 string embedded in text prompts. Only local uploads are accepted; the app does not fetch arbitrary image URLs.
 - Keys live in browser memory and in server request memory while a run is active. Reloading clears them.
 - Sessions live in browser memory unless you explicitly enable local history. Local history is device-specific, includes prompts and answers, and does not include API keys or the original attachments (answers may quote them). Refresh restores the active session after validating saved records. Clear history with the sidebar trash button and confirmation.
 - Each follow-up includes at most six recent live question/answer pairs, including the model perspectives from Compare runs; demo content is excluded. Prior answers are capped at 30,000 characters per turn.
-- Each question is limited to 20,000 characters; attached text to 60,000 characters. Provider timeouts are 120 seconds per call.
+- Each question is limited to 20,000 characters; attached text to 60,000 characters; image bytes to 4 MB. Total request bodies are limited to 8 MB, including base64 encoding and conversation context. Browser uploads check decoding and dimensions; the endpoint checks base64 size, type, and file signature. Provider timeouts are 120 seconds per call.
 - Three connected models normally use ten calls in Deep Council, seven in Council, four in Quick synthesis, or three in Compare. Synthesis can try up to two alternate models. Each broken streaming call can add one non-streaming retry, including failover attempts. Retries can incur extra charges; attempted calls and incomplete usage are reported. Each vendor bills its own usage.
 - Live results include a usage panel with attempted calls, reported input/output tokens, and a per-model breakdown. Missing provider metadata and failed requests are explicitly marked as partial usage. Gemini thinking tokens count as output; OpenAI reasoning tokens are already included in its output total. Usage is included in local history and Markdown exports.
 - Standard-rate USD estimates are shown only when every attempt reported usage and all models have a known, unexpired uncached rate. They exclude discounts and taxes. Cached usage, unknown models, missing metadata, and expired rates display no cost estimate; provider invoices remain authoritative. Current rates were checked September 22, 2026 against [OpenAI](https://developers.openai.com/api/docs/models/gpt-6-astra), [Anthropic](https://platform.claude.com/docs/en/about-claude/pricing), and [Google](https://ai.google.dev/gemini-api/docs/pricing). The table expires January 1, 2027, before using outdated introductory rates.
 - A failed provider does not stop the others. If all synthesis attempts fail, an independent draft is explicitly labeled as a fallback.
-- Text and code collaboration are supported. This version does not browse the web, execute code, generate images, or expose every feature of the vendors' consumer apps.
+- Text, code, and image understanding are supported. This version does not browse the web, execute code, generate images, or expose every feature of the vendors' consumer apps. Custom models must support image inputs. Vision request formats follow the official [OpenAI](https://developers.openai.com/api/docs/guides/images-vision), [Claude](https://platform.claude.com/docs/en/build-with-claude/vision), and [Gemini](https://ai.google.dev/gemini-api/docs/image-understanding) documentation. Image runs report provider token usage but omit cost estimates because modality-specific pricing has not been verified.
 - Model agreement is not verification. Important claims and decisions still need checking.
 
 ## Validation
@@ -68,6 +70,7 @@ node tests/browser-deep-council.mjs
 node tests/browser-history.mjs
 node tests/browser-storage.mjs
 node tests/browser-streaming.mjs
+node tests/browser-images.mjs
 ```
 
 The scripts default to Microsoft Edge and http://localhost:5173. Set TRIO_BASE_URL to test a server on another port, PLAYWRIGHT_CHANNEL for another installed Chromium channel, and optionally PLAYWRIGHT_MODULE to a module URL if using a bundled Playwright installation.
