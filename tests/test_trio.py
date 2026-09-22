@@ -258,6 +258,40 @@ def test_lost_stream_usage_never_prices_as_complete(monkeypatch):
     assert usage["incomplete"] is True
     assert usage["cost"] is None, "an undercounted bill must not be priced as exact"
     assert usage["models"]["claude"]["input"] > 0  # the counted attempts still show
+    for model in usage["models"].values():  # per-model prices would also read as exact
+        assert "cost" not in model
+
+
+def test_pre_delta_stream_failure_is_potentially_undercounted(monkeypatch):
+    """A stream that fails before its first delta may still have been accepted
+    and billed; the tally must be marked incomplete (Codex review, PR #12)."""
+    import asyncio
+
+    import orchestrator
+    from providers import Provider
+
+    async def ask(client, model, key, system, messages, usage=None):
+        if usage is not None:
+            usage.update(input=100, output=50)
+        return "recovered answer"
+
+    async def instant_death(client, model, key, system, messages, usage=None):
+        raise RuntimeError("connection lost before any delta")
+        yield  # pragma: no cover - makes this an async generator
+
+    providers = [
+        Provider("claude", "Claude", "claude-opus-5", "k", ask, instant_death),
+        Provider("openai", "ChatGPT", "claude-opus-5", "k", ask, None),
+    ]
+    monkeypatch.setattr(orchestrator, "active_providers", lambda: providers)
+
+    async def collect():
+        return [ev async for ev in orchestrator.run(None, "q", thorough=False)]
+
+    events = asyncio.run(collect())
+    usage = next(e for e in events if e["type"] == "final")["usage"]
+    assert usage["incomplete"] is True
+    assert usage["cost"] is None
 
 
 def test_cost_estimate_uses_price_table():
