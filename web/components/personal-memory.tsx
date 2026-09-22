@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Switch } from '@/components/ui/switch';
 import { memoryProfileSchema, maxMemoryCharacters, type MemoryProfile } from '@/lib/memory';
 import { providers, type Connections, type ProviderId } from '@/lib/trio';
@@ -36,12 +37,30 @@ type MemoryState = ReturnType<typeof usePersonalMemory>;
 export function PersonalMemory({ accountId, open, onOpenChange, memory, connections, sessionId, sessionSaved, busy }: { accountId: string; open: boolean; onOpenChange: (open: boolean) => void; memory: MemoryState; connections: Connections; sessionId: string | null; sessionSaved: boolean; busy: boolean }) {
   const [notes, setNotes] = useState(''), [enabled, setEnabled] = useState(false), [error, setError] = useState('');
   const [saving, setSaving] = useState(false), [suggesting, setSuggesting] = useState(false), [suggested, setSuggested] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [chosen, setChosen] = useState<ProviderId>('claude');
   const abort = useRef<AbortController | null>(null), version = useRef(0);
   const available = providers.filter(p => connections[p.id].enabled && connections[p.id].key.trim());
   const provider = available.find(p => p.id === chosen)?.id ?? available[0]?.id;
-  useEffect(() => { version.current++; abort.current?.abort(); setSuggesting(false); setNotes(memory.profile?.notes ?? ''); setEnabled(memory.profile?.enabled ?? false); setError(''); setSuggested(false); }, [open, memory.profile]);
+  const dirty = Boolean(memory.profile && (notes !== memory.profile.notes || enabled !== memory.profile.enabled));
+  useEffect(() => { version.current++; abort.current?.abort(); setSuggesting(false); setNotes(memory.profile?.notes ?? ''); setEnabled(memory.profile?.enabled ?? false); setError(''); setSuggested(false); setDiscardOpen(false); }, [open, memory.profile]);
   useEffect(() => () => { version.current++; abort.current?.abort(); }, []);
+  useEffect(() => {
+    if (!open || !dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [open, dirty]);
+  function changeOpen(value: boolean) {
+    if (saving) return;
+    if (!value) {
+      // Stop a pending suggestion before deciding whether to discard the draft.
+      // A late response must not replace notes while the confirmation is open.
+      version.current++; abort.current?.abort(); setSuggesting(false);
+      if (dirty) { setDiscardOpen(true); return; }
+    }
+    onOpenChange(value);
+  }
   async function save(forget = false) {
     if (!memory.profile || saving || suggesting || busy) return;
     if (forget && !window.confirm('Forget personal memory for future answers? Earlier answer snapshots and downloaded backups are retained.')) return;
@@ -61,7 +80,7 @@ export function PersonalMemory({ accountId, open, onOpenChange, memory, connecti
     } catch (e) { if (request === version.current && !controller.signal.aborted) setError(e instanceof Error ? e.message : 'Could not suggest memory.'); }
     finally { if (request === version.current) setSuggesting(false); }
   }
-  return <Dialog open={open} onOpenChange={value => { if (!saving) onOpenChange(value); }}><DialogContent className="memory-dialog"><DialogTitle>Personal memory</DialogTitle><DialogDescription>Keep useful goals, background, and preferences in your private account. You decide what Trio remembers. This provides context to your models; it does not train their weights or guarantee accuracy.</DialogDescription>
+  return <Dialog open={open} onOpenChange={changeOpen}><DialogContent className="memory-dialog"><DialogTitle>Personal memory</DialogTitle><DialogDescription>Keep useful goals, background, and preferences in your private account. You decide what Trio remembers. This provides context to your models; it does not train their weights or guarantee accuracy.</DialogDescription>
     {memory.loading ? <p role="status">Loading personal memory…</p> : !memory.profile ? <div role="alert"><p>{memory.error}</p><button className="subtle-button" onClick={() => void memory.reload()}>Retry loading memory</button></div> : <>
       <div className="connection-mode"><div><strong>Use personal memory</strong><p>When enabled, saved notes go to every participating model in future live questions. Demo ignores memory.</p></div><Switch aria-label="Use personal memory" checked={enabled} disabled={busy || saving || suggesting} onCheckedChange={setEnabled} /></div>
       <label className="memory-editor">What should Trio remember?<textarea aria-label="Personal memory notes" value={notes} maxLength={maxMemoryCharacters} disabled={busy || saving || suggesting} onChange={e => { setNotes(e.target.value); setSuggested(false); }} placeholder="For example: I prefer plain-language explanations, practical examples, and a short list of next steps." /><small>{notes.length.toLocaleString()} / 4,000 characters. Avoid passwords, API keys, and sensitive personal details.</small></label>
@@ -70,5 +89,6 @@ export function PersonalMemory({ accountId, open, onOpenChange, memory, connecti
       {error && <div className="error-box" role="alert"><p>{error}</p><button className="subtle-button" disabled={saving || suggesting} onClick={() => { if (window.confirm('Discard this memory draft and load the latest saved memory? Copy edits you want to keep first.')) void memory.reload(); }}>Reload saved memory</button></div>}
       <div className="dialog-actions"><button className="subtle-button" disabled={busy || saving || suggesting || !memory.profile.notes} onClick={() => void save(true)}>Forget memory</button><button className="run-button" disabled={busy || saving || suggesting} onClick={() => void save()}>{saving ? 'Saving…' : 'Save memory'}</button></div><small>Forgetting clears future personalization. Earlier answers retain the memory they used; delete those conversations separately if needed.</small>
     </>}
+    <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}><AlertDialogContent><AlertDialogTitle>Discard unsaved memory changes?</AlertDialogTitle><AlertDialogDescription>Your edited notes, suggested draft, and memory setting have not been saved. Keep editing to review and save them, or discard these changes. Your saved personal memory will stay as it is.</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep editing</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { setDiscardOpen(false); onOpenChange(false); }}>Discard changes</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </DialogContent></Dialog>;
 }
