@@ -1,0 +1,84 @@
+const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { samplePdf } from './fixtures/pdf.ts';
+
+const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  const png = await page.locator('.models-grid').screenshot();
+  const file = { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from(samplePdf) };
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles(file);
+  await page.getByText('Demo ignores this PDF. Switch to Live in Connections to analyze it.').waitFor();
+  await page.getByRole('button', { name: 'Run demo', exact: true }).click();
+  await page.getByRole('button', { name: 'Run demo', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Connections', exact: true }).click();
+  await page.getByPlaceholder('Paste your API key').first().fill('fake-pdf-key');
+  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByLabel('Choose image').setInputFiles({ name: 'diagram.png', mimeType: 'image/png', buffer: png });
+  await page.getByAltText('Attached image preview').waitFor();
+  await page.getByLabel('Choose text context').setInputFiles({ name: 'instructions.txt', mimeType: 'text/plain', buffer: Buffer.from('Read the PDF with the diagram') });
+  await page.locator('.attachment').getByText('instructions.txt', { exact: true }).waitFor();
+  let calls = 0;
+  await page.route('**/api/ask', async route => {
+    calls++; const body = route.request().postDataJSON();
+    assert.equal(body.context, 'Read the PDF with the diagram');
+    assert.deepEqual(body.image, { mimeType: 'image/png', data: png.toString('base64') });
+    if (calls < 3) assert.deepEqual(body.pdf, { mimeType: 'application/pdf', data: file.buffer.toString('base64') });
+    else assert.equal(body.pdf, undefined);
+    if (calls > 1) assert.match(body.history[0].content, /PDF.*bytes are not part of the text history/);
+    assert.ok(!JSON.stringify(body.history).includes(file.buffer.toString('base64')));
+    await route.fulfill({ contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'final', result: { drafts: { openai: 'Document finding' }, reviews: {}, answer: `PDF answer ${calls}`, by: 'openai', errors: [], seconds: 1, demo: false } }) + '\n' });
+  });
+  const ask = async question => { await page.getByRole('textbox', { name: 'Your question' }).fill(question); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click(); await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor(); };
+  await ask('Read this report'); await ask('Compare the report with the diagram');
+  const saved = await page.evaluate(() => localStorage.getItem('trio-sessions'));
+  assert.equal(JSON.parse(saved)[0].turns[0].pdfName, undefined, 'Demo never pretends to read the PDF');
+  assert.equal(JSON.parse(saved)[0].turns[1].pdfName, 'report.pdf'); assert.ok(!saved.includes(file.buffer.toString('base64'))); assert.ok(!saved.includes('fake-pdf-key'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await mkdir('test-output', { recursive: true }); await page.locator('.prompt-section').screenshot({ path: 'test-output/pdf-mobile.png' });
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  const large = Buffer.from(samplePdf.padEnd(3_999_990, ' '));
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'large.pdf', buffer: large });
+  await page.locator('.attachment-limit').waitFor(); assert.equal(await page.getByRole('button', { name: 'Ask Trio', exact: true }).isDisabled(), true);
+  await page.getByRole('textbox', { name: 'Your question' }).fill('Too much'); await page.getByRole('textbox', { name: 'Your question' }).press('Control+Enter'); assert.equal(calls, 2);
+  await page.getByRole('button', { name: 'Remove PDF', exact: true }).click(); await ask('Continue without the PDF');
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'fake.pdf', buffer: Buffer.from('<html>not PDF</html>') });
+  await page.getByText('This file does not have a supported PDF header. Choose another PDF.', { exact: true }).waitFor(); assert.equal(await page.locator('.pdf-context').count(), 0);
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles(file);
+  await page.getByRole('button', { name: 'New session', exact: false }).click(); assert.equal(await page.locator('.pdf-context').count(), 0);
+  // A file selected in an earlier conversation must never appear after a late read.
+  await page.evaluate(() => { const original = File.prototype.arrayBuffer; File.prototype.arrayBuffer = async function () { const bytes = await original.call(this); if (this.name.startsWith('slow-')) await new Promise(resolve => window.finishPdf = resolve); return bytes; }; });
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'slow-new.pdf' });
+  await page.waitForFunction(() => !!window.finishPdf); assert.equal(await page.getByRole('button', { name: 'Ask Trio', exact: true }).isDisabled(), true);
+  await page.getByRole('button', { name: 'New session', exact: false }).click();
+  await page.evaluate(async () => { window.finishPdf(); await new Promise(requestAnimationFrame); }); assert.equal(await page.locator('.pdf-context').count(), 0);
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'slow-replace.pdf' });
+  await page.getByText('Loading PDF…', { exact: true }).waitFor();
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles(file); await page.locator('.pdf-context strong').getByText('report.pdf', { exact: true }).waitFor();
+  await page.evaluate(async () => { window.finishPdf(); await new Promise(requestAnimationFrame); }); assert.equal(await page.locator('.pdf-context strong').innerText(), 'report.pdf');
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'slow-remove.pdf' });
+  await page.getByText('Loading PDF…', { exact: true }).waitFor(); await page.getByRole('button', { name: 'Remove PDF', exact: true }).click();
+  await page.evaluate(async () => { window.finishPdf(); await new Promise(requestAnimationFrame); }); assert.equal(await page.locator('.pdf-context').count(), 0);
+  await page.getByLabel('Choose PDF', { exact: true }).setInputFiles({ ...file, name: 'slow-switch.pdf' });
+  await page.getByText('Loading PDF…', { exact: true }).waitFor(); await page.locator('.session-list').getByRole('button').first().click();
+  await page.evaluate(async () => { window.finishPdf(); await new Promise(requestAnimationFrame); }); assert.equal(await page.locator('.pdf-context').count(), 0);
+  await page.reload({ waitUntil: 'networkidle' }); assert.equal(await page.locator('.pdf-context').count(), 0);
+  await page.locator('.session-list').getByRole('button').first().click();
+  await page.locator('.previous-turns > summary').click();
+  const earlier = page.getByRole('button', { name: /Question 2/ }); await earlier.click(); await page.getByText('PDF used: report.pdf. Reattach it to revisit document details; PDF data is not saved.', { exact: true }).waitFor();
+  const base = { question: 'q', connections: Object.fromEntries(['openai', 'claude', 'gemini'].map(id => [id, { key: '', model: 'model', enabled: true }])), mode: 'fast', lead: 'openai' };
+  for (const pdf of [{ mimeType: 'application/pdf', data: 'https://example.org/report.pdf' }, { mimeType: 'text/html', data: btoa('<html>') }, { mimeType: 'application/pdf', data: btoa('not pdf') }]) {
+    const response = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, pdf } }); assert.equal(response.status(), 400); assert.match((await response.json()).error, /PDF format/);
+  }
+  const valid = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, pdf: { mimeType: 'application/pdf', data: file.buffer.toString('base64') } } }); assert.match((await valid.json()).error, /Connect at least one/);
+  const combined = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, pdf: { mimeType: 'application/pdf', data: large.toString('base64') }, image: { mimeType: 'image/png', data: png.toString('base64') } } }); assert.equal(combined.status(), 400); assert.match((await combined.json()).error, /together must be under 4 MB/);
+  assert.equal(calls, 3); assert.deepEqual(errors, []);
+} finally { await browser.close(); }
+console.log('PDF browser checks passed: demo separation, PDF/image/text combination, follow-ups, metadata-only history, mobile, combined limits, invalid files, session isolation, stale reads, API validation.');

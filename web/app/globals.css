@@ -58,3 +58,5 @@
 .research-controls label { font-size:11px; color:#b6a3c7; display:flex; flex-direction:column; gap:6px; }
 .research-controls select { background:#211a2a; border:1px solid #493953; color:#deceeb; font:inherit; font-size:12px; padding:8px; border-radius:6px; max-width:100%; }
 @media(max-width:720px) { .research-setting { align-items:flex-start; flex-wrap:wrap; } .research-controls { flex:1; justify-content:space-between; } }
+
+.pdf-context>svg{color:#c4bbff;flex-shrink:0}.attachment-limit{color:#efb4a8;font-size:12px;line-height:1.6;margin:0 18px 14px}
