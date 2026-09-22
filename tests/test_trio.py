@@ -97,6 +97,40 @@ def test_no_providers_yields_helpful_error(client, monkeypatch):
     assert "No API keys" in out["error"]
 
 
+def test_broken_stream_restarts_the_final_answer(monkeypatch):
+    """A stream that dies after emitting chunks must signal a restart, or
+    consumers that already showed the abandoned prefix keep it (Codex review,
+    PR #2): a fresh final_start precedes the non-streaming retry's answer."""
+    import asyncio
+
+    import orchestrator
+    from providers import Provider
+
+    async def draft(client, model, key, system, messages):
+        return "complete answer"
+
+    async def dying_stream(client, model, key, system, messages):
+        yield "partial "
+        raise RuntimeError("stream died")
+
+    providers = [
+        Provider("claude", "Claude", "m", "k", draft, dying_stream),
+        Provider("openai", "ChatGPT", "m", "k", draft, None),
+    ]
+    monkeypatch.setattr(orchestrator, "active_providers", lambda: providers)
+
+    async def collect():
+        return [ev async for ev in orchestrator.run(None, "q", thorough=False)]
+
+    events = asyncio.run(collect())
+    starts = [i for i, e in enumerate(events) if e["type"] == "final_start"]
+    deltas = [i for i, e in enumerate(events) if e["type"] == "final_delta"]
+    final = next(e for e in events if e["type"] == "final")
+    assert len(starts) == 2, "the abandoned stream must be followed by a restart"
+    assert deltas and all(starts[0] < i < starts[1] for i in deltas)
+    assert final["text"] == "complete answer" and final["by"] == "claude"
+
+
 def test_synthesizer_preference_is_respected(client, monkeypatch):
     monkeypatch.setenv("SYNTHESIZER", "gemini")
     out = client.post("/api/ask", json={"question": "hi", "stream": False}).json()

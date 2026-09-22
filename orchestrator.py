@@ -139,17 +139,23 @@ async def run(
     last_err = None
     for p in _synth_order(providers, set(drafts)):
         streamed = ""
+        emitted = False
         if p.stream_fn:
             yield {"type": "final_start", "by": p.key}
             try:
                 async for piece in p.stream(client, FINAL_SYSTEM, final_msgs):
                     streamed += piece
+                    emitted = True
                     yield {"type": "final_delta", "by": p.key, "text": piece}
             except Exception as e:
                 last_err = str(e) or e.__class__.__name__
                 streamed = ""  # a broken stream may be cut mid-thought; retry below without streaming
         text = streamed.strip()
         if not text:
+            if emitted:
+                # Consumers already showed deltas of an answer we are abandoning;
+                # a fresh final_start tells them the answer restarts from scratch.
+                yield {"type": "final_start", "by": p.key}
             _, full, err, _ = await _timed(p, p.ask(client, FINAL_SYSTEM, final_msgs))
             if err:
                 last_err = err
