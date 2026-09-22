@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# The app modules (main, orchestrator, providers) live at the repo root;
+# bare `pytest` does not put the root on sys.path, so pin it here.
+pythonpath = ["."]
+testpaths = ["tests"]

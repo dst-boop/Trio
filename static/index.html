@@ -224,14 +224,34 @@ function handle(ui, ev) {
       if (ev.text) { ui.reviews[ev.model] = ev.text; setLane(ui, ev.model, "", "Answered and reviewed"); }
       else setLane(ui, ev.model, "failed", `Answered, but the review failed: ${ev.error}`);
       break;
+    case "final_start": {                    // the final answer streams in live
+      ui.live?.card.remove();
+      const live = { card: el("article", "final"), body: el("div", "body"), text: "", queued: false };
+      live.card.append(live.body);
+      ui.turn.append(live.card);
+      ui.live = live;
+      break;
+    }
+    case "final_delta": {
+      const live = ui.live;
+      if (!live) break;
+      live.text += ev.text;
+      if (!live.queued) {
+        live.queued = true;
+        requestAnimationFrame(() => { live.queued = false; if (ui.live === live) live.body.replaceChildren(md(live.text)); });
+      }
+      break;
+    }
     case "final":
       ui.writing?.remove();
+      ui.live?.card.remove(); ui.live = null;
       showFinal(ui, ev);
       history.push({ role: "user", content: ui.question }, { role: "assistant", content: ev.text });
       $("#reset").hidden = false;
       break;
     case "error":
       ui.writing?.remove();
+      ui.live?.card.remove(); ui.live = null;
       ui.turn.append(el("p", "note", ev.message));
       break;
   }
