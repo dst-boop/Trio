@@ -1,6 +1,7 @@
 import type { ProviderId } from './trio.ts';
 import { readUsage, type Tokens } from './usage.ts';
 import { readResearch, type Research } from './research.ts';
+import { maxAnswerCharacters, readProviderText } from './provider-response.ts';
 
 /** Safe to surface: vendor payloads and parser errors can contain credentials. */
 export class StreamInterrupted extends Error {
@@ -44,7 +45,7 @@ export async function readProviderStream(id: ProviderId, body: ReadableStream<Ui
   const steps = new Map<number, string>();
   const add = (piece: unknown) => {
     if (typeof piece !== 'string' || !piece) return;
-    if (text.length + piece.length > 120000) throw new StreamInterrupted();
+    if (text.length + piece.length > maxAnswerCharacters) throw new StreamInterrupted();
     text += piece; onDelta(piece);
   };
   try {
@@ -61,8 +62,7 @@ export async function readProviderStream(id: ProviderId, body: ReadableStream<Ui
           if (event.response?.status && event.response.status !== 'completed') throw new StreamInterrupted();
           complete = true;
           // The terminal response is authoritative if a provider coalesced deltas.
-          const output = (event.response?.output ?? []).flatMap((item: any) => item.content ?? []).filter((part: any) => part.type === 'output_text').map((part: any) => part.text ?? '').join('\n');
-          if (output) text = output;
+          if (event.response?.output?.length) text = readProviderText('openai', event.response);
           if (onResearch) { const research = readResearch(event.response); text = research.text; onResearch(research); }
         }
       } else if (id === 'claude') {
@@ -88,7 +88,7 @@ export async function readProviderStream(id: ProviderId, body: ReadableStream<Ui
       }
       if (complete) break;
     }
-    if (!complete || !text.trim() || text.length > 120000) throw new StreamInterrupted();
+    if (!complete || !text.trim() || text.length > maxAnswerCharacters) throw new StreamInterrupted();
     return text.trim();
   } catch {
     signal.throwIfAborted();

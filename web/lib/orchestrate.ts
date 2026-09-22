@@ -1,6 +1,7 @@
 import { providers, type Connections, type Mode, type ProviderId, type ProviderUsage, type Result, type RunEvent, type Phase } from './trio.ts';
 import { readUsage, estimateStandardCost, summarizeUsage, type Tokens } from './usage.ts';
 import { readProviderStream, StreamInterrupted } from './provider-stream.ts';
+import { readProviderJson, readProviderText } from './provider-response.ts';
 import type { ImageInput } from './images.ts';
 import { readResearch, ResearchPaused, selectResearchProvider, type ResearchChoice, type Research } from './research.ts';
 
@@ -26,6 +27,7 @@ export async function callProvider(id: ProviderId, key: string, model: string, i
     body = { ...request, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }], ...(continuation ? { messages: [...request.messages, { role: 'assistant', content: continuation }] } : {}) };
   }
   const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(120000)]);
+  requestSignal.throwIfAborted();
   let response: Response;
   try {
     response = await fetcher(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body as object, ...(streaming ? { stream: true } : {}) }), signal: requestSignal });
@@ -44,7 +46,7 @@ export async function callProvider(id: ProviderId, key: string, model: string, i
     return readProviderStream(id, response.body, requestSignal, onDelta, onUsage, onResearch);
   }
   let data: any;
-  try { data = await response.json(); } catch { signal.throwIfAborted(); throw new Error(`${id}: The provider returned an unreadable response.`); }
+  try { data = await readProviderJson(response, requestSignal); } catch (error) { requestSignal.throwIfAborted(); throw new Error(`${id}: ${(error as Error).message}`); }
   onUsage?.(readUsage(id, data));
   if ((id === 'openai' || id === 'gemini') && data.status && data.status !== 'completed' || id === 'claude' && ['max_tokens', 'model_context_window_exceeded'].includes(data.stop_reason)) throw new Error(`${id}: The provider did not complete the answer. Try a shorter question or another model.`);
   if (onResearch) {
@@ -56,12 +58,7 @@ export async function callProvider(id: ProviderId, key: string, model: string, i
     const research = readResearch(id === 'claude' && continuation ? { ...data, content: [...continuation, ...data.content] } : data, id as 'openai' | 'claude');
     onResearch(research); return research.text;
   }
-  let text = '';
-  if (id === 'openai') text = (data.output ?? []).flatMap((v: { content?: { type: string; text?: string }[] }) => v.content ?? []).filter((v: { type: string }) => v.type === 'output_text').map((v: { text: string }) => v.text).join('\n');
-  if (id === 'claude') text = (data.content ?? []).filter((v: { type: string }) => v.type === 'text').map((v: { text: string }) => v.text).join('\n');
-  if (id === 'gemini') text = (data.steps ?? []).filter((v: { type: string }) => v.type === 'model_output').flatMap((v: { content?: { type: string; text?: string }[] }) => v.content ?? []).filter((v: { type: string }) => v.type === 'text').map((v: { text?: string }) => v.text ?? '').join('\n');
-  if (!text.trim()) throw new Error(`${id}: No text returned. The response may have been blocked or exceeded its output limit.`);
-  return text.trim();
+  try { return readProviderText(id, data); } catch (error) { throw new Error(`${id}: ${(error as Error).message}`); }
 }
 
 export async function orchestrate(input: Input, emit: (event: RunEvent) => void, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<Result> {
