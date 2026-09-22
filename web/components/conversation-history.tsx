@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Answer } from '@/components/answer';
+import { ResearchPanel } from '@/components/research-panel';
 import { UsageSummary } from '@/components/usage-summary';
 import { providers, type Result } from '@/lib/trio';
 import type { Turn } from '@/lib/sessions';
@@ -40,6 +41,7 @@ function PastTurn({ turn }: { turn: Turn }) {
       <TabsContent value="reviews"><Contributions result={result} bucket="reviews" /></TabsContent>
       {turn.mode === 'deep' && <TabsContent value="revisions"><Contributions result={result} bucket="revisions" /></TabsContent>}
     </Tabs>
+    {result.researchRequested && <ResearchPanel research={result.research} />}
     {result.usage && !result.demo && <UsageSummary usage={result.usage} />}
     {result.errors.length > 0 && <div className="error-box"><strong>Run notes</strong>{[...new Set(result.errors)].map((error, index) => <p key={index}>{error}</p>)}</div>}
   </div>;

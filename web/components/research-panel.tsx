@@ -1,0 +1,7 @@
+import { Answer } from '@/components/answer';
+import { safeSourceUrl, type Research } from '@/lib/research';
+
+export function ResearchPanel({ research, loading = false }: { research?: Research; loading?: boolean }) {
+  if (!research) return <div className="research-panel research-status" role="status"><strong>Shared web research</strong><p>{loading ? 'OpenAI is searching and preparing a cited brief for the team…' : 'No cited brief was available. Check run notes; current claims still need verification.'}</p></div>;
+  return <details className="research-panel"><summary>Shared web research <span>{research.sources.length} cited {research.sources.length === 1 ? 'source' : 'sources'} · OpenAI</span></summary><div className="research-body"><p className="revision-note">Searched {research.at.slice(0, 10)} (UTC). All participants received this brief. Sources can be incomplete or wrong; citations do not validate the final answer automatically.</p><Answer text={research.text} /><h3>Sources cited in the brief</h3><ol>{research.sources.map((source, index) => { const url = safeSourceUrl(source.url); return url ? <li key={index}><a href={url} target="_blank" rel="noopener noreferrer">{source.title || new URL(url).hostname}<span>{new URL(url).hostname} ↗</span></a></li> : null; })}</ol></div></details>;
+}

@@ -1,5 +1,6 @@
 import type { ProviderId } from './trio.ts';
 import { readUsage, type Tokens } from './usage.ts';
+import { readResearch, type Research } from './research.ts';
 
 /** Safe to surface: vendor payloads and parser errors can contain credentials. */
 export class StreamInterrupted extends Error {
@@ -38,7 +39,7 @@ async function* events(body: ReadableStream<Uint8Array>, signal: AbortSignal): A
 }
 
 /** Only visible answer text is forwarded; thought/tool events stay server-side. */
-export async function readProviderStream(id: ProviderId, body: ReadableStream<Uint8Array>, signal: AbortSignal, onDelta: (text: string) => void, onUsage?: (tokens: Tokens | null) => void): Promise<string> {
+export async function readProviderStream(id: ProviderId, body: ReadableStream<Uint8Array>, signal: AbortSignal, onDelta: (text: string) => void, onUsage?: (tokens: Tokens | null) => void, onResearch?: (research: Research) => void): Promise<string> {
   let text = '', complete = false, usage: any = null, finalClaudeUsage = false;
   const steps = new Map<number, string>();
   const add = (piece: unknown) => {
@@ -62,6 +63,7 @@ export async function readProviderStream(id: ProviderId, body: ReadableStream<Ui
           // The terminal response is authoritative if a provider coalesced deltas.
           const output = (event.response?.output ?? []).flatMap((item: any) => item.content ?? []).filter((part: any) => part.type === 'output_text').map((part: any) => part.text ?? '').join('\n');
           if (output) text = output;
+          if (onResearch) { const research = readResearch(event.response); text = research.text; onResearch(research); }
         }
       } else if (id === 'claude') {
         if (type === 'message_start') usage = event.message?.usage ?? null;

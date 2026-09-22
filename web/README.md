@@ -41,7 +41,15 @@ The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/as
 
 Live drafts, reviews, revisions, and synthesis stream as they are written. The workspace initially shows Perspectives and switches to Answer when synthesis starts. A broken stream retries once without streaming, clearing its previous partial text. Partial output never enters peer-review prompts or saved turns. Stop cancels provider reads and preserves completed questions; the interrupted contribution remains visible only in the current tab.
 
-The hosted event contract adds `contribution_start` and `contribution_delta` with a `provider` and `phase` (`draft`, `review`, `revision`, or `synthesis`). Start clears that contribution; delta appends visible text. Existing complete `draft`, `review`, `revision`, and `final` events remain authoritative. `lib/run-events.ts` handles client state separately from the Python SSE contract. Provider parsers require a terminal completion event and ignore thought/tool content. See the official [OpenAI Responses](https://developers.openai.com/api/docs/guides/streaming-responses), [Claude Messages](https://platform.claude.com/docs/en/build-with-claude/streaming), and [Gemini Interactions](https://ai.google.dev/gemini-api/docs/streaming) streaming specifications.
+The hosted event contract adds `contribution_start` and `contribution_delta` with a `provider` and `phase` (`research`, `draft`, `review`, `revision`, or `synthesis`). Start clears that contribution; delta appends visible text. Existing complete `draft`, `review`, `revision`, and `final` events remain authoritative. `lib/run-events.ts` handles client state separately from the Python SSE contract. Provider parsers require a terminal completion event and ignore thought/tool content. See the official [OpenAI Responses](https://developers.openai.com/api/docs/guides/streaming-responses), [Claude Messages](https://platform.claude.com/docs/en/build-with-claude/streaming), and [Gemini Interactions](https://ai.google.dev/gemini-api/docs/streaming) streaming specifications.
+
+## Shared web research
+
+Turn on **Web research** in Live mode. It requires an enabled OpenAI API connection with a model supporting the [Responses web-search tool](https://developers.openai.com/api/docs/guides/tools-web-search). OpenAI searches first; the same cited brief, source URLs, and timestamp then go to every draft, review, revision, and synthesis call. The other steps have no browsing tools. The brief is evidence to evaluate, not independent verification by three search engines.
+
+Research adds one OpenAI response (plus at most one retry), with at most three built-in tool calls per attempt. Search and token charges apply; the UI reports usage but omits research cost estimates. It is off by default and disabled in demo mode. Search failures or a response without completed search and usable citations produce a visible warning, then normal collaboration continues with an explicit unavailable-research notice in model context.
+
+Citations come from provider metadata, not URLs guessed from prose. The research panel shows clickable inline references and a source list; only HTTP(S) URLs without embedded credentials are accepted. Briefs and citations survive opt-in local history and Markdown exports. Research text is displayed only after its complete citation metadata arrives. A new `research` event carries the completed brief; partial research text is never shared or saved. Follow-ups search again only while the toggle is on. No search results are fabricated in demo mode.
 
 ## Data and limits
 
@@ -54,7 +62,7 @@ The hosted event contract adds `contribution_start` and `contribution_delta` wit
 - Live results include a usage panel with attempted calls, reported input/output tokens, and a per-model breakdown. Missing provider metadata and failed requests are explicitly marked as partial usage. Gemini thinking tokens count as output; OpenAI reasoning tokens are already included in its output total. Usage is included in local history and Markdown exports.
 - Standard-rate USD estimates are shown only when every attempt reported usage and all models have a known, unexpired uncached rate. They exclude discounts and taxes. Cached usage, unknown models, missing metadata, and expired rates display no cost estimate; provider invoices remain authoritative. Current rates were checked September 22, 2026 against [OpenAI](https://developers.openai.com/api/docs/models/gpt-6-astra), [Anthropic](https://platform.claude.com/docs/en/about-claude/pricing), and [Google](https://ai.google.dev/gemini-api/docs/pricing). The table expires January 1, 2027, before using outdated introductory rates.
 - A failed provider does not stop the others. If all synthesis attempts fail, an independent draft is explicitly labeled as a fallback.
-- Text, code, and image understanding are supported. This version does not browse the web, execute code, generate images, or expose every feature of the vendors' consumer apps. Custom models must support image inputs. Vision request formats follow the official [OpenAI](https://developers.openai.com/api/docs/guides/images-vision), [Claude](https://platform.claude.com/docs/en/build-with-claude/vision), and [Gemini](https://ai.google.dev/gemini-api/docs/image-understanding) documentation. Image runs report provider token usage but omit cost estimates because modality-specific pricing has not been verified.
+- Text, code, and image understanding are supported. Optional web research uses OpenAI to share a cited brief with all participants. This version does not execute code, generate images, or expose every feature of the vendors' consumer apps. Custom models must support image inputs. Vision request formats follow the official [OpenAI](https://developers.openai.com/api/docs/guides/images-vision), [Claude](https://platform.claude.com/docs/en/build-with-claude/vision), and [Gemini](https://ai.google.dev/gemini-api/docs/image-understanding) documentation. Image runs report provider token usage but omit cost estimates because modality-specific pricing has not been verified.
 - Model agreement is not verification. Important claims and decisions still need checking.
 
 ## Validation
@@ -71,6 +79,7 @@ node tests/browser-history.mjs
 node tests/browser-storage.mjs
 node tests/browser-streaming.mjs
 node tests/browser-images.mjs
+node tests/browser-research.mjs
 ```
 
 The scripts default to Microsoft Edge and http://localhost:5173. Set TRIO_BASE_URL to test a server on another port, PLAYWRIGHT_CHANNEL for another installed Chromium channel, and optionally PLAYWRIGHT_MODULE to a module URL if using a bundled Playwright installation.
