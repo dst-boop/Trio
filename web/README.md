@@ -73,6 +73,8 @@ Use **Back up & restore** in the sidebar to download a versioned Trio JSON file 
 
 Import validates every record before making changes, then lets you select conversations. Identical content is skipped, even if another device assigned it a different ID. Changed versions with matching IDs are kept as separate copies. Existing sessions, the active conversation, and an unsent prompt remain intact. An import that would exceed the 30-session limit is blocked until fewer conversations are selected; it never silently evicts existing history.
 
+New backups use format version 2 so older clients reject them instead of silently discarding session instructions or PDF metadata. This client still reads version 1, including files exported before the version change that already contain instructions. Imported legacy files are exported as version 2.
+
 Backups may be up to 20 MB and can recover conversations larger than the 5-million-character local-history limit. The preview warns when imported sessions cannot fit local history. Import does not enable persistence or make any model requests. With local history off, imported sessions remain in tab memory until you enable it in Connections; storage failures retain the existing warning and export controls. Corrupt files and unsupported backup versions are rejected as a whole. The file is parsed locally and never uploaded by the restore workflow.
 
 ## Data and limits

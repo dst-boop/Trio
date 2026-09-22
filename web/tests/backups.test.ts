@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { exportBackup, parseBackup, readBackupFile, planImport, mergeBackup, maxBackupBytes } from '../lib/backups.ts';
 import { serializeSessions, type Session } from '../lib/sessions.ts';
@@ -15,12 +17,28 @@ test('portable backups round-trip complete conversations and strip unknown field
   assert.deepEqual(parseBackup(text), [session()]);
   const parsed = JSON.parse(text); parsed.key = 'secret-not-for-import'; parsed.sessions[0].turns[0].result.drafts.apiKey = 'secret-not-for-import';
   assert.ok(!JSON.stringify(parseBackup(JSON.stringify(parsed))).includes('secret-not-for-import'));
-  assert.equal(parsed.format, 'trio-workspace'); assert.equal(parsed.version, 1);
+  assert.equal(parsed.format, 'trio-workspace'); assert.equal(parsed.version, 2);
+});
+
+test('V2 exports are rejected by the legacy version gate, while all V1 data remains readable', () => {
+  const legacy = readFileSync(new URL('./fixtures/workspace-v1.json', import.meta.url), 'utf8');
+  const parsed = parseBackup(legacy); assert.deepEqual(parsed, JSON.parse(legacy).sessions);
+  const upgraded = exportBackup(parsed); assert.equal(JSON.parse(upgraded).version, 2); assert.deepEqual(parseBackup(upgraded), parsed);
+  const withInstructions = session(); withInstructions.instructions = 'Current session preferences';
+  withInstructions.turns[0].instructions = 'Historical instructions used'; withInstructions.turns[0].pdfName = 'report.pdf';
+  const current = exportBackup([withInstructions]);
+  // This is the version check shipped by V1 clients, before unknown fields are stripped.
+  const legacyVersionGate = z.object({ format: z.literal('trio-workspace'), version: z.literal(1) });
+  assert.equal(legacyVersionGate.safeParse(JSON.parse(current)).success, false);
+  // Some V1 files were already written with instructions before the version bump.
+  const transitional = JSON.stringify({ ...JSON.parse(current), version: 1 });
+  assert.deepEqual(parseBackup(transitional), [withInstructions]);
+  assert.deepEqual(parseBackup(exportBackup(parseBackup(transitional))), [withInstructions]);
 });
 
 test('unsupported, partial, invalid, and duplicate-ID files are rejected as a whole', () => {
   const good = JSON.parse(exportBackup([session()]));
-  for (const value of [null, [], { ...good, version: 2 }, { ...good, format: 'other' }, { ...good, exportedAt: 'bad-date' }, { ...good, sessions: [] }, { ...good, sessions: [...good.sessions, { ...session('bad'), turns: [null] }] }, { ...good, sessions: [session(), session()] }, { ...good, sessions: Array.from({ length: 31 }, (_, i) => session(String(i))) }]) assert.throws(() => parseBackup(JSON.stringify(value)), /supported Trio backup/);
+  for (const value of [null, [], { ...good, version: 3 }, { ...good, format: 'other' }, { ...good, exportedAt: 'bad-date' }, { ...good, sessions: [] }, { ...good, sessions: [...good.sessions, { ...session('bad'), turns: [null] }] }, { ...good, sessions: [session(), session()] }, { ...good, sessions: Array.from({ length: 31 }, (_, i) => session(String(i))) }]) assert.throws(() => parseBackup(JSON.stringify(value)), /supported Trio backup/);
   assert.throws(() => parseBackup('{not-json'), /valid JSON/);
   const unsafe = session(); unsafe.turns[0].result.research!.sources[0].url = 'javascript:alert(1)';
   assert.throws(() => parseBackup(JSON.stringify({ ...good, sessions: [unsafe] })), /supported Trio backup/);

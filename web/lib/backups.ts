@@ -3,14 +3,16 @@ import { sessionSchema, serializeSessions, type Session } from './sessions.ts';
 
 export const maxBackupBytes = 20_000_000;
 const records = z.array(sessionSchema).min(1).max(30).refine(sessions => new Set(sessions.map(s => s.id)).size === sessions.length);
-const envelope = z.object({ format: z.literal('trio-workspace'), version: z.literal(1), exportedAt: z.string().datetime(), sessions: records });
+// V2 prevents old clients from silently stripping instruction snapshots and PDF metadata.
+// Both legacy V1 files and the brief V1 instruction-bearing release remain readable.
+const envelope = z.object({ format: z.literal('trio-workspace'), version: z.union([z.literal(1), z.literal(2)]), exportedAt: z.string().datetime(), sessions: records });
 const byteLength = (value: string) => new TextEncoder().encode(value).length;
 
 /** A portable backup is deliberately independent of the smaller localStorage budget. */
 export function exportBackup(sessions: Session[]): string {
   const parsed = records.safeParse(sessions);
   if (!parsed.success) throw new Error('These sessions could not be backed up. Export individual conversations as Markdown.');
-  const text = JSON.stringify({ format: 'trio-workspace', version: 1, exportedAt: new Date().toISOString(), sessions: parsed.data });
+  const text = JSON.stringify({ format: 'trio-workspace', version: 2, exportedAt: new Date().toISOString(), sessions: parsed.data });
   if (byteLength(text) > maxBackupBytes) throw new Error('This backup exceeds 20 MB. Export individual conversations as Markdown.');
   return text;
 }
