@@ -15,10 +15,11 @@ try {
   await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('switch', { name: 'Web research', exact: true }).click();
+  if (await page.getByLabel('Research provider', { exact: true }).count()) await page.getByLabel('Research provider', { exact: true }).selectOption('openai');
   await page.getByRole('textbox', { name: 'Your question' }).fill('Research current facts');
   await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
   await page.getByRole('heading', { name: 'Connect your AI team' }).waitFor();
-  await page.getByText('Web research needs an enabled OpenAI API connection.').waitFor();
+  await page.getByText('Web research requires an enabled OpenAI API connection.').waitFor();
   await page.getByPlaceholder('Paste your API key').first().fill('fake-openai-research');
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   const research = { text: 'Evidence from [the report](https://example.org/report).', sources: [{ title: 'Primary report', url: 'https://example.org/report' }], at: '2026-09-22T12:00:00.000Z' };
@@ -44,6 +45,7 @@ try {
   await mkdir('test-output', { recursive: true }); await page.locator('.research-panel').screenshot({ path: 'test-output/research-mobile.png' });
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.getByRole('switch', { name: 'Web research', exact: true }).click();
+  if (await page.getByLabel('Research provider', { exact: true }).count()) await page.getByLabel('Research provider', { exact: true }).selectOption('openai');
   await ask('Follow up without another search');
   assert.equal(await page.locator('.results-section > .research-panel').count(), 0);
   await page.locator('.previous-turns > summary').click(); await page.getByRole('button', { name: /Question 1/ }).click();
@@ -53,7 +55,7 @@ try {
   await page.locator('.previous-turns > summary').click(); await page.getByRole('button', { name: /Question 1/ }).click();
   await page.locator('.history-turn-body .research-panel summary').click(); await page.getByRole('link', { name: 'Primary report', exact: false }).waitFor();
   const connections = { openai: { enabled: false, key: '', model: 'model' }, claude: { enabled: true, key: 'fake', model: 'model' }, gemini: { enabled: false, key: '', model: 'model' } };
-  const rejected = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'claude', webResearch: true, connections } });
+  const rejected = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'claude', webResearch: true, researchProvider: 'openai', connections } });
   assert.equal(rejected.status(), 400); assert.match((await rejected.json()).error, /OpenAI/);
   assert.deepEqual(errors, []);
   console.log('Web research browser checks passed: opt-in, prerequisite, citations, mobile layout, history, export, refresh, and API validation.');

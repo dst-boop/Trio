@@ -41,7 +41,7 @@ function PastTurn({ turn }: { turn: Turn }) {
       <TabsContent value="reviews"><Contributions result={result} bucket="reviews" /></TabsContent>
       {turn.mode === 'deep' && <TabsContent value="revisions"><Contributions result={result} bucket="revisions" /></TabsContent>}
     </Tabs>
-    {result.researchRequested && <ResearchPanel research={result.research} />}
+    {result.researchRequested && <ResearchPanel research={result.research} provider={result.researchBy} />}
     {result.usage && !result.demo && <UsageSummary usage={result.usage} />}
     {result.errors.length > 0 && <div className="error-box"><strong>Run notes</strong>{[...new Set(result.errors)].map((error, index) => <p key={index}>{error}</p>)}</div>}
   </div>;
