@@ -201,6 +201,16 @@ Real paid API calls have not been verified without user-provided keys. Model ava
 - [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create)
 - [Gemini Interactions API](https://ai.google.dev/gemini-api/docs/get-started)
 
+## Audio transcription
+
+In Live mode, enable OpenAI in Connections and choose **Audio to text**. Select an MP3, WAV, M4A, or WebM recording under 4 MB, then explicitly choose **Transcribe with OpenAI**. Review/edit the transcript against the local audio player and choose **Add to question**. This appends without replacing an existing draft; the combined question must fit 20,000 characters. Use short clips: transcription may omit or mishear words, and long clips may be incomplete.
+
+The authenticated, same-origin, account-pinned `/api/transcribe` endpoint accepts bounded JSON (6 MB), validates canonical base64, actual audio size and basic container signatures, then sends one multipart request to the fixed OpenAI `/v1/audio/transcriptions` endpoint with `gpt-4o-mini-transcribe` and JSON output. It never fetches user URLs, follows redirects, retries automatically, or writes audio/keys/transcripts to storage. OpenAI validates full container/codec structure. Raw provider diagnostics are discarded. Responses are private/no-store and bounded to 2 MB / 60,000 transcript characters. The server timeout is 120 seconds; the browser timeout is 150 seconds. Stopping invalidates late results; already-started work may still be billed.
+
+Every explicit attempt incurs separate OpenAI API usage, outside the conversation's usage totals. Other vendors never receive the original audio or OpenAI key. Only after the user adds and submits the reviewed text does it participate in the normal multi-model question and completed-conversation history. An unsaved audio draft has a discard confirmation and unload warning. Keys and raw recordings remain transient. Consumer ChatGPT subscriptions do not supply API billing. Demo/guest users can inspect the workflow but cannot transcribe.
+
+Contract verified against [OpenAI's transcription reference](https://developers.openai.com/api/reference/cli/resources/audio/subresources/transcriptions/methods/create). Automated tests use synthetic files and simulated responses; they do not establish real speech-recognition accuracy.
+
 ## Hosting
 
 The .openai/hosting.json manifest identifies this private Sites app. Keep its project ID when updating this deployment. The production build is packaged from dist/ and deployed with the Sites publishing workflow. Sharing changes are separate from publishing.

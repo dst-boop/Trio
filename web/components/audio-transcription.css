@@ -1,0 +1,15 @@
+.audio-dialog{width:min(640px,calc(100vw - 2rem))!important}
+.audio-note{font-size:13px;line-height:1.65;color:#c1b7cb}
+.audio-file,.audio-transcript{display:grid;gap:9px;font-size:14px;min-width:0}
+.audio-file input{max-width:100%;border:1px solid #51455f;border-radius:8px;padding:12px;font-size:13px}
+.audio-preview{display:grid;gap:10px;min-width:0}
+.audio-preview strong{font-size:14px;overflow-wrap:anywhere}
+.audio-preview audio{width:100%}
+.audio-transcript textarea{width:100%;min-height:130px;resize:vertical;background:#19161f;border:1px solid #685977;border-radius:8px;padding:12px;font-size:16px;line-height:1.6}
+.audio-transcript small{font-size:12px;color:#b7adc7}
+.audio-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px}
+.audio-actions button{border:1px solid #61516f;border-radius:8px;padding:10px 14px;font-size:13px}
+.audio-actions .primary-action{background:#c3b0f1;color:#231b32;font-weight:600}
+.audio-actions button:disabled{opacity:.45;cursor:not-allowed}
+.audio-error{color:#ffb8be;font-size:13px;line-height:1.6}
+.audio-dialog .text-link{text-decoration:underline;color:#d3bff3}
