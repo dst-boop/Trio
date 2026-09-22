@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
+const base=process.env.TRIO_BASE_URL||'http://localhost:5173';
+const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'msedge'});
+const page=await browser.newPage({viewport:{width:1440,height:1050}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const result={drafts:{claude:'Completed draft'},reviews:{},answer:'First original answer',by:'claude',errors:[],seconds:1,demo:false};
+const source={id:'original',title:'Original discussion',instructions:'Current instruction after the discussion',time:'',turns:[{question:'Original first question',instructions:'Use concise bullet points',pdfName:'original.pdf',mode:'council',result:{...result,memory:'Earlier memory'}},{question:'Original second question',mode:'compare',result:{...result,answer:'',drafts:{claude:'Second perspective'}}},{question:'Original third question',instructions:'Later instruction',mode:'fast',result:{...result,answer:'Latest original answer'}}]};
+try{
+  await page.goto(base+'/signin-with-chatgpt?return_to=%2Fdemo',{waitUntil:'networkidle'});await page.evaluate(source=>{localStorage.setItem('trio-remember','true');localStorage.setItem('trio-active-session',source.id);localStorage.setItem('trio-sessions',JSON.stringify([source]));},source);await page.reload({waitUntil:'networkidle'});
+  await page.getByRole('textbox',{name:'Your question',exact:true}).fill('Unsent draft to keep on cancel');
+  await page.getByLabel('Choose text context').setInputFiles({name:'current.txt',mimeType:'text/plain',buffer:Buffer.from('Do not carry this to the branch')});await page.getByText('current.txt',{exact:true}).waitFor();
+  await page.locator('.previous-turns > summary').click();await page.getByRole('button',{name:/Question 1 Original first question/}).click();await page.locator('[data-history-turn="0"] .branch-turn').click();
+  await page.getByRole('dialog').getByText('Your unsent prompt and current attachments will be cleared.',{exact:false}).waitFor();
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await page.getByRole('textbox',{name:'Your question',exact:true}).inputValue(),'Unsent draft to keep on cancel');assert.equal(await page.getByText('current.txt',{exact:true}).count(),1);
+  await page.locator('[data-history-turn="0"] .branch-turn').click();await page.getByLabel('New conversation name',{exact:true}).fill('An alternative plan');
+  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>{const r=document.querySelector('[role=dialog]')?.getBoundingClientRect();return r&&r.top>=0&&r.bottom<=innerHeight;});assert.equal(await page.locator('[role=dialog]').evaluate(el=>el.scrollWidth>el.clientWidth),false);await mkdir('test-output',{recursive:true});await page.screenshot({path:'test-output/branch-dialog-mobile.png',animations:'disabled'});
+  await page.getByRole('button',{name:'Create conversation',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});await page.getByText('First original answer',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('textbox',{name:'Your question',exact:true}).inputValue(),'');assert.equal(await page.getByText('current.txt',{exact:true}).count(),0);assert.equal(await page.getByText('Latest original answer',{exact:true}).count(),0);
+  assert.equal(await page.locator('.previous-turns').count(),0);
+  let saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions')));assert.equal(saved.length,2);assert.deepEqual(saved.find(s=>s.id==='original'),source);const branch=saved.find(s=>s.id!=='original');assert.equal(branch.title,'An alternative plan');assert.equal(branch.turns.length,1);assert.equal(branch.instructions,'Use concise bullet points');
+  await page.setViewportSize({width:1440,height:1050});await page.getByRole('button',{name:'Connections',exact:true}).click();await page.getByPlaceholder('Paste your API key').nth(1).fill('fake-branch-key');await page.getByRole('switch',{name:'Demo mode',exact:true}).click();await page.getByRole('button',{name:'Done',exact:true}).click();
+  let request;await page.route('**/api/ask',route=>{request=route.request().postDataJSON();return route.fulfill({contentType:'application/x-ndjson',body:JSON.stringify({type:'final',result:{...result,answer:'Alternative follow-up answer'}})+'\n'});});
+  await page.getByRole('textbox',{name:'Your question',exact:true}).fill('Try a different direction');await page.getByRole('button',{name:'Ask Trio',exact:true}).click();await page.getByText('Alternative follow-up answer',{exact:true}).waitFor();
+  assert.equal(request.instructions,'Use concise bullet points');assert.equal(request.history.length,2);assert.ok(!JSON.stringify(request.history).includes('Original second'));assert.equal(request.context,undefined);assert.equal(request.pdf,undefined);assert.equal(request.image,undefined);
+  saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions')));assert.deepEqual(saved.find(s=>s.id==='original'),source);assert.equal(saved.find(s=>s.id===branch.id).turns.length,2);
+  await page.reload({waitUntil:'networkidle'});await page.getByText('Alternative follow-up answer',{exact:true}).waitFor();await page.locator('.session-open').filter({hasText:'Original discussion'}).click();await page.getByText('Latest original answer',{exact:true}).waitFor();
+  await page.locator('.branch-latest').click();await page.getByLabel('New conversation name',{exact:true}).fill('Complete copy');await page.getByRole('button',{name:'Create conversation',exact:true}).click();saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions')));assert.equal(saved[0].turns.length,3);assert.equal(saved[0].instructions,'Later instruction');
+  await page.evaluate(source=>{localStorage.setItem('trio-sessions',JSON.stringify(Array.from({length:30},(_,i)=>({...source,id:String(i)}))));localStorage.setItem('trio-active-session','0');},source);await page.reload({waitUntil:'networkidle'});await page.locator('.branch-latest').click();assert.ok(await page.getByRole('button',{name:'Create conversation',exact:true}).isDisabled());assert.equal((await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions')))).length,30);await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  // Exercise the same copy against the actual local authenticated D1 history.
+  const snapshot=await(await page.request.get(base+'/api/workspace')).json();
+  const headers={Origin:base,'X-Trio-Account':snapshot.accountId,'X-Trio-Workspace-Version':'3'};
+  assert.equal((await page.request.put(base+'/api/workspace',{headers,data:{revision:snapshot.revision,sessions:[source]}})).status(),200);
+  try{
+    await page.goto(base+'/workspace',{waitUntil:'networkidle'});await page.locator('.session-open').filter({hasText:'Original discussion'}).click();await page.locator('.branch-latest').click();await page.getByLabel('New conversation name',{exact:true}).fill('Account alternative');
+    const save=page.waitForResponse(r=>r.url().endsWith('/api/workspace')&&r.request().method()==='PUT');await page.getByRole('button',{name:'Create conversation',exact:true}).click();assert.equal((await save).status(),200);
+    const stored=await(await page.request.get(base+'/api/workspace')).json();assert.equal(stored.sessions.length,2);assert.deepEqual(stored.sessions.find(s=>s.id==='original'),source);assert.equal(stored.sessions[0].title,'Account alternative');
+    await page.reload({waitUntil:'networkidle'});await page.locator('.session-open').filter({hasText:'Account alternative'}).click();await page.getByText('Latest original answer',{exact:true}).waitFor();
+  }finally{
+    await page.goto(base+'/demo',{waitUntil:'networkidle'});const latest=await(await page.request.get(base+'/api/workspace')).json();assert.equal((await page.request.put(base+'/api/workspace',{headers,data:{revision:latest.revision,sessions:snapshot.sessions}})).status(),200);
+  }
+  assert.deepEqual(errors,[]);console.log('Conversation branches passed: cancel preserves draft, chosen prefix/instructions only, original unchanged, attachments isolated, follow-up context, reload, latest-answer copy, capacity guard, mobile dialog, authenticated D1 save/reload.');
+}finally{await browser.close();}

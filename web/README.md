@@ -20,6 +20,12 @@ Provider generation, research, memory suggestions, and access checks reject HTTP
 
 The browser finishes and saves a live run as soon as its first valid final event arrives, without waiting for the network connection to close. Stream events and final results are validated; unknown event types are ignored for compatibility, unexpected fields are stripped, and malformed or oversized records stop the run without saving partial output. UTF-8 decoding preserves split characters and rejects damaged text. Stream cleanup does not delay completion or Stop.
 
+## Explore an alternative conversation
+
+Choose **Continue from here** on the latest answer or an expanded earlier question. Give the new conversation a name and review the copy before creating it. It includes completed questions through the selected answer and the instructions saved with that answer; later discussion and later instruction changes are excluded. The original stays unchanged, and each conversation can receive its own follow-ups.
+
+API connections stay in the current tab. Original file bytes and current attachments are not copied; reattach files when needed. Historical memory snapshots remain with old answers, while future answers use current personal-memory settings. The dialog warns before clearing an unsent prompt or attached files, and Cancel preserves them. Copies count toward the 30-conversation and shared storage limits; creating one never evicts another conversation. Account copies use the usual private cloud save; guest copies follow the existing device-history setting.
+
 ## Review and evidence
 
 Completed live answers show **Review & evidence**, derived from the contributions that actually returned. The progress display marks partial, skipped, and unavailable steps separately: one model cannot earn a peer-review completion mark, a failed synthesis remains unavailable when a fallback is shown, and demo steps are labeled Sample. Interrupted streaming text never receives completed coverage.
@@ -142,6 +148,7 @@ Run browser checks with Playwright installed separately and a local dev server r
 ```sh
 node tests/browser-smoke.mjs
 node tests/browser-quality.mjs
+node tests/browser-branches.mjs
 node tests/browser-coverage.mjs
 node tests/browser-connections.mjs
 node tests/browser-deep-council.mjs
