@@ -46,6 +46,14 @@ class ConversationStore:
             return None
         return {**dict(row), "turns": json.loads(row["turns"])}
 
+    def delete(self, conversation_id: str) -> bool:
+        """Remove a conversation for good; True when a row was actually deleted."""
+        if not ID_PATTERN.fullmatch(conversation_id):
+            return False
+        with self._connect() as db:
+            cur = db.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        return cur.rowcount > 0
+
     def append(self, conversation_id: str | None, turn: dict, expected_turns: int) -> dict:
         """Atomically append, rejecting stale continuations instead of losing turns."""
         now = datetime.now(timezone.utc).isoformat()

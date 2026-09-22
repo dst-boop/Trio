@@ -110,7 +110,7 @@ textarea { width: 100%; border: 0; outline: 0; resize: none; background: transpa
     <p class="lede">Claude, ChatGPT and Gemini each answer your question, check one another's work, and then one final answer is written from all three.</p>
     <ul class="roster" id="roster" aria-label="Models in use"></ul>
     <div class="banner" id="banner" hidden></div>
-    <div class="saved-tools" id="saved-tools" hidden><span id="saved-label">Saved on this server</span><button class="link" id="share" type="button">Copy conversation link</button><button class="link" id="continue" type="button" hidden>Continue conversation</button><a class="link" href="/">New conversation</a></div>
+    <div class="saved-tools" id="saved-tools" hidden><span id="saved-label">Saved on this server</span><button class="link" id="share" type="button">Copy conversation link</button><button class="link" id="continue" type="button" hidden>Continue conversation</button><button class="link" id="delete" type="button">Delete this conversation</button><a class="link" href="/">New conversation</a></div>
   </header>
 
   <main id="thread" aria-live="polite"></main>
@@ -356,6 +356,23 @@ $('#share').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(new URL(`/c/${conversationId}`, location.origin).href); $('#saved-label').textContent = 'Link copied · Anyone with the link and server password can read or continue'; }
   catch { $('#saved-label').textContent = 'Copy the conversation URL from the address bar'; }
 });
+let deleteArmed = 0;
+$('#delete').addEventListener('click', async () => {  // two clicks: arm, then delete
+  if (busy || !conversationId) return;
+  if (!deleteArmed) {
+    $('#delete').textContent = 'Really delete? Click again';
+    deleteArmed = setTimeout(() => { deleteArmed = 0; $('#delete').textContent = 'Delete this conversation'; }, 4000);
+    return;
+  }
+  clearTimeout(deleteArmed); deleteArmed = 0;
+  let r;
+  try { r = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, { method: 'DELETE', headers: headers() }); }
+  catch { $('#saved-label').textContent = 'Could not reach the server to delete. Try again.'; $('#delete').textContent = 'Delete this conversation'; return; }
+  if (r.ok || r.status === 404) { location.href = '/'; return; }  // gone either way: the link is dead
+  $('#saved-label').textContent = r.status === 401 ? 'Wrong server password - reload, enter it, then delete.' : 'Could not delete. Try again.';
+  $('#delete').textContent = 'Delete this conversation';
+});
+
 window.addEventListener('popstate', () => location.reload());
 
 loadStatus().then(ok => { if (ok) return restoreConversation(); }).catch(error => { $('#banner').hidden = false; $('#banner').textContent = error.message || 'Could not connect. Reload to try again.'; });

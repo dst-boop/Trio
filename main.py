@@ -99,6 +99,15 @@ async def get_conversation(conversation_id: str, x_app_password: str | None = He
     return JSONResponse(saved, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, x_app_password: str | None = Header(default=None)):
+    check_password(x_app_password)  # holding the link is the authorization, same as reading
+    deleted = await asyncio.to_thread(app.state.conversations.delete, conversation_id)
+    if not deleted:
+        raise HTTPException(404, "Conversation not found.")
+    return {"deleted": True}
+
+
 @app.get("/api/status")
 async def status(x_app_password: str | None = Header(default=None)):
     check_password(x_app_password)
