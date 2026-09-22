@@ -5,8 +5,8 @@ export type Turn = { question: string; result: Result; mode: Mode };
 export type Session = { id: string; title: string; turns: Turn[]; time: string };
 const provider = z.enum(['openai', 'claude', 'gemini']);
 const answers = z.object({ openai: z.string().max(120000).optional(), claude: z.string().max(120000).optional(), gemini: z.string().max(120000).optional() });
-const result = z.object({ drafts: answers, reviews: answers, answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: z.number().finite().nonnegative(), demo: z.boolean(), fallback: z.boolean().optional() });
-const session = z.object({ id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ question: z.string().min(1).max(20000), mode: z.enum(['council', 'fast', 'compare']), result })).min(1).max(200) });
+const result = z.object({ drafts: answers, reviews: answers, revisions: answers.optional(), answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: z.number().finite().nonnegative(), demo: z.boolean(), fallback: z.boolean().optional() });
+const session = z.object({ id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ question: z.string().min(1).max(20000), mode: z.enum(['council', 'deep', 'fast', 'compare']), result })).min(1).max(200) });
 
 /** Restore only well-formed records; strip unknown fields, including injected credentials. */
 export function parseSessions(raw: string | null): Session[] {
@@ -39,6 +39,7 @@ export function sessionMarkdown(turns: Turn[]): string {
     t.result.answer ? `## ${t.result.fallback ? 'Fallback answer' : 'Combined answer'}\n\n${t.result.answer}` : '',
     ...providers.filter(p => t.result.drafts[p.id]).map(p => `## ${p.name} draft\n\n${t.result.drafts[p.id]}`),
     ...providers.filter(p => t.result.reviews[p.id]).map(p => `## ${p.name} review\n\n${t.result.reviews[p.id]}`),
+    ...providers.filter(p => t.result.revisions?.[p.id]).map(p => `## ${p.name} revised answer\n\n${t.result.revisions![p.id]}`),
     t.result.errors.length ? `## Run notes\n\n${t.result.errors.map(e => `- ${e}`).join('\n')}` : '',
   ].filter(Boolean).join('\n\n')).join('\n\n---\n\n');
 }

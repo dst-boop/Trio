@@ -30,3 +30,15 @@ test('exports preserve fallback and failure context', () => {
   const exported = sessionMarkdown([{ ...turn, result: { ...turn.result, answer: 'Choose A', fallback: true, errors: ['Synthesis unavailable'] } }]);
   assert.match(exported, /single-model draft fallback/); assert.match(exported, /Synthesis unavailable/); assert.match(exported, /## Claude draft/);
 });
+
+test('deep council restoration and export retain originals, reviews and revisions', () => {
+  const deep: Turn = { ...turn, mode: 'deep', result: { ...turn.result, reviews: { claude: 'Check the assumption' }, revisions: { openai: 'Choose A after checking the assumption' }, answer: 'A with caveats' } };
+  const saved = { ...session, turns: [deep] };
+  assert.deepEqual(parseSessions(JSON.stringify([saved])), [saved]);
+  const exported = sessionMarkdown([deep]);
+  assert.match(exported, /Mode: deep/);
+  assert.match(exported, /## ChatGPT draft\n\nChoose A/);
+  assert.match(exported, /## Claude review\n\nCheck the assumption/);
+  assert.match(exported, /## ChatGPT revised answer\n\nChoose A after checking the assumption/);
+  assert.equal(conversationHistory([deep])[1].content, 'A with caveats');
+});

@@ -1,3 +1,4 @@
+const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -8,7 +9,7 @@ const page = await context.newPage();
 const errors = []; page.on('pageerror', error => errors.push(error.message));
 const result = { drafts: { openai: 'First perspective', claude: 'Second perspective' }, reviews: {}, answer: '', errors: [], seconds: 1, demo: false };
 const session = { id: 'restored-comparison', title: 'Saved comparison', time: new Date().toISOString(), turns: [{ question: 'Saved comparison', mode: 'compare', result }] };
-await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
+await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
 await page.evaluate(s => {
   localStorage.setItem('trio-remember', 'true');
   localStorage.setItem('trio-sessions', JSON.stringify([{ id: 'broken', turns: [{}] }, s]));

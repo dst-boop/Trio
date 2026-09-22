@@ -11,7 +11,7 @@ function setup(fail?: (id: string, stage: string) => boolean) {
     const id = url.includes('openai') ? 'openai' : url.includes('anthropic') ? 'claude' : 'gemini';
     const body = JSON.parse(init.body as string);
     const system = body.instructions ?? body.system ?? body.system_instruction;
-    const stage = system.startsWith('Review') ? 'review' : system.startsWith('Write the final') ? 'final' : 'draft';
+    const stage = system.startsWith('Review') ? 'review' : system.startsWith('Revise') ? 'revision' : system.startsWith('Write the final') ? 'final' : 'draft';
     calls.push({ id, stage, body });
     if (fail?.(id, stage)) return new Response('{}', { status: 429 });
     const text = `${id} ${stage} response`;
@@ -56,4 +56,82 @@ test('no keys cannot make requests', async () => {
 test('provider errors cannot reflect secret-bearing response text', async () => {
   const fetcher = (async () => new Response('secret-should-not-appear', { status: 401 })) as typeof fetch;
   await assert.rejects(callProvider('openai', 'secret-should-not-appear', 'gpt-6-astra', 'system', 'hello', new AbortController().signal, fetcher), e => e instanceof Error && !e.message.includes('secret-should-not-appear') && e.message.includes('401'));
+});
+
+const promptOf = (call: { body: any }) => JSON.parse(call.body.input ?? call.body.messages[0].content);
+test('deep council revises from the shared critique and synthesizes labeled revisions', async () => {
+  const s = setup(), events: RunEvent[] = [];
+  const result = await orchestrate({ ...s.input, mode: 'deep' }, e => events.push(e), new AbortController().signal, s.fetcher);
+  assert.equal(s.calls.length, 10);
+  assert.deepEqual(events.filter(e => e.type === 'stage').map(e => e.stage), ['draft', 'review', 'revision', 'synthesis']);
+  assert.equal(events.filter(e => e.type === 'revision').length, 3);
+  assert.equal(Object.keys(result.revisions!).length, 3);
+  assert.equal(result.drafts.openai, 'openai draft response');
+  const reviews = s.calls.filter(c => c.stage === 'review');
+  for (const call of s.calls.filter(c => c.stage === 'revision')) {
+    const prompt = promptOf(call);
+    assert.deepEqual(prompt.drafts, promptOf(reviews[0]).drafts);
+    assert.equal(prompt.drafts.find((d: any) => d.label === prompt.your_draft_label).answer, `${call.id} draft response`);
+    assert.deepEqual([...prompt.reviews].sort(), Object.values(result.reviews).sort());
+    assert.equal(prompt.task.reference_text, 'Reference context');
+    assert.equal(prompt.revisions, undefined, 'Parallel revisions must not influence one another');
+    assert.ok(!JSON.stringify(prompt).includes('test-key-not-real'));
+  }
+  const synthesis = promptOf(s.calls.find(c => c.stage === 'final')!);
+  assert.equal(synthesis.revisions.length, 3);
+  for (const revision of synthesis.revisions) {
+    assert.equal(revision.answer.replace('revision', 'draft'), synthesis.drafts.find((d: any) => d.label === revision.label).answer);
+  }
+  assert.equal(result.by, 'claude');
+});
+
+test('deep council tolerates a failed review and revision without dropping original drafts', async () => {
+  const s = setup((id, stage) => id === 'gemini' && stage === 'review' || id === 'claude' && stage === 'revision');
+  const result = await orchestrate({ ...s.input, mode: 'deep' }, () => {}, new AbortController().signal, s.fetcher);
+  assert.equal(Object.keys(result.reviews).length, 2);
+  assert.equal(Object.keys(result.revisions!).length, 2);
+  assert.equal(result.revisions!.claude, undefined);
+  assert.equal(result.errors.length, 2);
+  const synthesis = promptOf(s.calls.find(c => c.stage === 'final')!);
+  assert.equal(synthesis.drafts.length, 3);
+  assert.equal(synthesis.revisions.length, 2);
+  assert.equal(result.answer, 'claude final response');
+});
+
+test('deep council skips revision when no reviews are available and supports one provider', async () => {
+  for (const singleProvider of [false, true]) {
+    const s = setup((_id, stage) => stage === 'review');
+    if (singleProvider) { s.input.connections.openai.enabled = false; s.input.connections.gemini.enabled = false; }
+    const result = await orchestrate({ ...s.input, mode: 'deep' }, () => {}, new AbortController().signal, s.fetcher);
+    assert.equal(s.calls.filter(c => c.stage === 'revision').length, 0);
+    assert.equal(result.revisions, undefined);
+    assert.equal(result.answer, 'claude final response');
+    assert.equal(s.calls.length, singleProvider ? 2 : 7);
+  }
+});
+
+test('deep council can synthesize originals if every revision fails', async () => {
+  const s = setup((_id, stage) => stage === 'revision');
+  const result = await orchestrate({ ...s.input, mode: 'deep' }, () => {}, new AbortController().signal, s.fetcher);
+  assert.equal(result.errors.length, 3);
+  assert.deepEqual(promptOf(s.calls.find(c => c.stage === 'final')!).revisions, []);
+  assert.equal(result.answer, 'claude final response');
+});
+
+test('deep council synthesis failover and final fallback retain revised work', async () => {
+  for (const allFail of [false, true]) {
+    const s = setup((id, stage) => stage === 'final' && (allFail || id === 'claude'));
+    const result = await orchestrate({ ...s.input, mode: 'deep' }, () => {}, new AbortController().signal, s.fetcher);
+    assert.equal(result.by, 'openai');
+    assert.equal(result.answer, allFail ? 'openai revision response' : 'openai final response');
+    assert.equal(Boolean(result.fallback), allFail);
+  }
+});
+
+test('stopping at revision prevents revision and synthesis requests', async () => {
+  const s = setup(), controller = new AbortController(), events: RunEvent[] = [];
+  await assert.rejects(orchestrate({ ...s.input, mode: 'deep' }, e => { events.push(e); if (e.stage === 'revision') controller.abort(); }, controller.signal, s.fetcher), { name: 'AbortError' });
+  assert.equal(s.calls.length, 6);
+  assert.ok(!events.some(e => e.type === 'final'));
+  assert.ok(!s.calls.some(c => c.stage === 'revision' || c.stage === 'final'));
 });

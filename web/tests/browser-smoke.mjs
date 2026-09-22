@@ -1,3 +1,4 @@
+const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import { mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -5,7 +6,7 @@ const browser = await chromium.launch({ headless: true, channel: process.env.PLA
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const errors = []; page.on('pageerror', e => errors.push(e.message));
 await mkdir('test-output', { recursive: true });
-await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
+await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
 await page.getByRole('heading', { name: 'One question. Three perspectives.' }).waitFor();
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 await page.screenshot({ path: 'test-output/desktop.png', fullPage: true });
@@ -40,9 +41,9 @@ await page.getByRole('dialog').waitFor({ state: 'hidden' });
 await page.setViewportSize({ width: 390, height: 844 });
 await page.screenshot({ path: 'test-output/mobile.png', fullPage: true });
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'No mobile overflow');
-const bad = await page.request.post('http://localhost:5173/api/ask', { data: { question: 'x' } });
+const bad = await page.request.post(`${baseUrl}/api/ask`, { data: { question: 'x' } });
 assert.equal(bad.status(), 400);
-const crossOrigin = await page.request.post('http://localhost:5173/api/ask', { headers: { origin: 'https://example.com' }, data: {} });
+const crossOrigin = await page.request.post(`${baseUrl}/api/ask`, { headers: { origin: 'https://example.com' }, data: {} });
 assert.equal(crossOrigin.status(), 403);
 assert.deepEqual(errors, []);
 await browser.close();
