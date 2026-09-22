@@ -77,6 +77,7 @@
 .welcome-intro { max-width: 630px; font-size: 20px; line-height: 1.65; color: #aeadbe; }
 .welcome-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
 .welcome-caption { font-size: 12px; color: #92909f; margin-top: 18px; }
+.welcome-access { font-size: 11px; color: #b8a6dd; letter-spacing: .4px; }
 .welcome-council { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid #34313f; border-bottom: 1px solid #34313f; }
 .welcome-council article { padding: 34px 26px; border-right: 1px solid #34313f; }
 .welcome-council article:first-child { padding-left: 0; }

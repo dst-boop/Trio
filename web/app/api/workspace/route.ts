@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
-import { readWorkspace, writeWorkspace, workspaceSchema } from '@/lib/account-store';
+import { readWorkspace, writeWorkspace, workspaceWriteSchema } from '@/lib/account-store';
 
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', 'X-Content-Type-Options': 'nosniff' } });
 export async function GET(request: Request) {
@@ -32,7 +32,7 @@ export async function PUT(request: Request) {
   } catch { return reply({ error: 'Could not read the workspace.' }, 400); }
   finally { reader.releaseLock(); }
   let input;
-  try { input = workspaceSchema.parse(JSON.parse(raw)); }
+  try { input = workspaceWriteSchema.parse(JSON.parse(raw)); }
   catch { return reply({ error: 'Invalid workspace backup.' }, 400); }
   try {
     if (!env.DB) throw new Error('Database unavailable');
