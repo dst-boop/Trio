@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import { samplePdf } from './fixtures/pdf.ts';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base=process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL || 'msedge'});
@@ -27,15 +28,26 @@ try {
  });
  await page.getByLabel('Choose text context').setInputFiles({name:'reference.txt',mimeType:'text/plain',buffer:Buffer.from('Original reference context')});
  await page.getByText('reference.txt',{exact:true}).waitFor();
+ const originalImage=await page.getByRole('heading',{name:'One question. Three perspectives.'}).screenshot();
+ await page.getByLabel('Choose image').setInputFiles({name:'original.png',mimeType:'image/png',buffer:originalImage});
+ await page.getByAltText('Attached image preview').waitFor();
+ await page.getByLabel('Choose PDF',{exact:true}).setInputFiles({name:'original.pdf',mimeType:'application/pdf',buffer:Buffer.from(samplePdf)});
+ await page.locator('.pdf-context').getByText('original.pdf',{exact:true}).waitFor();
  await page.getByRole('textbox',{name:'Your question'}).fill('Is the original plan sound?');
  await page.getByRole('button',{name:'Ask Trio',exact:true}).click();
  await page.getByRole('button',{name:'Have the team check this'}).waitFor();
  assert.equal(requests[0].mode,'single');assert.equal(requests[0].lead,'claude');assert.deepEqual(requests[0].history,[],'Demo stays out of live history');
  await page.getByRole('textbox',{name:'Your question'}).fill('Keep this unsent follow-up');
+ await page.getByLabel('Choose text context').setInputFiles({name:'next-reference.txt',mimeType:'text/plain',buffer:Buffer.from('Unsent follow-up reference')});
+ await page.getByLabel('Choose image').setInputFiles({name:'next.png',mimeType:'image/png',buffer:await page.getByRole('textbox',{name:'Your question'}).screenshot()});
+ await page.locator('.image-context').getByText('next.png',{exact:true}).waitFor();
+ await page.getByLabel('Choose PDF',{exact:true}).setInputFiles({name:'next.pdf',mimeType:'application/pdf',buffer:Buffer.from(samplePdf+'\n% New follow-up document')});
+ await page.locator('.pdf-context').getByText('next.pdf',{exact:true}).waitFor();
  await page.getByRole('combobox',{name:'Answer model'}).selectOption('openai');
  await page.getByRole('button',{name:'Have the team check this'}).click();
  await page.getByText('Correction from review',{exact:true}).waitFor();
  const review=requests[1];assert.equal(review.mode,'council');assert.equal(review.question,requests[0].question);assert.equal(review.reviewAnswer,'Original marker answer');assert.equal(review.context,'Original reference context');assert.deepEqual(review.history,[],'Original answer must not enter independent drafting through history');
+ assert.deepEqual(review.image,requests[0].image);assert.deepEqual(review.pdf,requests[0].pdf);
  assert.equal(await page.getByRole('textbox',{name:'Your question'}).inputValue(),'Keep this unsent follow-up');
  await page.getByText('Original answer before team review',{exact:true}).click();
  assert.ok((await page.locator('.original-answer').innerText()).includes('Original marker answer'));
@@ -58,6 +70,8 @@ try {
  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions'))[0].turns);
  assert.equal(saved.filter(t=>t.mode==='single'&&!t.result.demo).length,2);
  assert.equal(saved.find(t=>t.result.reviewedAnswer)?.result.reviewedAnswer,'Original marker answer');
+ const checked=saved.find(t=>t.result.reviewedAnswer);assert.equal(checked.imageName,'original.png');assert.equal(checked.pdfName,'original.pdf');
+ assert.ok(!JSON.stringify(saved).includes(originalImage.toString('base64')));assert.ok(!JSON.stringify(saved).includes(Buffer.from(samplePdf).toString('base64')));
  assert.deepEqual(errors,[]);
  console.log('Single-answer browser checks passed: demo, context isolation, retained original, unsent draft, cancellation, reload, key privacy, desktop/mobile.');
 } finally {await browser.close();}

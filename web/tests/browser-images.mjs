@@ -8,7 +8,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
-  const png = await page.locator('.models-grid').screenshot();
+  const png = await page.getByRole('heading', { name: 'One question. Three perspectives.' }).screenshot();
   const file = { name: 'team-screenshot.png', mimeType: 'image/png', buffer: png };
   await page.getByLabel('Choose image').setInputFiles(file);
   await page.getByAltText('Attached image preview').waitFor();
@@ -41,7 +41,7 @@ try {
   await page.getByRole('button', { name: 'Remove image', exact: true }).click();
   await ask('Summarize without the image');
   await page.getByRole('combobox', { name: 'Answer mode', exact: true }).selectOption('compare');
-  await page.getByText('Up to 3 calls + retries', { exact: false }).waitFor();
+  await page.getByText('Up to 3 calls + retries', { exact: true }).waitFor();
   await page.getByLabel('Choose image').setInputFiles(file);
   await page.getByAltText('Attached image preview').waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
