@@ -44,6 +44,7 @@ try {
   const saved = await page.evaluate(() => localStorage.getItem('trio-sessions'));
   assert.equal(JSON.parse(saved).length, 2); assert.deepEqual(JSON.parse(saved)[0], original); assert.ok(!saved.includes('injected-import-key'));
   await page.locator('.session-list').getByRole('button', { name: 'Imported researched question', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard and switch', exact: true }).click();
   await page.getByText('Imported answer with complete context', { exact: true }).waitFor();
   await page.locator('.research-panel summary').click(); await page.getByRole('link', { name: 'Imported source', exact: false }).waitFor();
   await open(); await upload(mixed); await page.getByText('0 new · 1 already present', { exact: true }).waitFor();
