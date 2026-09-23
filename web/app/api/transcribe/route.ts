@@ -3,6 +3,8 @@ import { accountReply as reply } from '@/lib/account-api';
 import { JsonBodyError, readJsonBody } from '@/lib/request-json';
 import { transcriptionSchema } from '@/lib/audio';
 import { transcribeAudio } from '@/lib/transcribe';
+import { env } from 'cloudflare:workers';
+import { CredentialError, resolveCredential } from '@/lib/credential-store';
 
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
@@ -12,6 +14,8 @@ export async function POST(request: Request) {
   try { input = transcriptionSchema.safeParse(await readJsonBody(request, 6_000_000)); }
   catch (error) { return reply({ error: error instanceof JsonBodyError ? error.message : 'Could not read the recording.' }, error instanceof JsonBodyError ? error.status : 400); }
   if (!input.success) return reply({ error: 'Choose a supported recording under 4 MB and add your OpenAI API key.' }, 400);
+  try { input.data.key = await resolveCredential(env.DB, env.TRIO_CREDENTIAL_KEY, request, user.userId, 'openai', input.data.key); }
+  catch (error) { return reply({ error: error instanceof CredentialError ? error.message : 'Saved key unavailable.' }, error instanceof CredentialError ? error.status : 503); }
   try { return reply({ transcript: await transcribeAudio(input.data, request.signal) }); }
   catch (error) { return reply({ error: error instanceof Error ? error.message : 'Transcription failed. Try again.' }, 502); }
 }

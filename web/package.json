@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.ts",
-    "test:worker": "node tests/worker-provider-transport.mjs",
+    "test:worker": "node tests/worker-provider-transport.mjs && node tests/worker-saved-credentials.mjs",
     "eval:quality": "node scripts/evaluate-quality.mjs",
     "typecheck": "tsc --noEmit",
     "install:ci": "node scripts/install-ci.mjs",

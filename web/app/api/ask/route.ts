@@ -7,6 +7,9 @@ import { selectResearchProvider } from '@/lib/research';
 import { instructionsSchema } from '@/lib/instructions';
 import { timeZoneSchema } from '@/lib/current-time';
 import { env } from 'cloudflare:workers';
+import { CredentialError, resolveCredential } from '@/lib/credential-store';
+import { savedKeyReference } from '@/lib/saved-connections';
+import { providers } from '@/lib/trio';
 import { readMemory } from '@/lib/memory-store';
 import { imageSchema } from '@/lib/images';
 import { pdfSchema, attachmentBytes, maxAttachmentBytes } from '@/lib/pdf';
@@ -18,7 +21,7 @@ export async function POST(request: Request) {
   if (!user) return reply({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, 401);
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
-  // Keys remain request-scoped. Reject bad uploads before checking memory or calling providers.
+  // Reject bad uploads before resolving credentials or calling providers.
   let body;
   try { body = await readJsonBody(request, 8_000_000); }
   catch (error) { return reply({ error: error instanceof JsonBodyError ? error.message : 'Could not read the request.' }, error instanceof JsonBodyError ? error.status : 400); }
@@ -28,6 +31,12 @@ export async function POST(request: Request) {
   if (parsed.data.mode === 'single' && !(parsed.data.connections[parsed.data.lead].enabled && parsed.data.connections[parsed.data.lead].key.trim())) return reply({ error: 'Connect the selected answer model or choose another model.' }, 400);
   if (parsed.data.reviewAnswer && (parsed.data.mode !== 'council' || Object.values(parsed.data.connections).filter(c => c.enabled && c.key.trim()).length < 2)) return reply({ error: 'Team review requires Council and at least two connected models.' }, 400);
   if (parsed.data.webResearch) { try { selectResearchProvider(parsed.data.connections, parsed.data.researchProvider); } catch (error) { return reply({ error: error instanceof Error ? error.message : 'Connect a research provider.' }, 400); } }
+  try {
+    for (const provider of providers) {
+      const connection = parsed.data.connections[provider.id];
+      if (connection.key === savedKeyReference) connection.key = connection.enabled ? await resolveCredential(env.DB, env.TRIO_CREDENTIAL_KEY, request, user.userId, provider.id, connection.key) : '';
+    }
+  } catch (error) { return reply({ error: error instanceof CredentialError ? error.message : 'Saved keys could not be loaded.' }, error instanceof CredentialError ? error.status : 503); }
   let memory: string | undefined;
   if (parsed.data.personalize) {
     if (request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Your account changed. Reload before starting a personalized answer.' }, 401);

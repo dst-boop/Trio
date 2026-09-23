@@ -7,6 +7,7 @@ export const connectionCheckSchema = z.object({
 }).strict();
 
 export const connectionMessages = {
+  saved: 'Saved key unavailable or your account changed. Reload saved connections or sign in again.',
   checked: 'Access checked. The provider accepted your key and returned model details.',
   invalid: 'Enter an API key and a valid model ID, then check again.',
   signin: 'Sign in again before checking access.',

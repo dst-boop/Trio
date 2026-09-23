@@ -42,7 +42,7 @@ try {
   await page.getByRole('button',{name:'Done',exact:true}).click();release();release=undefined;
   await page.getByRole('button',{name:'Connections',exact:true}).click();assert.equal(await first.getByText('Access checked',{exact:true}).count(),0);
   await first.getByRole('button',{name:'Check access',exact:true}).click();while(!release)await new Promise(r=>setTimeout(r,10));
-  await page.getByRole('button',{name:'Clear keys',exact:true}).click();release();release=undefined;
+  await page.getByRole('button',{name:'Clear keys from this tab',exact:true}).click();release();release=undefined;
   await first.getByText('No key added',{exact:true}).waitFor();assert.equal(await first.getByLabel('API key',{exact:true}).inputValue(),'');assert.equal(await second.getByLabel('API key',{exact:true}).inputValue(),'');
   assert.ok(!(await page.evaluate(()=>JSON.stringify({local:localStorage,session:sessionStorage}))).includes('private-test'));
   await page.setViewportSize({width:390,height:844});
