@@ -10,7 +10,9 @@ Default: preview only; no API requests and no report file.
   --run                    Explicitly make billed provider API calls
   --providers LIST         openai,claude,gemini (default: all three)
   --mode MODE              fast, council (default), or deep
-  --cases LIST             Comma-separated IDs from the preview
+  --suite NAME             core (default), representative (25 new cases), or all
+  --baseline PROVIDER      Fixed comparison baseline, chosen before any calls
+  --cases LIST             Specific case IDs; overrides suite selection
   --max-calls N            Maximum HTTP attempts, including retries (1–500; default 60)
   --timeout-seconds N      Overall deadline (1–3600; default 900)
   --output PATH            New JSON report file (never overwrites an existing file)
