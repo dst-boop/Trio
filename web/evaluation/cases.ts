@@ -1,5 +1,5 @@
 export type QualityCase = { id: string; category: string; question: string; context?: string; expected: string | number };
-const format = ' Return only a JSON object with one field named answer. Use a JSON number for a numerical answer and a JSON string for a label. Do not include an explanation.';
+export const format = ' Return only a JSON object with one field named answer. Use a JSON number for a numerical answer and a JSON string for a label. Do not include an explanation.';
 
 /** Synthetic, public fixtures with local ground truth; never private user conversations. */
 export const qualityCases: QualityCase[] = [

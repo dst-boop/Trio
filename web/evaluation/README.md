@@ -6,6 +6,15 @@ The cases check unit arithmetic, a false numerical premise, acknowledging missin
 
 ## Preview without charges
 
+The default stays the original six-case **core** suite and the 60-attempt cap. `--suite representative` selects 25 additional self-contained planning/arithmetic, uncertainty, reference-handling, and misleading-premise cases; `--suite all` selects all 31. `--cases` overrides suite selection. None of their answers depends on current rates or regulations. Conjunction, survivorship, and sunk-cost fixtures make their assumptions explicit so an ambiguous premise is not scored as a model error.
+
+```sh
+pnpm eval:quality --suite all --baseline openai
+pnpm eval:quality --suite representative --cases basis-points,weighted-return
+```
+
+`--baseline` fixes the comparison provider before any calls; it must be in `--providers`. The default is Claude when selected, otherwise the first selected provider. All selected providers still produce independent baseline samples. The team synthesizer selection is unchanged. The 31-case Council plan normally requires 310 attempts, so the unchanged 60-attempt cap intentionally cannot finish it. Review the preview and explicitly choose a suitable bound before adding `--run`; attempt limits are not dollar caps.
+
 Run from `web/` with Node 24:
 
 ```sh
@@ -32,6 +41,22 @@ The first example checks a single provider with one independent answer followed 
 The orchestrator's existing retries and synthesis failover share the same call budget. There are no additional case-level retries. Ctrl+C requests cancellation and a partial report. A deadline or exhausted budget leaves unattempted results explicitly `not_run`. A transport failure or single-model fallback is marked degraded even when its answer happens to be correct.
 
 ## Reports and interpretation
+
+V2 reports add the fixed baseline identity, per-phase elapsed milliseconds, and `baselineRun.providerElapsedMs` for each completed independent answer. Individual baseline cost is in `baselineRun.usage.byProvider`. Baselines run concurrently: the entire baseline phase's latency and total cost must not be presented as the latency/cost of one model. A failed or interrupted baseline has no completed-provider timing; a phase never attempted has null elapsed time.
+
+The `comparison` section counts paired correct-to-incorrect and incorrect-to-correct outcomes against the fixed baseline, overall and by category. A separate majority count identifies incorrect team outputs when more than half the independently sampled baselines were correct. Format errors, incomplete/degraded phases, and missing outputs are excluded from these correctness comparisons and remain visible in the original verdicts. They are not silently treated as factual errors. These are separate samples: differences do not prove the review stage caused a correction or mistake. Repeat the same cases, providers, evidence, modes and limits across trials before interpreting patterns. Results from questions used to tune prompts should be separated from later evaluation questions.
+
+### Offline blind review export
+
+After an opt-in run with `--include-answers`, export its V2 report without making further API calls:
+
+```sh
+node scripts/blind-quality-report.mjs test-output/quality-report.json test-output/blind-review.json
+```
+
+This creates two **new** files: `blind-review.json`, with answer labels randomized within each case, and `blind-review.json.key.json`, containing the arm identities and expected answers. Keep the key away from the reviewer until grading is complete. Provider names and configured model IDs are replaced in answer text, but style and remaining content can still reveal identity. Cases with fewer than two answers are omitted; the original report remains authoritative for missing outputs and failure rates. Existing files are never overwritten. Failed export can leave reserved empty files.
+
+Exact-JSON answers support correctness comparisons; they cannot establish open-ended usefulness. For a separate human usefulness pass, use realistic open-ended questions, give each arm the same source material and constraints, hide arm identities, and rate decision-readiness, honest uncertainty, and useful information without padding (0–2 each). Record a short reason and a preferred answer or “none.” Human ratings are never inferred from model agreement or exact-answer pass rates. No live quality findings are claimed by this implementation.
 
 Reports default to the Git-ignored `test-output/quality-<timestamp>-<id>.json`. `--output PATH` selects a different **new** file. The file is reserved before any billed requests; an existing/unwritable path fails before networking. Abrupt process termination can leave the reserved file empty, which is not a completed report.
 
