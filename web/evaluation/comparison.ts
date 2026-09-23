@@ -8,7 +8,8 @@ const empty = () => ({ eligible: 0, introducedErrors: 0, correctedErrors: 0, unc
 /** Paired outcomes of separate samples, not causal evidence of review quality. */
 export function compareOutcomes(rows: Row[], baselineProvider: ProviderId, selected: ProviderId[]) {
  const overall=empty(), byCategory:Record<string,ReturnType<typeof empty>>={};
- const majority={eligible:0,introducedErrors:0,excluded:0};
+ const emptyMajority=()=>({eligible:0,introducedErrors:0,excluded:0});
+ const majority={...emptyMajority(),byCategory:{} as Record<string,ReturnType<typeof emptyMajority>>};
  for(const row of rows) {
   const category=byCategory[row.category]??=empty();
   const baseline=row.baseline[baselineProvider];
@@ -21,9 +22,12 @@ export function compareOutcomes(rows: Row[], baselineProvider: ProviderId, selec
    else if(row.team.status==='pass')totals.unchangedCorrect++;
    else totals.unchangedIncorrect++;
   }
-  if(selected.length<2||row.baselineRun.degraded||row.teamRun.degraded||!scored(row.team)||selected.some(p=>!scored(row.baseline[p]))) {majority.excluded++;continue;}
-  majority.eligible++;
-  if(row.team.status==='incorrect'&&selected.filter(p=>row.baseline[p]?.status==='pass').length>selected.length/2)majority.introducedErrors++;
+  const majorityCategory=majority.byCategory[row.category]??=emptyMajority();
+  for(const totals of [majority,majorityCategory]) {
+   if(selected.length<2||row.baselineRun.degraded||row.teamRun.degraded||!scored(row.team)||selected.some(p=>!scored(row.baseline[p]))) {totals.excluded++;continue;}
+   totals.eligible++;
+   if(row.team.status==='incorrect'&&selected.filter(p=>row.baseline[p]?.status==='pass').length>selected.length/2)totals.introducedErrors++;
+  }
  }
  return {baselineProvider,overall,byCategory,majority};
 }

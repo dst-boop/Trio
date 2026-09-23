@@ -36,6 +36,7 @@ test('paired changes distinguish correctness from formatting and transport, with
  const pass={status:'pass' as const},wrong={status:'incorrect' as const};
  const rows=[{category:'math',baseline:{openai:pass,claude:pass,gemini:wrong},team:wrong,baselineRun:{degraded:false},teamRun:{degraded:false}},{category:'math',baseline:{openai:wrong,claude:wrong,gemini:pass},team:pass,baselineRun:{degraded:false},teamRun:{degraded:false}},{category:'format',baseline:{openai:pass,claude:pass,gemini:pass},team:{status:'format_error' as const},baselineRun:{degraded:false},teamRun:{degraded:false}},{category:'outage',baseline:{openai:pass,claude:pass,gemini:pass},team:wrong,baselineRun:{degraded:false},teamRun:{degraded:true}}];
  const r=compareOutcomes(rows,'openai',['openai','claude','gemini']);assert.equal(r.overall.eligible,2);assert.equal(r.overall.introducedErrors,1);assert.equal(r.overall.correctedErrors,1);assert.equal(r.overall.excluded,2);assert.equal(r.majority.introducedErrors,1);assert.equal(r.byCategory.math.eligible,2);
+ assert.deepEqual(r.majority.byCategory.math,{eligible:2,introducedErrors:1,excluded:0});assert.equal(r.majority.byCategory.outage.excluded,1);
 });
 test('the real evaluator records separate baseline-provider timing and exports anonymous answers with a private key',async()=>{
  const c=freshConnections();Object.values(c).forEach(x=>x.key='synthetic-private-key');

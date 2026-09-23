@@ -1,5 +1,5 @@
 import { orchestrate } from '../lib/orchestrate.ts';
-import { providers, type Connections, type Mode, type ProviderId, type Result, type Usage } from '../lib/trio.ts';
+import { providers, type Connections, type ProviderId, type Result, type Usage } from '../lib/trio.ts';
 import { qualityCases, scoreAnswer, type QualityCase, type Verdict } from './cases.ts';
 import { compareOutcomes } from './comparison.ts';
 
