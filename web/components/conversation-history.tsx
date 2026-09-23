@@ -14,7 +14,7 @@ import { UsageSummary } from '@/components/usage-summary';
 import { providers, type Result } from '@/lib/trio';
 import type { Turn } from '@/lib/sessions';
 
-const modeNames = { council: 'Council', deep: 'Deep Council', fast: 'Quick synthesis', compare: 'Compare' };
+const modeNames = { single: 'Single answer', council: 'Council', deep: 'Deep Council', fast: 'Quick synthesis', compare: 'Compare' };
 
 function Contributions({ result, bucket }: { result: Result; bucket: 'drafts' | 'reviews' | 'revisions' }) {
   const answers = result[bucket] ?? {};
@@ -37,6 +37,7 @@ function PastTurn({ turn, onBranch, onFeedback, account, busy }: { turn: Turn; o
     {turn.imageName && <p className="revision-note">Image used: {turn.imageName}. Reattach it to revisit visual details; image data is not saved.</p>}
     {turn.pdfName && <p className="revision-note">PDF used: {turn.pdfName}. Reattach it to revisit document details; PDF data is not saved.</p>}
     {result.fallback && <p className="revision-note">Single-model fallback · Synthesis did not complete.</p>}
+    {result.reviewedAnswer && <details className="original-answer"><summary>Original answer before team review</summary><Answer text={result.reviewedAnswer} /></details>}
     <RunCoverage result={result} mode={turn.mode} />
     <Tabs defaultValue={turn.mode === 'compare' ? 'drafts' : 'answer'}>
       <TabsList className="result-tabs history-tabs" aria-label="Earlier question contributions">

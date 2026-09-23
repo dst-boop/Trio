@@ -17,7 +17,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.getByRole('link', { name: 'Sign in with ChatGPT' }).click(); await page.getByText('Saved to your account', { exact: true }).waitFor();
   const snapshot = await (await page.request.get(baseUrl + '/api/workspace')).json();
-  await context.setExtraHTTPHeaders({ 'X-Trio-Account': snapshot.accountId, 'X-Trio-Workspace-Version': '4' });
+  await context.setExtraHTTPHeaders({ 'X-Trio-Account': snapshot.accountId, 'X-Trio-Workspace-Version': '5' });
   assert.equal((await page.request.put(baseUrl + '/api/workspace', { headers: { origin: baseUrl, 'X-Trio-Account': 'different-account' }, data: { revision: snapshot.revision, sessions: [] } })).status(), 401);
   const fixture = { id: 'legacy-private', title: 'My existing project', time: '', turns: [{ question: 'Private legacy question', mode: 'fast', result: { answer: 'Private legacy answer', drafts: {}, reviews: {}, errors: [], seconds: 1, demo: false } }] };
   const cleared = await page.request.put(baseUrl + '/api/workspace', { headers: { origin: baseUrl }, data: { revision: snapshot.revision, sessions: [] } }); assert.equal(cleared.status(), 200);

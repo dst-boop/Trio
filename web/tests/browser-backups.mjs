@@ -21,7 +21,7 @@ try {
   const downloadEvent = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download backup', exact: true }).click();
   const download = await downloadEvent; let json = ''; for await (const chunk of await download.createReadStream()) json += chunk;
   assert.ok(!json.includes('fake-backup-key')); const backup = JSON.parse(json);
-  assert.equal(backup.sessions.length, 1); assert.equal(backup.version, 4);
+  assert.equal(backup.sessions.length, 1); assert.equal(backup.version, 5);
   const original = backup.sessions[0];
   await upload(backup); await page.getByText('0 new · 1 already present', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Import 0 sessions', exact: true }).isDisabled(), true);
@@ -44,6 +44,7 @@ try {
   const saved = await page.evaluate(() => localStorage.getItem('trio-sessions'));
   assert.equal(JSON.parse(saved).length, 2); assert.deepEqual(JSON.parse(saved)[0], original); assert.ok(!saved.includes('injected-import-key'));
   await page.locator('.session-list').getByRole('button', { name: 'Imported researched question', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard and switch', exact: true }).click();
   await page.getByText('Imported answer with complete context', { exact: true }).waitFor();
   await page.locator('.research-panel summary').click(); await page.getByRole('link', { name: 'Imported source', exact: false }).waitFor();
   await open(); await upload(mixed); await page.getByText('0 new · 1 already present', { exact: true }).waitFor();
