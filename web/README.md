@@ -2,6 +2,16 @@
 
 A multi-user online workspace for OpenAI, Claude, and Gemini. Ask once, get independent perspectives, review disagreements, and combine the strongest ideas.
 
+## Guided work and recorded results
+
+**Put Trio to work** prepares an editable brief for a client meeting, a workday, or a growth experiment. Existing question text is preserved in the brief's notes; oversized notes block preparation instead of truncating them. Applying a brief explicitly switches to Live mode without making a model call. Current attachments, instructions, and answer-mode selection remain in place. Review the question and choose Ask Trio to submit it.
+
+After a completed live answer, **Record result** captures used / used with edits / not used, optional signed minutes saved, and a note. Negative minutes mean extra time spent; blank means unknown. For an explicit team review, the user can confirm or reject a proposed material correction. This is a user assessment, never an automatic error-detection claim. Editing a record preserves its original recording date.
+
+An optional **action plan** keeps up to 20 concrete actions and planning dates with the answer. The user marks each action complete. Recording that a draft was used does not execute, complete, or hide its remaining actions. Dates do not schedule reminders. **Your work** shows open actions, recorded outcomes, and results from the last seven days by mode. Its totals are self-reported observations, not measured productivity or accuracy. Unreported time is excluded; extra time is retained.
+
+Plans and results use the existing private account history, conflict handling, optional device history, V6 portable backups, and Markdown export. Older backups remain readable, and stale clients cannot overwrite V6 account records. Branching a discussion leaves real-world action plans and receipts with the original to avoid counting them twice. No external email, calendar, CRM, or background job is executed by these features.
+
 ## Accounts and online history
 
 Trio is **invite-only**. Keep the Sites audience `custom`, preserving its invitation allowlist, until the owner explicitly asks to open registration. The Sites edge checks access before serving the site, including the welcome page at / and /demo. Invitees sign in with the account matching their invited email; /workspace additionally requires **Sign in with ChatGPT**. Sites handles identity and sign-out, and injects verified identity headers at its edge. Deploy this app behind that trusted edge, not a server that accepts arbitrary identity headers from clients. The local Vite plugin strips those headers and supplies a localhost-only test identity after its mock sign-in. No app passwords are collected.

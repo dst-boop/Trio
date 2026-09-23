@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { serializeSessions, type Session } from '@/lib/sessions';
 import { workspaceSchema } from '@/lib/account-store';
+import { workspaceVersion } from '@/lib/workspace-version';
 import { z } from 'zod';
 const responseError = (data: unknown, fallback: string) => z.object({ error: z.string() }).safeParse(data).data?.error ?? fallback;
 type SaveAttempt = { requestId: string; snapshot: string; revision: number };
@@ -24,7 +25,7 @@ export function useAccountWorkspace(accountId: string | undefined, sessions: Ses
         // Keep the exact attempt until acknowledged, even if the user edits
         // again after a response was lost. Then save the latest pending state.
         const attempt = s.attempt ??= { requestId: crypto.randomUUID(), snapshot: s.pending, revision: s.revision };
-        const response = await fetch('/api/workspace', { method: 'PUT', signal: AbortSignal.timeout(30_000), headers: { 'Content-Type': 'application/json', 'X-Trio-Account': accountId!, 'X-Trio-Workspace-Version': '5' }, body: JSON.stringify({ requestId: attempt.requestId, revision: attempt.revision, sessions: JSON.parse(attempt.snapshot) }) });
+        const response = await fetch('/api/workspace', { method: 'PUT', signal: AbortSignal.timeout(30_000), headers: { 'Content-Type': 'application/json', 'X-Trio-Account': accountId!, 'X-Trio-Workspace-Version': String(workspaceVersion) }, body: JSON.stringify({ requestId: attempt.requestId, revision: attempt.revision, sessions: JSON.parse(attempt.snapshot) }) });
         const data = await response.json();
         if (!response.ok) { setConflict(response.status === 409); throw new Error(responseError(data, 'Could not save. Download a backup before closing this tab.')); }
         const revision = z.object({ revision: z.literal(attempt.revision + 1) }).parse(data).revision;

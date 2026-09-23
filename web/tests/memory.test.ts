@@ -33,7 +33,7 @@ test('every stage receives approved memory as user context with evidence safegua
     const result=await orchestrate({question:'What should I do?',memory:'Prefers short examples',connections,mode,lead:'claude'},()=>{},new AbortController().signal,fetcher);
     assert.equal(result.memory,'Prefers short examples'); const record={...session,turns:[{...session.turns[0],result}]};
     assert.deepEqual(parseSessions(serializeSessions([record])), [record]);
-    const backup=exportBackup([record]); assert.equal(JSON.parse(backup).version,5); assert.deepEqual(parseBackup(backup),[record]); assert.match(sessionMarkdown(record.turns),/Personal memory used\n\nPrefers short examples/);
+    const backup=exportBackup([record]); assert.equal(JSON.parse(backup).version,6); assert.deepEqual(parseBackup(backup),[record]); assert.match(sessionMarkdown(record.turns),/Personal memory used\n\nPrefers short examples/);
     assert.ok(!JSON.stringify(conversationHistory(record.turns)).includes('Prefers short examples'),'Old memory must not re-enter later conversations as current preferences');
     const old={...JSON.parse(backup),version:2}; delete old.sessions[0].turns[0].result.memory; assert.equal(parseBackup(JSON.stringify(old))[0].turns[0].result.memory,undefined);
   }

@@ -30,7 +30,7 @@ try{
   const sample={...source,id:'samples',turns:source.turns.map(t=>({...t,result:{...t.result,demo:true}}))};await page.evaluate(sample=>{localStorage.setItem('trio-sessions',JSON.stringify([sample]));localStorage.setItem('trio-active-session',sample.id);},sample);await page.reload({waitUntil:'networkidle'});assert.equal(await page.locator('.branch-latest').count(),0);await page.locator('.previous-turns > summary').click();await page.getByRole('button',{name:/Question 1 Original first question/}).click();assert.equal(await page.locator('.branch-turn').count(),0,'Prepared demo answers cannot branch into live context');
   // Exercise the same copy against the actual local authenticated D1 history.
   const snapshot=await(await page.request.get(base+'/api/workspace')).json();
-  const headers={Origin:base,'X-Trio-Account':snapshot.accountId,'X-Trio-Workspace-Version':'5'};
+  const headers={Origin:base,'X-Trio-Account':snapshot.accountId,'X-Trio-Workspace-Version':'6'};
   assert.equal((await page.request.put(base+'/api/workspace',{headers,data:{revision:snapshot.revision,sessions:[source]}})).status(),200);
   try{
     await page.goto(base+'/workspace',{waitUntil:'networkidle'});await page.locator('.session-open').filter({hasText:'Original discussion'}).click();await page.locator('.branch-latest').click();await page.getByLabel('New conversation name',{exact:true}).fill('Account alternative');

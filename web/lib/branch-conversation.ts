@@ -9,7 +9,10 @@ export function branchConversation(sessions: Session[], sourceId: string, turnIn
   if (sessions.length >= 30) throw new Error('Your workspace has 30 conversations. Export and remove one before creating another.');
   if (!title.trim() || title.trim().length > maxSessionTitle) throw new Error(`Use a conversation name between 1 and ${maxSessionTitle} characters.`);
   if (sessions.some(s => s.id === id)) throw new Error('Could not create a separate conversation. Try again.');
-  const session = sessionSchema.parse({ id, title: title.trim(), time, instructions: source.turns[turnIndex].instructions ?? '', turns: source.turns.slice(0, turnIndex + 1) });
+  // A new line of discussion must not duplicate real-world tasks or count an
+  // already recorded outcome twice. The original retains its action plans.
+  const turns = source.turns.slice(0, turnIndex + 1).map(({ work, ...turn }) => turn);
+  const session = sessionSchema.parse({ id, title: title.trim(), time, instructions: source.turns[turnIndex].instructions ?? '', turns });
   const next = [session, ...sessions];
   try { serializeSessions(next); } catch { throw new Error('This copy would exceed your workspace storage limit. Export and remove older conversations first.'); }
   return { session, sessions: next };

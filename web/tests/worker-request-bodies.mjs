@@ -29,7 +29,7 @@ const expectError = async (response, status, message) => {
   // A complete, valid body reaches input validation, but disabled providers guarantee no paid API calls.
   const connection = { key: '', model: 'model', enabled: false };
   await expectError(await client.post(base + '/api/ask', { headers, data: { question: 'No provider should run 🌍', mode: 'fast', lead: 'claude', connections: { openai: connection, claude: connection, gemini: connection } } }), 400, 'Connect at least one model.');
-  const accountHeaders = { ...headers, 'X-Trio-Account': snapshot.accountId, 'X-Trio-Workspace-Version': '5' };
+  const accountHeaders = { ...headers, 'X-Trio-Account': snapshot.accountId, 'X-Trio-Workspace-Version': '6' };
   const put = (data, extra = {}) => client.put(base + '/api/workspace', { headers: { ...accountHeaders, ...extra }, data });
   await expectError(await put(invalidUtf8), 400, 'Could not read valid JSON.');
   await expectError(await put(' '.repeat(20_000_001)), 413, 'Workspace is too large. Export a backup and remove older sessions.');
