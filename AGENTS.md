@@ -84,6 +84,20 @@ async generator of plain dict events that drives all three frontends.
   resolve secrets server-side and send each only to its own vendor. Provide
   replacement/deletion, stale-write protection, and temporary unsaved overrides.
   Keep demo answers out of live conversation context.
+- **Trio drafts; the user executes.** The product prepares deliverables,
+  plans, and next actions; export/copy is the handoff. Completion and
+  outcomes are recorded by the user and labeled as user-reported — never
+  inferred from generated text, model agreement, or votes, and never
+  presented as measured productivity or accuracy. Do not claim to send
+  messages, change calendars or records, or schedule reminders where no
+  integration performs and verifies that action.
+- Any future connector that acts outside Trio (mail, calendar, CRM, files)
+  must use least-privilege authorization, require explicit user approval
+  for each externally consequential action, be idempotent under retries,
+  and record a receipt of what was done. Permission to connect is distinct
+  from permission to execute: persistent OAuth connections are acceptable;
+  standing execute-without-approval authority is not. This governs external
+  effects only — it adds no approval gates for reversible edits inside Trio.
 - `web/.openai/hosting.json` identifies the deployed private Site. Reuse
   its identity, preserve its audience, and publish through the Sites
   workflow after hosted app changes. Repository CI checks builds; it does
