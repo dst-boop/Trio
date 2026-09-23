@@ -76,8 +76,13 @@ async generator of plain dict events that drives all three frontends.
   consumer and tests when changing either contract.
 - Hosted demo mode uses explicitly labeled prepared examples and no API
   keys; it is separate from the Python `TRIO_MOCK=1` environment setting.
-- Never persist browser API keys in localStorage, sessionStorage, history,
-  logs, or source. Keys are request-scoped and go only to their own vendor.
+- Never persist plaintext API keys in localStorage, sessionStorage, history,
+  backups, exports, logs, or source. The owner explicitly requires remembered
+  keys: signed-in users may opt in to server-side account-scoped encrypted
+  storage, with the encryption master held separately as a Sites runtime secret.
+  Saved-key reads return metadata only; authenticated, account-pinned requests
+  resolve secrets server-side and send each only to its own vendor. Provide
+  replacement/deletion, stale-write protection, and temporary unsaved overrides.
   Keep demo answers out of live conversation context.
 - `web/.openai/hosting.json` identifies the deployed private Site. Reuse
   its identity, preserve its audience, and publish through the Sites
