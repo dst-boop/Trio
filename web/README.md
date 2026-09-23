@@ -46,6 +46,16 @@ Connections checks the provider's model metadata endpoint: [OpenAI Models](https
 
 ## Use the app
 
+### Single answers and optional team review
+
+Choose **Single answer** in **Answer mode** and choose its **Answer model**. With research off, a successful uninterrupted run uses one generation call and shows that draft directly; it does not run peer review or synthesis. Existing retry accounting remains visible. An unavailable selected model does not silently bill another provider. Council remains the default while comparative quality evaluation is pending.
+
+After a live single answer, **Have the team check this** starts a separate Council run with the original question, reference text, attachments, instructions, and pre-answer conversation context. It uses current connections and current account-memory settings. At least two models must be connected. Each participant drafts independently before the original answer is supplied as untrusted material for critique and synthesis. A three-provider review normally adds seven calls, plus optional research and retries. It does not promise a correction or greater accuracy.
+
+The original answer remains in history and appears beside the completed review in **Original answer before team review**. An unsent follow-up stays in the composer. Stopping or failing a review preserves the original and never saves partial contributions. The review action is available while the original request is still in this tab; refreshing, leaving the conversation, or clearing its attachments discards that request. Original image/PDF bytes and request snapshots are never saved. Run a new single answer to establish fresh review context after returning to a saved conversation.
+
+The main screen places the latest answer above the composer, uses compact mode/model selectors, and groups text, image, and PDF uploads under **Attach**. Portable exports now use format V5 and still read V1–V4; stale account clients must reload before writing V5 history.
+
 Sign in from the welcome page and open your workspace first.
 
 1. Open Connections and add API keys for the providers you want to use. Choose **Check access** to check each key and model before asking a question; one provider is enough to start.

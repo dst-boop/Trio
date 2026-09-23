@@ -10,7 +10,7 @@ export function RunCoverage({ result, mode }: { result: Result; mode: Mode }) {
 }
 
 export function RunPipeline({ result, mode, busy, stage }: { result: Result; mode: Mode; busy: boolean; stage: string }) {
-  const steps = runCoverage(result, mode).filter(s => s.phase === 'research' ? result.researchRequested : s.phase === 'review' ? mode === 'council' || mode === 'deep' : s.phase === 'revision' ? mode === 'deep' : s.phase === 'synthesis' ? mode !== 'compare' : true);
+  const steps = runCoverage(result, mode).filter(s => s.phase === 'research' ? result.researchRequested : s.phase === 'review' ? mode === 'council' || mode === 'deep' : s.phase === 'revision' ? mode === 'deep' : s.phase === 'synthesis' ? mode !== 'compare' && mode !== 'single' : true);
   return <div className="pipeline" aria-label="Run progress" aria-live="polite">{steps.map((step, i) => {
     // Partial streamed text must not earn a completion check after Stop or interruption.
     const state = busy ? step.phase === stage ? 'current' : 'pending' : stage === 'failed' ? 'interrupted' : step.state;

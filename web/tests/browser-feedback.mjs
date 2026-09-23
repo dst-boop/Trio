@@ -18,7 +18,7 @@ try {
     };
     try {
       if (account) {
-        snapshot = await (await page.request.get(base + '/api/workspace')).json(); headers = { Origin: base, 'X-Trio-Account': snapshot.accountId, 'X-Trio-Workspace-Version': '4' };
+        snapshot = await (await page.request.get(base + '/api/workspace')).json(); headers = { Origin: base, 'X-Trio-Account': snapshot.accountId, 'X-Trio-Workspace-Version': '5' };
         assert.equal((await page.request.put(base + '/api/workspace', { headers, data: { revision: snapshot.revision, sessions: [fixture] } })).status(), 200);
         // Stale clients must not silently strip feedback or overwrite newer history.
         assert.equal((await page.request.put(base + '/api/workspace', { headers: { ...headers, 'X-Trio-Workspace-Version': '3' }, data: { revision: snapshot.revision + 1, sessions: [] } })).status(), 409);

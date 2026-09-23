@@ -21,7 +21,7 @@ try {
   const downloadEvent = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download backup', exact: true }).click();
   const download = await downloadEvent; let json = ''; for await (const chunk of await download.createReadStream()) json += chunk;
   assert.ok(!json.includes('fake-backup-key')); const backup = JSON.parse(json);
-  assert.equal(backup.sessions.length, 1); assert.equal(backup.version, 4);
+  assert.equal(backup.sessions.length, 1); assert.equal(backup.version, 5);
   const original = backup.sessions[0];
   await upload(backup); await page.getByText('0 new · 1 already present', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Import 0 sessions', exact: true }).isDisabled(), true);

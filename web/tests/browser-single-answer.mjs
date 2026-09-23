@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const base=process.env.TRIO_BASE_URL || 'http://localhost:5173';
+const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL || 'msedge'});
+const page=await browser.newPage({viewport:{width:1360,height:960}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await mkdir('test-output',{recursive:true});
+try {
+ await page.goto(`${base}/signin-with-chatgpt?return_to=%2Fdemo`,{waitUntil:'networkidle'});
+ assert.equal(await page.getByRole('combobox',{name:'Answer mode',exact:true}).inputValue(),'council','Existing default stays unchanged');
+ await page.getByRole('combobox',{name:'Answer mode',exact:true}).selectOption('single');
+ await page.getByRole('button',{name:'Run demo',exact:true}).click();
+ await page.getByRole('tab',{name:'Perspectives 1'}).waitFor();
+ await page.getByRole('button',{name:'Connections',exact:true}).click();
+ const keys=page.getByPlaceholder('Paste your API key');
+ for(let i=0;i<3;i++)await keys.nth(i).fill('fake-browser-key');
+ await page.getByRole('switch',{name:'Remember sessions on this device'}).click();
+ await page.getByRole('switch',{name:'Demo mode',exact:true}).click();
+ await page.getByRole('button',{name:'Done',exact:true}).click();
+ const requests=[];let hold=false,release;
+ await page.route('**/api/ask',async route=>{
+  const body=route.request().postDataJSON();requests.push(body);
+  if(hold)await new Promise(resolve=>{release=resolve;});
+  const result={drafts:body.mode==='single'?{[body.lead]:'Original marker answer'}:{openai:'Independent A',claude:'Independent B',gemini:'Independent C'},reviews:body.mode==='single'?{}:{openai:'Check',claude:'Check',gemini:'Check'},answer:body.mode==='single'?'Original marker answer':'Correction from review',by:body.lead,errors:[],seconds:1,demo:false,...(body.reviewAnswer?{reviewedAnswer:body.reviewAnswer}:{})};
+  try {await route.fulfill({status:200,contentType:'application/x-ndjson',body:JSON.stringify({type:'final',result})+'\n'});}catch{}
+ });
+ await page.getByLabel('Choose text context').setInputFiles({name:'reference.txt',mimeType:'text/plain',buffer:Buffer.from('Original reference context')});
+ await page.getByText('reference.txt',{exact:true}).waitFor();
+ await page.getByRole('textbox',{name:'Your question'}).fill('Is the original plan sound?');
+ await page.getByRole('button',{name:'Ask Trio',exact:true}).click();
+ await page.getByRole('button',{name:'Have the team check this'}).waitFor();
+ assert.equal(requests[0].mode,'single');assert.equal(requests[0].lead,'claude');assert.deepEqual(requests[0].history,[],'Demo stays out of live history');
+ await page.getByRole('textbox',{name:'Your question'}).fill('Keep this unsent follow-up');
+ await page.getByRole('combobox',{name:'Answer model'}).selectOption('openai');
+ await page.getByRole('button',{name:'Have the team check this'}).click();
+ await page.getByText('Correction from review',{exact:true}).waitFor();
+ const review=requests[1];assert.equal(review.mode,'council');assert.equal(review.question,requests[0].question);assert.equal(review.reviewAnswer,'Original marker answer');assert.equal(review.context,'Original reference context');assert.deepEqual(review.history,[],'Original answer must not enter independent drafting through history');
+ assert.equal(await page.getByRole('textbox',{name:'Your question'}).inputValue(),'Keep this unsent follow-up');
+ await page.getByText('Original answer before team review',{exact:true}).click();
+ assert.ok((await page.locator('.original-answer').innerText()).includes('Original marker answer'));
+ await page.screenshot({path:'test-output/fast-answer-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.screenshot({path:'test-output/fast-answer-mobile.png',fullPage:true});
+ // A later single answer can be checked; stopping that review never appends a partial result.
+ await page.getByRole('button',{name:'Ask Trio',exact:true}).click();
+ await page.getByRole('button',{name:'Have the team check this'}).waitFor();
+ const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions'))[0].turns.length);
+ hold=true;await page.getByRole('button',{name:'Have the team check this'}).click();
+ await page.getByRole('button',{name:'Stop',exact:true}).click();
+ release?.();
+ await page.getByText('Session stopped. Partial contributions are shown below.',{exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions'))[0].turns.length),before);
+ assert.ok(!(await page.evaluate(()=>JSON.stringify(localStorage))).includes('fake-browser-key'));
+ await page.reload({waitUntil:'networkidle'});
+ assert.equal(await page.getByRole('button',{name:'Have the team check this'}).count(),0,'Original request bytes are not retained across reload');
+ const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions'))[0].turns);
+ assert.equal(saved.filter(t=>t.mode==='single'&&!t.result.demo).length,2);
+ assert.equal(saved.find(t=>t.result.reviewedAnswer)?.result.reviewedAnswer,'Original marker answer');
+ assert.deepEqual(errors,[]);
+ console.log('Single-answer browser checks passed: demo, context isolation, retained original, unsent draft, cancellation, reload, key privacy, desktop/mobile.');
+} finally {await browser.close();}

@@ -12,7 +12,7 @@ try{
     const waitCloud=()=>account?page.waitForResponse(r=>r.url().endsWith('/api/workspace')&&r.request().method()==='PUT'):Promise.resolve(null);
     try{
       await page.goto(base+'/signin-with-chatgpt?return_to=%2Fdemo',{waitUntil:'networkidle'});
-      if(account){snapshot=await(await page.request.get(base+'/api/workspace')).json();headers={Origin:base,'X-Trio-Account':snapshot.accountId,'X-Trio-Workspace-Version':'4'};assert.equal((await page.request.put(base+'/api/workspace',{headers,data:{revision:snapshot.revision,sessions:fixtures}})).status(),200);await page.goto(base+'/workspace',{waitUntil:'networkidle'});}
+      if(account){snapshot=await(await page.request.get(base+'/api/workspace')).json();headers={Origin:base,'X-Trio-Account':snapshot.accountId,'X-Trio-Workspace-Version':'5'};assert.equal((await page.request.put(base+'/api/workspace',{headers,data:{revision:snapshot.revision,sessions:fixtures}})).status(),200);await page.goto(base+'/workspace',{waitUntil:'networkidle'});}
       else{await page.evaluate(sessions=>{localStorage.setItem('trio-remember','true');localStorage.setItem('trio-sessions',JSON.stringify(sessions));localStorage.setItem('trio-active-session','0');},fixtures);await page.reload({waitUntil:'networkidle'});}
       await page.getByText('Conversation limit reached',{exact:true}).waitFor();await page.getByRole('button',{name:/New session/}).click();assert.ok(await page.getByRole('button',{name:'Run demo',exact:true}).isDisabled());
       await page.getByRole('textbox',{name:'Your question',exact:true}).press('Control+Enter');assert.equal(await page.getByRole('button',{name:'Stop',exact:true}).count(),0);assert.deepEqual(await readSaved(),fixtures);

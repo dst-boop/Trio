@@ -31,9 +31,9 @@ test('invalid targets, demos, empty answers, oversized notes and full storage fa
   assert.throws(() => setAnswerFeedback([full], 'one', 0, { rating: 'helpful' })); assert.equal(full.turns[0].feedback, undefined);
 });
 
-test('V4 backups, history, Markdown and branches preserve feedback while stripping unknown metadata', () => {
+test('V5 backups, history, Markdown and branches preserve feedback while stripping unknown metadata', () => {
   const records = setAnswerFeedback([source], 'one', 0, { rating: 'needs-work', note: 'Explain uncertainty' });
-  const exported = exportBackup(records); assert.equal(JSON.parse(exported).version, 4);
+  const exported = exportBackup(records); assert.equal(JSON.parse(exported).version, 5);
   assert.deepEqual(parseBackup(exported), records); assert.deepEqual(parseSessions(serializeSessions(records)), records);
   assert.match(sessionMarkdown(records[0].turns), /Your feedback\n\nNeeds work\n\nExplain uncertainty/);
   assert.deepEqual(branchConversation(records, 'one', 0, 'Copy', 'copy').session.turns[0].feedback, records[0].turns[0].feedback);

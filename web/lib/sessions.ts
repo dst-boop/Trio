@@ -16,8 +16,8 @@ const nonnegative = z.number().finite().nonnegative();
 const usageCounts = { calls: nonnegative.int(), reportedCalls: nonnegative.int(), inputTokens: nonnegative.int(), outputTokens: nonnegative.int(), costUSD: nonnegative.nullable() };
 const providerUsage = z.object({ ...usageCounts, model: z.string().max(100) });
 const usage = z.object({ ...usageCounts, byProvider: z.object({ openai: providerUsage.optional(), claude: providerUsage.optional(), gemini: providerUsage.optional() }) });
-export const resultSchema = z.object({ memory: memoryNotesSchema.optional(), researchRequested: z.boolean().optional(), researchBy: z.enum(['openai', 'claude']).optional(), research: researchSchema.optional(), drafts: answers, reviews: answers, revisions: answers.optional(), answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: nonnegative, demo: z.boolean(), fallback: z.boolean().optional(), usage: usage.optional() });
-export const sessionSchema = z.object({ instructions: instructionsSchema.optional(), id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ feedback: answerFeedbackSchema.optional(), instructions: instructionsSchema.optional(), question: z.string().min(1).max(20000), mode: z.enum(['council', 'deep', 'fast', 'compare']), imageName: z.string().max(255).optional(), pdfName: z.string().max(255).optional(), result: resultSchema })).min(1) });
+export const resultSchema = z.object({ reviewedAnswer: z.string().max(120000).optional(), memory: memoryNotesSchema.optional(), researchRequested: z.boolean().optional(), researchBy: z.enum(['openai', 'claude']).optional(), research: researchSchema.optional(), drafts: answers, reviews: answers, revisions: answers.optional(), answer: z.string().max(120000), by: provider.optional(), errors: z.array(z.string().max(4000)).max(30), seconds: nonnegative, demo: z.boolean(), fallback: z.boolean().optional(), usage: usage.optional() });
+export const sessionSchema = z.object({ instructions: instructionsSchema.optional(), id: z.string().min(1).max(100), title: z.string().max(20000), time: z.string().max(100), turns: z.array(z.object({ feedback: answerFeedbackSchema.optional(), instructions: instructionsSchema.optional(), question: z.string().min(1).max(20000), mode: z.enum(['single', 'council', 'deep', 'fast', 'compare']), imageName: z.string().max(255).optional(), pdfName: z.string().max(255).optional(), result: resultSchema })).min(1) });
 const maxStoredCharacters = 5_000_000;
 
 /** Only write snapshots the reader can restore. Never truncate model contributions. */
@@ -111,6 +111,7 @@ export function sessionMarkdown(turns: Turn[]): string {
     t.feedback ? `## Your feedback\n\n${t.feedback.rating === 'helpful' ? 'Helpful' : 'Needs work'}${t.feedback.note ? '\n\n' + t.feedback.note : ''}` : '',
     t.result.usage ? `Reported usage: ${t.result.usage.inputTokens} input + ${t.result.usage.outputTokens} output tokens across ${t.result.usage.reportedCalls}/${t.result.usage.calls} calls. Standard-rate cost estimate: ${t.result.usage.costUSD === null ? 'unavailable' : '$' + t.result.usage.costUSD.toFixed(4)} (excludes discounts and taxes).` : '',
     t.result.fallback ? '> Synthesis failed. This is a single-model fallback answer.' : '',
+    t.result.reviewedAnswer ? `## Original answer before team review\n\n${t.result.reviewedAnswer}` : '',
     t.result.answer ? `## ${answerLabel(t.result)}\n\n${t.result.answer}` : '',
     ...providers.filter(p => t.result.drafts[p.id]).map(p => `## ${p.name} draft\n\n${t.result.drafts[p.id]}`),
     ...providers.filter(p => t.result.reviews[p.id]).map(p => `## ${p.name} review\n\n${t.result.reviews[p.id]}`),

@@ -12,7 +12,7 @@ import { imageSchema } from '@/lib/images';
 import { pdfSchema, attachmentBytes, maxAttachmentBytes } from '@/lib/pdf';
 
 const connection = z.object({ key: z.string().max(1024), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
-const schema = z.object({ timeZone: timeZoneSchema.optional(), personalize: z.boolean().optional(), instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), mode: z.enum(['council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
+const schema = z.object({ timeZone: timeZoneSchema.optional(), personalize: z.boolean().optional(), instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), reviewAnswer: z.string().trim().min(1).max(120000).optional(), mode: z.enum(['single', 'council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return reply({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, 401);
@@ -23,8 +23,10 @@ export async function POST(request: Request) {
   try { body = await readJsonBody(request, 8_000_000); }
   catch (error) { return reply({ error: error instanceof JsonBodyError ? error.message : 'Could not read the request.' }, error instanceof JsonBodyError ? error.status : 400); }
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return reply({ error: 'Check your time zone, prompt, session instructions (up to 6,000 characters), model IDs, context length, image format (PNG, JPEG, or WebP), and PDF format. Images and PDFs together must be under 4 MB.' }, 400);
+  if (!parsed.success) return reply({ error: 'Check your answer mode, time zone, prompt, session instructions (up to 6,000 characters), model IDs, context length, image format (PNG, JPEG, or WebP), and PDF format. Images and PDFs together must be under 4 MB.' }, 400);
   if (!Object.values(parsed.data.connections).some(c => c.enabled && c.key.trim())) return reply({ error: 'Connect at least one model.' }, 400);
+  if (parsed.data.mode === 'single' && !(parsed.data.connections[parsed.data.lead].enabled && parsed.data.connections[parsed.data.lead].key.trim())) return reply({ error: 'Connect the selected answer model or choose another model.' }, 400);
+  if (parsed.data.reviewAnswer && (parsed.data.mode !== 'council' || Object.values(parsed.data.connections).filter(c => c.enabled && c.key.trim()).length < 2)) return reply({ error: 'Team review requires Council and at least two connected models.' }, 400);
   if (parsed.data.webResearch) { try { selectResearchProvider(parsed.data.connections, parsed.data.researchProvider); } catch (error) { return reply({ error: error instanceof Error ? error.message : 'Connect a research provider.' }, 400); } }
   let memory: string | undefined;
   if (parsed.data.personalize) {
