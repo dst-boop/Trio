@@ -2,6 +2,7 @@ import { readJsonBody, JsonBodyError } from '@/lib/request-json';
 import { env } from 'cloudflare:workers';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { readWorkspace, writeWorkspace, workspaceWriteSchema } from '@/lib/account-store';
+import { workspaceVersion } from '@/lib/workspace-version';
 
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', 'X-Content-Type-Options': 'nosniff' } });
 export async function GET(request: Request) {
@@ -18,7 +19,7 @@ export async function PUT(request: Request) {
   if (!user) return reply({ error: 'Your sign-in expired. Export unsaved work, then sign in again.' }, 401);
   if (request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'The signed-in account changed. Download your unsaved work, then reload.' }, 401);
   if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
-  if (request.headers.get('x-trio-workspace-version') !== '5') return reply({ error: 'Trio has updated its saved history format. Download any unsaved work, then reload this page before saving.' }, 409);
+  if (request.headers.get('x-trio-workspace-version') !== String(workspaceVersion)) return reply({ error: 'Trio has updated its saved history format. Download any unsaved work, then reload this page before saving.' }, 409);
   let body;
   try { body = await readJsonBody(request, 20_000_000); }
   catch (error) {

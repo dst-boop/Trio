@@ -47,6 +47,6 @@ test('single answers and originals reviewed by the team survive history, backups
  const f=fixture();const single=await orchestrate(f.input,()=>{},new AbortController().signal,f.fetcher);
  const reviewed=await orchestrate({...f.input,mode:'council',reviewAnswer:single.answer},()=>{},new AbortController().signal,f.fetcher);
  const sessions:Session[]=[{id:'one',title:'Question',time:'2026-09-23T00:00:00Z',turns:[{question:f.input.question,mode:'single',result:single},{question:f.input.question,mode:'council',result:reviewed}]}];
- assert.deepEqual(parseSessions(serializeSessions(sessions)),sessions);assert.deepEqual(parseBackup(exportBackup(sessions)),sessions);assert.equal(JSON.parse(exportBackup(sessions)).version,5);
+ assert.deepEqual(parseSessions(serializeSessions(sessions)),sessions);assert.deepEqual(parseBackup(exportBackup(sessions)),sessions);assert.equal(JSON.parse(exportBackup(sessions)).version,6);
  assert.match(sessionMarkdown(sessions[0].turns),/Original answer before team review/);assert.match(sessionMarkdown(sessions[0].turns),/No synthesis call was made/);
 });
