@@ -45,7 +45,9 @@ try {
   await board.locator('details > summary').click();await save(()=>board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).check());
   assert.ok((await read()).sessions[0].turns[0].work.actions[0].completedAt);
   await board.getByLabel('Work filter',{exact:true}).selectOption('all');
-  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await board.evaluate(el=>el.scrollWidth>el.clientWidth),false);
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForFunction(()=>{const r=document.querySelector('.work-board')?.getBoundingClientRect();return r&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;},null,{timeout:4000});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await board.evaluate(el=>el.scrollWidth>el.clientWidth),false);
   await mkdir('test-output',{recursive:true});await page.screenshot({path:'test-output/work-ledger-mobile.png'});
   await board.getByRole('button',{name:'Close',exact:true}).click();
   await page.goto(base+'/signout-with-chatgpt?return_to=%2F',{waitUntil:'networkidle'});await page.goto(base+'/signin-with-chatgpt?return_to=%2Fworkspace',{waitUntil:'networkidle'});
