@@ -61,6 +61,26 @@ try {
   const browserStorage=await page.evaluate(()=>JSON.stringify({local:localStorage,session:sessionStorage}));
   for(const key of ['synthetic-browser-key','replacement-browser-key','other-tab-key']) assert.ok(!browserStorage.includes(key));
   assert.equal((await context.request.get(base+api,{headers:{...headers,'X-Trio-Account':'different-account'}})).status(),401);
+  for(const index of [0,1,2]) {
+    const row=page.locator('.connection-row').nth(index);
+    await row.getByLabel('API key',{exact:true}).fill('synthetic-forget-all-'+index);
+    await row.getByRole('button',{name:'Save to account',exact:true}).click();
+    await row.getByText('Saved to your account',{exact:true}).waitFor();
+  }
+  let failDeletion=true;
+  await page.route('**/api/connections',async route=>{
+    if(failDeletion && route.request().method()==='DELETE' && route.request().postDataJSON().provider==='gemini') { failDeletion=false;return route.fulfill({status:503,json:{error:'Synthetic failed deletion'}}); }
+    return route.continue();
+  });
+  const forget=async()=>{await page.getByRole('button',{name:'Forget all saved keys',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'Forget all saved keys',exact:true}).click();};
+  await forget();await page.getByText('Some deletions were not confirmed.',{exact:false}).waitFor();
+  const partial=await (await context.request.get(base+api,{headers})).json();assert.deepEqual(partial.connections.filter(c=>c.saved).map(c=>c.provider),['gemini']);
+  await page.getByRole('button',{name:'Reload saved connections',exact:true}).click();await page.getByText('Saved keys are private to this account.',{exact:false}).waitFor();
+  await forget();
+  await page.waitForFunction(()=>document.querySelectorAll('.connection-row input[type=password][placeholder="Saved securely · paste to replace"]').length===0);
+  await page.reload({waitUntil:'networkidle'});await open();
+  assert.equal((await (await context.request.get(base+api,{headers})).json()).connections.some(c=>c.saved),false);
+  assert.equal(await page.locator('[role=dialog]').evaluate(el=>el.scrollWidth>el.clientWidth),false);
   assert.deepEqual(errors,[]);
   console.log('Saved key browser checks passed: explicit save, metadata only, reload, sign-out/sign-in, replacement, conflict recovery, temporary disconnect, deletion, account pin, no browser persistence, mobile.');
 } finally {await browser.close();}

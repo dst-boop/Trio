@@ -16,11 +16,14 @@ import { POST as ask } from './app/api/ask/route.ts';
 import { POST as audio } from './app/api/transcribe/route.ts';
 import { POST as image } from './app/api/images/generate/route.ts';
 import { POST as memory } from './app/api/memory/suggest/route.ts';
-import { writeWorkspace } from './lib/account-store.ts';
+import { writeWorkspace, readWorkspace } from './lib/account-store.ts';
+import { exportBackup } from './lib/backups.ts';
+import { sessionMarkdown } from './lib/sessions.ts';
 export default { async fetch(request, env) {
   const userId = request.headers.get('fixture-user');
   globalThis.fixtureIdentity = userId ? {userId, email:userId+'@test.invalid'} : null;
   const path = new URL(request.url).pathname;
+  if (path === '/export') { const snapshot=await readWorkspace(env.DB, userId); return Response.json({snapshot,backup:exportBackup(snapshot.sessions),markdown:snapshot.sessions.map(s=>sessionMarkdown(s.turns))}); }
   if (path === '/seed') { await writeWorkspace(env.DB, userId, {revision:0,sessions:[{id:'one', title:'Test',time:'',turns:[{question:'I like plain language',mode:'single',result:{answer:'Noted',drafts:{},reviews:{},errors:[],seconds:1,demo:false}}]}]}); return Response.json({ok:true}); }
   if (path === '/api/connections') return connections[request.method](request);
   return ({'/api/connections/check':check,'/api/ask':ask,'/api/transcribe':audio,'/api/images/generate':image,'/api/memory/suggest':memory})[path](request);
@@ -64,6 +67,8 @@ try {
   assert.ok(!JSON.stringify(rows).includes(keyInput.key));
   assert.equal((await (await call('/api/connections', 'GET',undefined,'bob')).json()).connections.every(c=>!c.saved),true);
   await call('/seed','POST',{});
+  const exported=await (await call('/export')).text();
+  for(const secret of [keyInput.key,master,rows[0].cipher,ref]) assert.ok(!exported.includes(secret),'Workspace, backup and Markdown must exclude saved credential material');
   for (const [path,body] of consumerBodies) {
     const before = upstreamCalls;
     for (const [user,pin] of [['alice','bob'],['bob','bob']]) { const response=await call(path,'POST',body,user,pin); assert.ok([401,409].includes(response.status),path+': '+response.status); }
