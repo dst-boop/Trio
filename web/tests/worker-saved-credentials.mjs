@@ -76,6 +76,13 @@ try {
     const response=await call(path,'POST',body); assert.equal(response.status,200,path+': '+await response.clone().text());
     const text=await response.text(); assert.ok(!text.includes(keyInput.key)); assert.ok(upstreamCalls>before,path+' must resolve the saved key and reach its provider');
   }
+  const withMissing = { ...connections, claude:{key:ref,model:'model',enabled:true} };
+  const single = await call('/api/ask','POST',{question:'Only the selected provider',connections:withMissing,mode:'single',lead:'openai'});
+  assert.equal(single.status,200);assert.ok(!(await single.text()).includes('saved key was removed'),'Unused saved connections must not affect Single mode');
+  const council = await call('/api/ask','POST',{question:'Keep healthy contributions',connections:withMissing,mode:'council',lead:'openai'});
+  assert.equal(council.status,200);const councilEvents=(await council.text()).trim().split('\n').map(JSON.parse);
+  const final=councilEvents.find(event=>event.type==='final').result;assert.equal(final.answer,'Fixture answer');assert.ok(final.errors.some(error=>error.includes('Claude')&&error.includes('removed')),'Skipped saved connections stay visible in the saved result');
+  assert.equal((await call('/api/ask','POST',{question:'Review',reviewAnswer:'Original',connections:withMissing,mode:'council',lead:'openai'})).status,409,'Do not silently weaken an explicitly requested team review');
   assert.equal((await call('/api/connections','DELETE',{provider:'openai',revision:1})).status,200);
   for(const revision of [0,1]) assert.equal((await call('/api/connections','PUT',{...keyInput,revision})).status,409);
   const before=upstreamCalls;
