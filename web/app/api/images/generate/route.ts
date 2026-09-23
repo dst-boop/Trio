@@ -3,6 +3,8 @@ import { accountReply as reply } from '@/lib/account-api';
 import { JsonBodyError, readJsonBody } from '@/lib/request-json';
 import { imageGenerationSchema } from '@/lib/image-generation';
 import { generateImage } from '@/lib/generate-image';
+import { env } from 'cloudflare:workers';
+import { CredentialError, resolveCredential } from '@/lib/credential-store';
 
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
@@ -12,6 +14,8 @@ export async function POST(request: Request) {
   try { input = imageGenerationSchema.safeParse(await readJsonBody(request)); }
   catch (error) { return reply({ error: error instanceof JsonBodyError ? error.message : 'Could not read the image request.' }, error instanceof JsonBodyError ? error.status : 400); }
   if (!input.success) return reply({ error: 'Enter a description under 4,000 characters, valid image settings, and your OpenAI API key.' }, 400);
+  try { input.data.key = await resolveCredential(env.DB, env.TRIO_CREDENTIAL_KEY, request, user.userId, 'openai', input.data.key); }
+  catch (error) { return reply({ error: error instanceof CredentialError ? error.message : 'Saved key unavailable.' }, error instanceof CredentialError ? error.status : 503); }
   try { return reply({ image: await generateImage(input.data, request.signal) }); }
   catch (error) { return reply({ error: error instanceof Error ? error.message : 'Image generation failed.' }, 502); }
 }

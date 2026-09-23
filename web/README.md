@@ -16,7 +16,7 @@ Plans and results use the existing private account history, conflict handling, o
 
 Trio is **invite-only**. Keep the Sites audience `custom`, preserving its invitation allowlist, until the owner explicitly asks to open registration. The Sites edge checks access before serving the site, including the welcome page at / and /demo. Invitees sign in with the account matching their invited email; /workspace additionally requires **Sign in with ChatGPT**. Sites handles identity and sign-out, and injects verified identity headers at its edge. Deploy this app behind that trusted edge, not a server that accepts arbitrary identity headers from clients. The local Vite plugin strips those headers and supplies a localhost-only test identity after its mock sign-in. No app passwords are collected.
 
-Each account has its own D1 history, keyed only by the authenticated server identity. GET/PUT /api/workspace and live POST /api/ask require sign-in. History responses are private/no-store; writes require same-origin and a matching account identity, so a stale tab cannot save one person's data into another signed-in account. API keys and original image/PDF bytes remain ephemeral and never enter the database.
+Each account has its own D1 history, keyed only by the authenticated server identity. GET/PUT /api/workspace and live POST /api/ask require sign-in. History responses are private/no-store; writes require same-origin and a matching account identity, so a stale tab cannot save one person's data into another signed-in account. Original image/PDF bytes remain ephemeral. API keys explicitly saved in Connections are encrypted in separate account-scoped records, excluded from history and exports.
 
 Online history saves automatically after changes. Up to 30 conversations and 5 million serialized characters are supported. SQL transactions replace bounded chunks with a revision check; a newer device's save returns a visible conflict instead of overwriting it. Export the local version, then choose **Load latest workspace** to recover. Network errors preserve the last saved copy and offer retry/export. Wait for **Saved to your account** before closing a tab. Unsaved prompts and attachment bytes are not synced.
 
@@ -69,7 +69,7 @@ The main screen places the latest answer above the composer, uses compact mode/m
 Sign in from the welcome page and open your workspace first.
 
 1. Open Connections and add API keys for the providers you want to use. Choose **Check access** to check each key and model before asking a question; one provider is enough to start.
-2. Turn Demo mode off. Keys stay in the current tab's memory and are cleared on reload.
+2. Choose **Save to account** for each key you want to keep, then turn Demo mode off. Saved keys load after signing in again; unsaved keys clear on reload. Use **Delete saved key** to remove one from Trio, or **Clear keys from this tab** to disconnect temporarily without deleting saved keys.
 3. Choose Council (drafts → reviews → synthesis), Deep Council (drafts → reviews → revisions → synthesis), Quick synthesis (drafts → synthesis), or Compare (drafts only).
 4. Ask your question. Optionally attach a text, Markdown, CSV, JSON, or code file under 60 KB, one PNG, JPEG, or WebP image, and one PDF. Image and PDF bytes together must be under 4 MB. Images must be no larger than 8,000 pixels on either side. The preview shows exactly which image is attached.
 5. Inspect perspectives, reviews, and Deep Council revisions, copy individual code blocks, or export the session as Markdown with run notes and fallback labels. Answers render Markdown headings, lists, links, and tables; raw HTML and embedded images are disabled.
@@ -111,7 +111,7 @@ pnpm typecheck
 pnpm build
 ```
 
-The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/ask endpoint streams stage updates and visible answer text as newline-delimited JSON. Provider calls happen server-side to fixed vendor endpoints; API keys are never sent to another vendor, logged, or saved by the app. The Sites invitation allowlist restricts access to the whole app; account history and live model requests additionally require a signed-in identity.
+The app uses React, TypeScript, Vinext, and Cloudflare Workers. The POST /api/ask endpoint streams stage updates and visible answer text as newline-delimited JSON. Provider calls happen server-side to fixed vendor endpoints; API keys are never sent to another vendor or logged. The Sites invitation allowlist restricts access to the whole app; account history, saved credentials, and live model requests additionally require a signed-in identity.
 
 Live drafts, reviews, revisions, and synthesis stream as they are written. The workspace initially shows Perspectives and switches to Answer when synthesis starts. A broken stream retries once without streaming, clearing its previous partial text. Partial output never enters peer-review prompts or saved turns. Stop cancels provider reads and preserves completed questions; the interrupted contribution remains visible only in the current tab.
 
@@ -174,7 +174,7 @@ Backups may be up to 20 MB and can recover conversations larger than the 5-milli
 ## Data and limits
 
 - Prompts, attached text, images and PDFs, and recent live conversation context are sent to enabled providers. Drafts and reviews are shared among participating providers. Image and PDF bytes use each provider's native content parts, never a base64 string embedded in text prompts. Only local uploads are accepted; the app does not fetch arbitrary image or PDF URLs.
-- Keys live in browser memory and in server request memory while a run is active. Reloading clears them.
+- Unsaved keys live in browser memory and in server request memory while a run is active. Reloading clears them. Explicitly saved keys use the encrypted account vault described below.
 - Sessions live in browser memory unless you explicitly enable local history. Local history is device-specific, includes prompts and answers, and does not include API keys or the original attachments (answers may quote them). Refresh restores the active session after validating saved records. Clear history with the sidebar trash button and confirmation.
 - Each follow-up includes at most six recent completed live question/answer pairs; demo and empty results are excluded before selecting that window. Prior answers are capped at 30,000 characters per turn. Compare responses divide that space across all available labeled perspectives, with short drafts donating spare room; a long first model can no longer crowd out the others. Shortened excerpts carry an explicit omission marker and preserve Unicode boundaries. The same excerpt logic serves memory suggestions within their existing 8,000-character answer budget. Saved answers and exports remain complete.
 - In Live mode, **Next question uses…** below the composer reports the exact number of earlier live answers included, older exchanges omitted, and answers shortened. Its expandable explanation tells users to repeat needed older details or put continuing requirements in Session instructions. These counts and the outgoing request use the same context snapshot; no extra provider requests are made. `node tests/browser-followup-context.mjs` checks the visible counts and actual follow-up payload locally with mocked model responses.
@@ -258,3 +258,14 @@ The request contract follows [OpenAI's image-generation guide](https://developer
 ## Hosting
 
 The .openai/hosting.json manifest identifies this private Sites app. Keep its project ID when updating this deployment. The production build is packaged from dist/ and deployed with the Sites publishing workflow. Sharing changes are separate from publishing.
+
+
+## Saved provider keys
+
+Connections offers explicit save, replacement, settings save, and deletion for each signed-in account. Reads return provider/model/enabled/revision metadata only; the browser holds a public reference after saving, never the saved plaintext. The server resolves it for answers/research, access checks, memory suggestions, audio transcription, and image generation. All saved-key resolution requires same-origin requests and the exact signed-in account pin. Temporary keys remain supported. Keys are never included in browser storage, conversation history, or exports.
+
+The D1 provider_credentials table stores AES-256-GCM ciphertext with a fresh 96-bit nonce and authenticated account/provider/version context. Configure TRIO_CREDENTIAL_KEY as a **Sites secret** containing 32 cryptographically random bytes encoded as base64 before deployment. The value belongs in the runtime secret manager, never source, build assets, or .openai/hosting.json. See .env.example; local development uses a separate synthetic value in ignored .dev.vars. Keep the production value across deployments. This version has no automatic key rotation: changing or losing it makes existing saved credentials unreadable and users must replace them. Never silently generate a new master during application startup. Deletion remains available if the master is unavailable.
+
+Writes use compare-and-swap revisions; deletion clears ciphertext and retains a revision tombstone, preventing stale tabs from resurrecting keys. Uncertain responses require reloading metadata before another write. Deletion stops new requests using the stored credential; already-started requests may finish, and vendor-side revocation remains the user's control. Account authentication and encrypted storage protect keys at rest; the server decrypts a selected key in request memory to contact its vendor. Application account vault keys are not exported to CLI evaluation environments.
+
+Validation: saved-credentials.test.ts covers encryption/account binding and real SQLite conflicts. worker-saved-credentials.mjs runs the actual API routes, WebCrypto and D1 under workerd with closed provider fixtures. browser-saved-credentials.mjs covers save/reload/sign-out/sign-in, replacement/deletion and stale-tab recovery without real provider calls.
