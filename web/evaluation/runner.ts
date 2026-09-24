@@ -3,9 +3,9 @@ import { providers, type Connections, type ProviderId, type Result, type Usage }
 import { qualityCases, scoreAnswer, type QualityCase, type Verdict } from './cases.ts';
 import { compareOutcomes } from './comparison.ts';
 
-export type EvaluationOptions = { mode: 'fast' | 'council' | 'deep'; baseline?: ProviderId; maxCalls: number; timeoutSeconds: number; includeAnswers?: boolean; cases?: QualityCase[] };
-type PhaseReport = { state: 'not_run' | 'completed' | 'failed'; degraded: boolean; httpCalls: number; elapsedMs: number | null; providerElapsedMs: Partial<Record<ProviderId, number>>; usage?: Usage; notes: string[] };
-type CaseReport = { id: string; category: string; question: string; context?: string; expected: string | number; baseline: Partial<Record<ProviderId, Verdict>>; team: Verdict; baselineRun: PhaseReport; teamRun: PhaseReport; answers?: { baseline: Partial<Record<ProviderId, string>>; team?: string } };
+export type EvaluationOptions = { mode: 'fast' | 'council' | 'deep'; baseline?: ProviderId; maxCalls: number; timeoutSeconds: number; includeAnswers?: boolean; cases?: QualityCase[]; phases?: ('baseline' | 'team')[] };
+export type PhaseReport = { state: 'not_run' | 'completed' | 'failed'; degraded: boolean; httpCalls: number; elapsedMs: number | null; providerElapsedMs: Partial<Record<ProviderId, number>>; usage?: Usage; notes: string[] };
+export type CaseReport = { id: string; category: string; question: string; context?: string; expected: string | number; baseline: Partial<Record<ProviderId, Verdict>>; team: Verdict; baselineRun: PhaseReport; teamRun: PhaseReport; answers?: { baseline: Partial<Record<ProviderId, string>>; team?: string } };
 const emptyPhase = (): PhaseReport => ({ state: 'not_run', degraded: false, httpCalls: 0, elapsedMs: null, providerElapsedMs: {}, notes: [] });
 
 /** Defense in depth for report strings, including misconfigured model IDs and provider text. */
@@ -43,7 +43,7 @@ export async function evaluateQuality(connections: Connections, options: Evaluat
   const lead = active.find(p => p.id === 'claude')?.id ?? active[0].id;
   outer: for (const [index, item] of selected.entries()) {
     const row = results[index];
-    for (const phase of ['baseline', 'team'] as const) {
+    for (const phase of options.phases ?? ['baseline', 'team'] as const) {
       if (signal.aborted) { status = external.aborted ? 'cancelled' : 'timeout'; break outer; }
       if (calls >= options.maxCalls) { status = 'call_limit'; break outer; }
       const run = phase === 'baseline' ? row.baselineRun : row.teamRun;
@@ -75,9 +75,16 @@ export async function evaluateQuality(connections: Connections, options: Evaluat
       if (limitReached) { status = 'call_limit'; break outer; }
     }
   }
+  return evaluationReport(connections, options, results, {status, calls, startedAt});
+}
+
+export function evaluationReport(connections: Connections, options: EvaluationOptions, results: CaseReport[], state: {status: string; calls: number; startedAt: string; finishedAt?: string | null}) {
+  const active = providers.filter(p => connections[p.id].enabled);
+  const baseline = options.baseline ?? (active.find(p => p.id === 'claude')?.id ?? active[0].id);
+  const {status, calls, startedAt} = state;
   const count = (verdicts: Verdict[]) => ({ passed: verdicts.filter(v => v.status === 'pass').length, total: verdicts.length, notRun: verdicts.filter(v => v.status === 'not_run').length });
   return redactReport({
-    version: 2, baseline, startedAt, finishedAt: new Date().toISOString(), status, mode: options.mode, calls, maxCalls: options.maxCalls,
+    version: 2, baseline, startedAt, finishedAt: state.finishedAt === undefined ? new Date().toISOString() : state.finishedAt, status, mode: options.mode, calls, maxCalls: options.maxCalls,
     models: Object.fromEntries(active.map(p => [p.id, connections[p.id].model])),
     comparison: compareOutcomes(results, baseline, active.map(p => p.id)),
     summary: { baseline: Object.fromEntries(active.map(p => [p.id, count(results.map(r => r.baseline[p.id]!))])), team: count(results.map(r => r.team)), degradedPhases: results.reduce((n, r) => n + Number(r.baselineRun.degraded) + Number(r.teamRun.degraded), 0) },

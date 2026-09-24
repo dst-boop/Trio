@@ -41,7 +41,7 @@ export async function deleteCredential(db: D1Database, userId: string, value: un
   // Keep the revision after deletion so a stale tab cannot resurrect the key.
   return writeRow(db, userId, input.provider, input.revision, { cipher: null, iv: null, model: providers.find(p => p.id === input.provider)!.model, enabled: 0, updated_at: new Date().toISOString() });
 }
-export async function resolveCredential(db: D1Database | undefined, master: string | undefined, request: Request, userId: string, provider: ProviderId, value: string) {
+export async function resolveCredential(db: D1Database | undefined, master: string | undefined, request: Request, userId: string, provider: ProviderId, value: string, expectedRevision?: number) {
   if (value !== savedKeyReference) return value;
   if (request.headers.get('x-trio-account') !== userId) throw new CredentialError('Your account changed. Sign in again before using saved keys.', 401);
   if (request.headers.get('origin') !== new URL(request.url).origin) throw new CredentialError('Reload Trio and try again.', 403);
@@ -49,6 +49,7 @@ export async function resolveCredential(db: D1Database | undefined, master: stri
     if (!db) throw new Error();
     const row = await readCredentialRow(db, userId, provider);
     if (!row?.cipher || !row.iv) throw new CredentialError('This saved key was removed. Open Connections and add or reload your key.', 409);
+    if (expectedRevision !== undefined && (row.revision !== expectedRevision || !row.enabled)) throw new CredentialError('A saved connection changed. Start a new quality check with the updated settings.', 409);
     return await decryptCredential(master, userId, provider, { cipher: row.cipher, iv: row.iv });
   } catch (error) { throw error instanceof CredentialError ? error : new CredentialError(); }
 }
