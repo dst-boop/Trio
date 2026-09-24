@@ -7,14 +7,14 @@ const reportSchema=z.object({version:z.literal(2),mode:z.enum(['fast','council',
 const escape=(s:string)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
 /** Separate answer identities and ground truth from the sheet given to a reviewer. */
-export function blindReview(value:unknown) {
+export function blindReview(value:unknown, chooseIndex: (max: number) => number = randomInt) {
  const report=reportSchema.parse(value);
  const terms=[...Object.values(report.models),'ChatGPT','OpenAI','Anthropic','Claude','Gemini','Google'].filter(Boolean).sort((a,b)=>b.length-a.length);
  const names=new RegExp(terms.map(escape).join('|'),'gi');
  const rows=report.results.flatMap(row=>{
   const answers=[...providers.flatMap(p=>row.answers?.baseline[p.id]?[{arm:p.id,text:row.answers.baseline[p.id]!}]:[]),...(row.answers?.team?[{arm:'team',text:row.answers.team}]:[])];
   if(answers.length<2)return [];
-  for(let i=answers.length-1;i>0;i--){const j=randomInt(i+1);[answers[i],answers[j]]=[answers[j],answers[i]];}
+  for(let i=answers.length-1;i>0;i--){const j=chooseIndex(i+1);[answers[i],answers[j]]=[answers[j],answers[i]];}
   return [{row,answers:answers.map((a,i)=>({...a,label:String.fromCharCode(65+i)}))}];
  });
  if(!rows.length)throw new Error('A V2 report with --include-answers and at least two answers per case is required.');

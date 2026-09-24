@@ -1,4 +1,5 @@
-import { integer, sqliteTable, text, primaryKey } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, primaryKey, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 export const workspaces = sqliteTable('workspaces', {
   userId: text('user_id').primaryKey(),
   revision: integer('revision').notNull().default(0),
@@ -25,3 +26,25 @@ export const providerCredentials = sqliteTable('provider_credentials', {
   revision: integer('revision').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, t => [primaryKey({ columns: [t.userId, t.provider] })]);
+
+export const qualityRuns = sqliteTable('quality_runs', {
+  userId: text('user_id').notNull(),
+  id: text('id').notNull(),
+  status: text('status').notNull(),
+  config: text('config').notNull(),
+  startedAt: integer('started_at').notNull(),
+  deadline: integer('deadline').notNull(),
+  finishedAt: integer('finished_at'),
+  cursor: integer('cursor').notNull().default(0),
+  calls: integer('calls').notNull().default(0),
+  lease: text('lease'),
+  leaseUntil: integer('lease_until'),
+  blindSeed: text('blind_seed').notNull(),
+}, t => [primaryKey({columns:[t.userId,t.id]}), uniqueIndex('quality_one_active_account').on(t.userId).where(sql`${t.status} = 'running' OR ${t.lease} IS NOT NULL`)]);
+
+export const qualityPhases = sqliteTable('quality_phases', {
+  userId: text('user_id').notNull(),
+  runId: text('run_id').notNull(),
+  step: integer('step').notNull(),
+  report: text('report').notNull(),
+}, t => [primaryKey({columns:[t.userId,t.runId,t.step]})]);
