@@ -80,7 +80,10 @@ export async function stepQualityRun(db:D1Database,master:string|undefined,reque
   try {
     const connections=await resolveConnections(db,master,request,user,config);
     const stop=new AbortController();
-    const signal=AbortSignal.any([request.signal,stop.signal,AbortSignal.timeout(Math.max(1,Math.min(phaseLimitMs,run.deadline-Date.now())))]);
+    // A claimed, potentially billed phase owns its deadline. Closing a browser
+    // connection must not itself abort the provider calls. The route extends
+    // Worker lifetime with waitUntil; a platform kill still expires the lease.
+    const signal=AbortSignal.any([stop.signal,AbortSignal.timeout(Math.max(1,Math.min(phaseLimitMs,run.deadline-Date.now())))]);
     // Every actual HTTP attempt is durably reserved before dispatch. A crash
     // between reservation and dispatch may overcount; it can never undercount.
     const guarded:typeof fetch=async(url,init)=>{

@@ -9,7 +9,10 @@ const root=fileURLToPath(new URL('../',import.meta.url)),master=Buffer.alloc(32,
 const bundle=await build({absWorkingDir:root,bundle:true,write:false,platform:'node',format:'esm',target:'es2022',external:['cloudflare:workers','node:crypto'],logLevel:'silent',plugins:[{name:'fixture-identity',setup(b){b.onResolve({filter:/chatgpt-auth$/},()=>({path:'identity',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export async function getChatGPTUser(){return globalThis.fixtureIdentity}',loader:'js'}));}}],stdin:{resolveDir:root,loader:'ts',contents:`
 import * as quality from './app/api/quality/route.ts';
 import * as connections from './app/api/connections/route.ts';
-export default {async fetch(request,env){const user=request.headers.get('fixture-user');globalThis.fixtureIdentity=user?{userId:user,email:user+'@test.invalid'}:null;const routes=new URL(request.url).pathname==='/api/quality'?quality:connections;return routes[request.method](request);}};
+import {stepQualityRun} from './lib/quality-store.ts';
+export default {async fetch(request,env){const user=request.headers.get('fixture-user');globalThis.fixtureIdentity=user?{userId:user,email:user+'@test.invalid'}:null;
+if(new URL(request.url).pathname==='/disconnected'){const body=await request.json(),stop=new AbortController();stop.abort();const accepted=new Request(request.url,{headers:request.headers,signal:stop.signal});return Response.json({run:await stepQualityRun(env.DB,env.TRIO_CREDENTIAL_KEY,accepted,user,body.id,body.step)});}
+const routes=new URL(request.url).pathname==='/api/quality'?quality:connections;return routes[request.method](request);}};
 `}});
 let attempts=0,release=null,held=null,hold=false,gate=Promise.resolve();
 const keys={openai:'quality-openai-private',claude:'quality-claude-private',gemini:'quality-gemini-private'};
@@ -53,6 +56,10 @@ try {
   let limited=(await json(await call(start(randomUUID(),{maxCalls:4})))).run;const before=attempts;
   for(let i=0;i<3;i++)limited=(await json(await call({action:'step',id:limited.id,step:limited.completedSteps}))).run;
   assert.equal(limited.status,'call_limit');assert.equal(limited.calls,4);assert.equal(attempts-before,4);
+  const disconnected=(await json(await call(start()))).run,priorDisconnect=attempts;
+  const survived=await json(await call({id:disconnected.id,step:0},'/disconnected'));
+  assert.equal(survived.run.status,'running');assert.equal(survived.run.completedSteps,1);assert.equal(attempts,priorDisconnect+3,'An accepted phase ignores a disconnected browser signal');
+  await json(await call({action:'cancel',id:disconnected.id}));
   // Cancellation fences all subsequent calls while allowing an already-paid
   // response to finish. A second run remains excluded until it settles.
   const cancelRun=(await json(await call(start(randomUUID(),{providers:['openai','claude'],baseline:'openai'})))).run;

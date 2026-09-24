@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:workers';
+import { env, waitUntil } from 'cloudflare:workers';
 import { z } from 'zod';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { accountReply as reply, readSmallJson } from '@/lib/account-api';
@@ -27,7 +27,14 @@ async function handle(request:Request) {
       return reply(await qualityReport(env.DB,user.userId,runId));
     }
     const input=action.parse(await readSmallJson(request));
-    const run=input.action==='start'?await startQualityRun(env.DB,env.TRIO_CREDENTIAL_KEY,request,user.userId,input.id,input.settings):input.action==='step'?await stepQualityRun(env.DB,env.TRIO_CREDENTIAL_KEY,request,user.userId,input.id,input.step):await cancelQualityRun(env.DB,user.userId,input.id);
+    if(input.action==='step') {
+      const pending=stepQualityRun(env.DB,env.TRIO_CREDENTIAL_KEY,request,user.userId,input.id,input.step);
+      // Keep the ordinary response open, and request the platform's bounded
+      // post-disconnect grace period for already-claimed work and its receipt.
+      waitUntil(pending.then(()=>{},()=>{}));
+      return reply({run:await pending});
+    }
+    const run=input.action==='start'?await startQualityRun(env.DB,env.TRIO_CREDENTIAL_KEY,request,user.userId,input.id,input.settings):await cancelQualityRun(env.DB,user.userId,input.id);
     return reply({run});
   } catch(error) {
     if(error instanceof z.ZodError)return reply({error:'Choose a valid suite, baseline, at least two saved providers, and limits.'},400);
