@@ -4,7 +4,7 @@ import type { QualityCase } from '../evaluation/cases.ts';
 import { blindReview } from '../evaluation/blind.ts';
 import { qualitySettings, suiteCases, qualityEstimate, type QualitySettings } from '../evaluation/hosted-config.ts';
 import { freshConnections, providers, type Connections, type ProviderId } from './trio.ts';
-import { readSavedConnections, readCredentialRow, resolveCredential } from './credential-store.ts';
+import { readSavedConnections, resolveCredential } from './credential-store.ts';
 import { savedKeyReference } from './saved-connections.ts';
 
 export class QualityError extends Error {
@@ -38,9 +38,8 @@ async function resolveConnections(db:D1Database,master:string|undefined,request:
   for(const p of providers) {
     connections[p.id]={key:'',model:config.models[p.id] ?? p.model,enabled:config.providers.includes(p.id)};
     if(!connections[p.id].enabled)continue;
-    const row=await readCredentialRow(db,user,p.id);
-    if(!row?.enabled || row.revision!==config.revisions[p.id])throw new QualityError('A saved connection changed. This run has stopped; start a new comparison with the updated settings.');
-    connections[p.id].key=await resolveCredential(db,master,request,user,p.id,savedKeyReference);
+    // The revision and ciphertext are checked from the same row read.
+    connections[p.id].key=await resolveCredential(db,master,request,user,p.id,savedKeyReference,config.revisions[p.id]);
   }
   return connections;
 }
@@ -86,7 +85,8 @@ export async function stepQualityRun(db:D1Database,master:string|undefined,reque
     // between reservation and dispatch may overcount; it can never undercount.
     const guarded:typeof fetch=async(url,init)=>{
       signal.throwIfAborted();
-      const reservation=await db.prepare("UPDATE quality_runs SET calls = calls + 1 WHERE user_id = ? AND id = ? AND lease = ? AND status = 'running' AND calls < ? AND deadline > ? AND lease_until > ?").bind(user,id,token,config.maxCalls,Date.now(),Date.now()).run();
+      const pins=config.providers.map(()=> 'AND EXISTS (SELECT 1 FROM provider_credentials WHERE user_id = ? AND provider = ? AND revision = ? AND enabled = 1 AND cipher IS NOT NULL)').join(' ');
+      const reservation=await db.prepare("UPDATE quality_runs SET calls = calls + 1 WHERE user_id = ? AND id = ? AND lease = ? AND status = 'running' AND calls < ? AND deadline > ? AND lease_until > ? "+pins).bind(user,id,token,config.maxCalls,Date.now(),Date.now(),...config.providers.flatMap(p=>[user,p,config.revisions[p]!])).run();
       if(!reservation.meta.changes){stop.abort();throw new Error('Quality check stopped.');}
       signal.throwIfAborted();
       return fetcher(url,{...init,signal:AbortSignal.any([signal,...(init?.signal?[init.signal]:[])])});
@@ -125,7 +125,7 @@ export async function qualityReport(db:D1Database,user:string,id:string) {
     if(entry.step%2){row.team=phase.team;row.teamRun=phase.teamRun;row.answers!.team=phase.answers?.team;}
     else{row.baseline=phase.baseline;row.baselineRun=phase.baselineRun;row.answers!.baseline=phase.answers?.baseline??{};}
   }
-  const report=evaluationReport(connections,config,rows,{status:run.status,calls:run.calls,startedAt:new Date(run.started_at).toISOString(),finishedAt:run.finished_at?new Date(run.finished_at).toISOString():undefined});
+  const report=evaluationReport(connections,config,rows,{status:run.status,calls:run.calls,startedAt:new Date(run.started_at).toISOString(),finishedAt:run.finished_at?new Date(run.finished_at).toISOString():null});
   return {run:publicRun(run),report:{...report,callAccounting:'Calls are durable HTTP-attempt reservations. An interrupted dispatch may reserve an attempt without sending it. Failed or interrupted calls can still be billed; provider invoices remain authoritative.'}};
 }
 export async function qualityBlindExport(db:D1Database,user:string,id:string,part:'sheet'|'key') {

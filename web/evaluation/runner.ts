@@ -78,13 +78,13 @@ export async function evaluateQuality(connections: Connections, options: Evaluat
   return evaluationReport(connections, options, results, {status, calls, startedAt});
 }
 
-export function evaluationReport(connections: Connections, options: EvaluationOptions, results: CaseReport[], state: {status: string; calls: number; startedAt: string; finishedAt?: string}) {
+export function evaluationReport(connections: Connections, options: EvaluationOptions, results: CaseReport[], state: {status: string; calls: number; startedAt: string; finishedAt?: string | null}) {
   const active = providers.filter(p => connections[p.id].enabled);
   const baseline = options.baseline ?? (active.find(p => p.id === 'claude')?.id ?? active[0].id);
   const {status, calls, startedAt} = state;
   const count = (verdicts: Verdict[]) => ({ passed: verdicts.filter(v => v.status === 'pass').length, total: verdicts.length, notRun: verdicts.filter(v => v.status === 'not_run').length });
   return redactReport({
-    version: 2, baseline, startedAt, finishedAt: state.finishedAt ?? new Date().toISOString(), status, mode: options.mode, calls, maxCalls: options.maxCalls,
+    version: 2, baseline, startedAt, finishedAt: state.finishedAt === undefined ? new Date().toISOString() : state.finishedAt, status, mode: options.mode, calls, maxCalls: options.maxCalls,
     models: Object.fromEntries(active.map(p => [p.id, connections[p.id].model])),
     comparison: compareOutcomes(results, baseline, active.map(p => p.id)),
     summary: { baseline: Object.fromEntries(active.map(p => [p.id, count(results.map(r => r.baseline[p.id]!))])), team: count(results.map(r => r.team)), degradedPhases: results.reduce((n, r) => n + Number(r.baselineRun.degraded) + Number(r.teamRun.degraded), 0) },

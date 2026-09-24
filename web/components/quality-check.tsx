@@ -19,7 +19,7 @@ export function QualityCheck({accountId,open,onOpenChange,live,onConnections}:{a
   const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[executing,setExecuting]=useState(false),[paused,setPaused]=useState(false);
   const version=useRef(0),continueRun=useRef(false),startId=useRef(crypto.randomUUID());
   async function api(query='',body?:unknown) {
-    const response=await fetch('/api/quality'+query,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Trio-Account':accountId},...(body?{body:JSON.stringify(body)}:{})});
+    const response=await fetch('/api/quality'+query,{method:body?'POST':'GET',signal:AbortSignal.timeout((body as {action?:string}|undefined)?.action==='step'?165_000:30_000),headers:{'Content-Type':'application/json','X-Trio-Account':accountId},...(body?{body:JSON.stringify(body)}:{})});
     const data=await response.json() as {error?:string;run:QualityRun;runs:QualityRun[];connections:SavedConnection[];report:Report};if(!response.ok)throw new Error(data.error||'Could not load the quality check.');return data;
   }
   function saveRun(run:QualityRun) {setCurrent(run);setRuns(old=>[run,...old.filter(r=>r.id!==run.id)]);}

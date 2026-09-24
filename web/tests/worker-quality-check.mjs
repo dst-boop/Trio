@@ -35,6 +35,7 @@ try {
   const initial=start(),starts=await Promise.all([call(initial),call(initial)]);const one=await json(starts[0]),two=await json(starts[1]);assert.equal(one.run.id,two.run.id);assert.equal(attempts,0,'Creating a run alone does not call vendors');
   assert.equal((await call(start())).status,409,'Only one active run per account');
   let run=one.run;
+  assert.equal((await json(await call(undefined,'/api/quality?id='+run.id))).report.finishedAt,null,'An unfinished report must not invent a finish time');
   const competing=await Promise.all([call({action:'step',id:run.id,step:0}),call({action:'step',id:run.id,step:0})]);await Promise.all(competing.map(json));assert.equal(attempts,3,'Concurrent requests must not duplicate a billed phase');
   run=(await json(await call(undefined,'/api/quality?id='+run.id))).run;assert.equal(run.completedSteps,1);
   await json(await call({action:'step',id:run.id,step:0}));assert.equal(attempts,3,'Replayed cursor cannot spend');
@@ -42,6 +43,7 @@ try {
   while(run.status==='running')run=(await json(await call({action:'step',id:run.id,step:run.completedSteps}))).run;
   assert.equal(run.status,'complete');assert.equal(run.calls,60);assert.equal(attempts,60);assert.equal(run.completedSteps,12);
   const report=await json(await call(undefined,'/api/quality?id='+run.id));assert.equal(report.report.results.length,6);assert.equal(report.report.summary.degradedPhases,0);assert.equal(report.report.calls,60);
+  assert.equal(report.report.finishedAt,new Date(run.finishedAt).toISOString());
   const sheet=await json(await call(undefined,'/api/quality?id='+run.id+'&export=sheet')),key=await json(await call(undefined,'/api/quality?id='+run.id+'&export=key'));
   assert.deepEqual(sheet,await json(await call(undefined,'/api/quality?id='+run.id+'&export=sheet')),'Downloads preserve the same shuffle');assert.equal(sheet.cases[0].answers.length,4);assert.equal(sheet.cases[0].expected,undefined);assert.equal(sheet.cases[0].arms,undefined);assert.equal(key.cases[0].expected,2050);
   for(const secret of [...Object.values(keys),master,'__TRIO_SAVED_KEY__'])for(const data of [report,sheet,key,await json(await call())])assert.ok(!JSON.stringify(data).includes(secret));
@@ -58,6 +60,14 @@ try {
   const cancelled=await json(await call({action:'cancel',id:cancelRun.id}));assert.equal(cancelled.run.status,'cancelled');assert.equal((await call(start())).status,409);
   hold=false;release();
   await stepping;
+  // A replacement during a team phase fences later review/synthesis attempts,
+  // even though the original keys were already decrypted for that phase.
+  let replacing=(await json(await call(start()))).run;
+  replacing=(await json(await call({action:'step',id:replacing.id,step:0}))).run;
+  const beforeReplacement=attempts;hold=true;gate=new Promise(resolve=>release=resolve);const replacementEntered=new Promise(resolve=>held=resolve);
+  const inTeam=call({action:'step',id:replacing.id,step:1});await replacementEntered;
+  await db.prepare("UPDATE provider_credentials SET revision=revision+1 WHERE user_id='alice' AND provider='gemini'").run();hold=false;release();
+  assert.equal((await json(await inTeam)).run.status,'interrupted');assert.ok(attempts<=beforeReplacement+3,'No review/synthesis requests after credential replacement');
   // Simulate a Worker dying after reservation: never replay it on reload.
   const lost=(await json(await call(start()))).run;await db.prepare("UPDATE quality_runs SET lease='lost',lease_until=?,calls=1 WHERE user_id='alice' AND id=?").bind(Date.now()-1,lost.id).run();const previous=attempts;
   const interrupted=await json(await call({action:'step',id:lost.id,step:0}));assert.equal(interrupted.run.status,'interrupted');assert.equal(attempts,previous);

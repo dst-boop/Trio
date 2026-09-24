@@ -70,3 +70,20 @@ test('saved references require an exact account pin and origin; temporary keys d
     assert.equal(saveConnectionSchema.safeParse({ ...input, userId: 'bob' }).success, false);
   } finally { sql.close(); }
 });
+
+test('a pinned revision is checked on the ciphertext row, never a separate stale read', async () => {
+  const {db,sql}=database();
+  try {
+    await saveCredential(db,master,'alice',input);
+    let reads=0;
+    const racing={prepare:(query:string)=>({bind:(...args:unknown[])=>({first:async()=>{
+      reads++;const row=sql.prepare(query).get(...args as never[]);
+      await saveCredential(db,master,'alice',{...input,revision:1,key:'replacement-private-key'});
+      return row;
+    }})})} as unknown as D1Database;
+    assert.equal(await resolveCredential(racing,master,request(),'alice','openai',savedKeyReference,1),input.key);
+    assert.equal(reads,1,'Decrypt the exact row whose revision was checked');
+    await assert.rejects(resolveCredential(db,master,request(),'alice','openai',savedKeyReference,1),/changed/);
+    assert.equal(await resolveCredential(db,master,request(),'alice','openai',savedKeyReference,2),'replacement-private-key');
+  } finally {sql.close();}
+});
