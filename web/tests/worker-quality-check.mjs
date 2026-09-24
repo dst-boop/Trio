@@ -62,5 +62,6 @@ try {
   const lost=(await json(await call(start()))).run;await db.prepare("UPDATE quality_runs SET lease='lost',lease_until=?,calls=1 WHERE user_id='alice' AND id=?").bind(Date.now()-1,lost.id).run();const previous=attempts;
   const interrupted=await json(await call({action:'step',id:lost.id,step:0}));assert.equal(interrupted.run.status,'interrupted');assert.equal(attempts,previous);
   const expired=(await json(await call(start()))).run;await db.prepare("UPDATE quality_runs SET deadline=? WHERE user_id='alice' AND id=?").bind(Date.now()-1,expired.id).run();assert.equal((await json(await call({action:'step',id:expired.id,step:0}))).run.status,'timeout');assert.equal(attempts,previous);
+  const changed=(await json(await call(start()))).run;await db.prepare("UPDATE provider_credentials SET revision=revision+1 WHERE user_id='alice' AND provider='claude'").run();assert.equal((await json(await call({action:'step',id:changed.id,step:0}))).run.status,'interrupted');assert.equal(attempts,previous,'Changing a pinned credential stops before spending');
   console.log('Worker quality check passed: durable call cap, competing starts/steps, resume, cancellation, timeout/crash fencing, account isolation, redacted private reports and stable separate blind exports; no real network.');
 }finally{release?.();await mf.dispose();}

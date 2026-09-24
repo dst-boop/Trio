@@ -4,7 +4,7 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base=process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL || 'msedge'});
 const page=await browser.newPage({viewport:{width:1440,height:1050}});const errors=[];let calls=0;
-page.on('pageerror',error=>errors.push(error.message));page.on('request',request=>{if(/\/api\/(ask|memory\/suggest)$/.test(request.url()))calls++;});
+page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});page.on('request',request=>{if(/\/api\/(ask|memory\/suggest)$/.test(request.url()))calls++;});
 const fixture={id:'outcome-fixture',title:'Meeting follow-up',time:'',turns:[{question:'Prepare the follow-up draft',mode:'council',result:{answer:'Confirm the next meeting and ask for the missing document.',reviewedAnswer:'Original draft',drafts:{},reviews:{},errors:[],seconds:1,demo:false}}]};
 const read=async()=>{const response=await page.request.get(base+'/api/workspace');assert.equal(response.status(),200);return response.json();};
 const save=async action=>{const response=page.waitForResponse(r=>r.url().endsWith('/api/workspace')&&r.request().method()==='PUT');await action();assert.equal((await response).status(),200);};

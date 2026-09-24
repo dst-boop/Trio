@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { qualityCases } from './cases.ts';
 import { representativeCases } from './representative-cases.ts';
 import { estimateStandardCost } from '../lib/usage.ts';
-import type { ProviderId } from '../lib/trio.ts';
+import { providers, type ProviderId } from '../lib/trio.ts';
 
 export const qualitySettings = z.object({
   suite: z.enum(['core', 'representative', 'all']).default('core'),
@@ -19,11 +19,12 @@ export function qualityEstimate(settings: QualitySettings, models: Partial<Recor
   const count = suiteCases(settings.suite).length;
   const rounds = settings.mode === 'fast' ? 2 : settings.mode === 'deep' ? 4 : 3;
   const nominalCalls = count * (settings.providers.length * rounds + 1);
+  const lead = settings.providers.includes('claude') ? 'claude' : providers.find(p=>settings.providers.includes(p.id))?.id;
   // An illustrative token allowance, not a quote or spending cap. The runtime
   // uses the existing dated price table and refuses unknown/expired rates.
   let illustrativeUSD: number | null = 0;
   for (const provider of settings.providers) {
-    const calls = count * (rounds + Number(provider === (settings.providers.includes('claude') ? 'claude' : settings.providers[0])));
+    const calls = count * (rounds + Number(provider === lead));
     const cost = estimateStandardCost(models[provider] ?? '', {input:2000, output:1000, cached:0});
     if (cost === null) { illustrativeUSD = null; break; }
     illustrativeUSD += calls * cost;

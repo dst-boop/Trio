@@ -30,7 +30,7 @@ try{
  await page.getByRole('button',{name:'Quality check',exact:true}).click();await dialog.getByRole('button',{name:'Start paid quality check'}).waitFor();
  await dialog.getByRole('checkbox',{name:'Include Gemini'}).uncheck();await dialog.getByRole('checkbox',{name:'Include ChatGPT'}).uncheck();assert.equal(await dialog.getByRole('button',{name:'Start paid quality check'}).isEnabled(),false);
  await dialog.getByRole('checkbox',{name:'Include ChatGPT'}).check();await dialog.getByRole('checkbox',{name:'Include Gemini'}).check();
- await page.setViewportSize({width:390,height:844});await mkdir('test-output',{recursive:true});await page.screenshot({path:'test-output/quality-setup-mobile.png'});
+ await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>{const r=document.querySelector('.quality-dialog')?.getBoundingClientRect();return r&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;},null,{timeout:5000});await mkdir('test-output',{recursive:true});await page.screenshot({path:'test-output/quality-setup-mobile.png'});
  assert.equal(await dialog.evaluate(el=>el.scrollWidth>el.clientWidth),false);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await dialog.getByRole('button',{name:'Start paid quality check'}).click();await dialog.getByRole('button',{name:'Pause after this step'}).click();
  while(!release)await new Promise(resolve=>setTimeout(resolve,20));release();await dialog.getByRole('button',{name:'Continue quality check'}).waitFor();assert.equal(starts,1);assert.equal(steps,1);
@@ -43,6 +43,6 @@ try{
  await dialog.getByRole('button',{name:'View results',exact:true}).click();await dialog.getByRole('heading',{name:'Your private results'}).waitFor();
  const sheet=page.waitForEvent('download');await dialog.getByRole('button',{name:'Download blinded sheet'}).click();assert.match((await sheet).suggestedFilename(),/-sheet.json$/);
  page.once('dialog',d=>d.accept());const key=page.waitForEvent('download');await dialog.getByRole('button',{name:'Download identity key'}).click();assert.match((await key).suggestedFilename(),/-key.json$/);
- await page.setViewportSize({width:390,height:844});assert.equal(await dialog.evaluate(el=>el.scrollWidth>el.clientWidth),false);await page.screenshot({path:'test-output/quality-results-mobile.png'});
+ await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>{const r=document.querySelector('.quality-dialog')?.getBoundingClientRect();return r&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;},null,{timeout:5000});assert.equal(await dialog.evaluate(el=>el.scrollWidth>el.clientWidth),false);await page.screenshot({path:'test-output/quality-results-mobile.png'});
  assert.deepEqual(errors,[]);console.log('Quality UI passed: demo gating, two-provider minimum, explicit start, pause/reload/resume without duplicate calls, private results, separate downloads, mobile layout, no console errors.');
 }finally{release?.();await browser.close();}
