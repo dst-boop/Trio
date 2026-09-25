@@ -3,11 +3,12 @@ import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { accountReply as reply, readSmallJson } from '@/lib/account-api';
 import { saveConnectionSchema, deleteConnectionSchema } from '@/lib/saved-connections';
 import { CredentialError, readSavedConnections, saveCredential, deleteCredential } from '@/lib/credential-store';
+import { workspaceAvailability } from '@/lib/workspace-keys';
 
 export async function GET(request: Request) {
   const user = await getChatGPTUser();
   if (!user || request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Sign in again to load saved connections.' }, 401);
-  try { if (!env.DB) throw new Error(); return reply(await readSavedConnections(env.DB, user.userId)); }
+  try { if (!env.DB) throw new Error(); return reply({ ...(await readSavedConnections(env.DB, user.userId)), workspace: workspaceAvailability(env) }); }
   catch { return reply({ error: 'Saved connections could not be loaded. Retry before saving changes.' }, 503); }
 }
 async function mutate(request: Request, remove: boolean) {

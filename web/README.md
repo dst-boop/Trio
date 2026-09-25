@@ -48,6 +48,14 @@ Completed live answers show **Review & evidence**, derived from the contribution
 
 The same details appear with earlier questions and in Markdown exports, using each saved result rather than today's model settings. Counts describe the work performed; they are not confidence scores. Peer critiques and a shared cited brief do not independently verify every final claim, and model agreement does not guarantee accuracy or freedom from bias. Review cited sources and unresolved disagreements before relying on important claims.
 
+## Workspace-provided connections
+
+The deployment can include provider access so invitees never handle API keys. Set any of the Sites runtime secrets TRIO_WORKSPACE_OPENAI_KEY, TRIO_WORKSPACE_CLAUDE_KEY, and TRIO_WORKSPACE_GEMINI_KEY to a provider API key — the same secret manager as TRIO_CREDENTIAL_KEY, never source, build assets, or .openai/hosting.json. Signed-in users then see those providers marked **Included with Trio** in Connections and can ask live questions immediately; one configured provider is enough to start.
+
+Workspace keys never leave the server. The browser sends only the public reference `__TRIO_WORKSPACE_KEY__`; the authenticated worker substitutes the secret for requests pinned to the signed-in account, same-origin, and each provider's fixed endpoint, with redirects rejected as usual. The reference is refused as a saveable key and never appears in history, exports, or save receipts. Pasting a personal key (kept in the tab or saved to the account) overrides the included connection for that provider; deleting a saved key or clearing tab keys returns to the included connection. Access checks work on included connections without exposing the key.
+
+Usage on included connections bills the workspace owner's provider accounts, so keep the audience invite-only and watch provider spending. In-app quality checks still require the account's own saved keys because their calls are pinned to saved-key revisions.
+
 ## Provider access checks
 
 Connections checks the provider's model metadata endpoint: [OpenAI Models](https://developers.openai.com/api/reference/resources/models/methods/retrieve), [Claude Models](https://platform.claude.com/docs/en/api/models/retrieve), or [Gemini Models](https://ai.google.dev/api/models). It makes one GET request without generating text, sending prompts, or saving credentials. Only the selected key goes to its own fixed vendor endpoint; redirects are rejected. Checks require sign-in and a same-origin JSON request, with bounded input and response bodies, cancellation, a 15-second vendor timeout, and fixed errors that never expose vendor diagnostics.
@@ -68,7 +76,7 @@ The main screen places the latest answer above the composer, uses compact mode/m
 
 Sign in from the welcome page and open your workspace first.
 
-1. Open Connections and add API keys for the providers you want to use. Choose **Check access** to check each key and model before asking a question; one provider is enough to start.
+1. Open Connections. Providers marked **Included with Trio** are ready to use with no key of your own — skip to step 3 unless you prefer your own accounts. Otherwise add API keys for the providers you want to use. Choose **Check access** to check each connection and model before asking a question; one provider is enough to start.
 2. Choose **Save to account** for each key you want to keep, then turn Demo mode off. Saved keys load after signing in again; unsaved keys clear on reload. Use **Delete saved key** to remove one from Trio, or **Clear keys from this tab** to disconnect temporarily without deleting saved keys.
 3. Choose Council (drafts → reviews → synthesis), Deep Council (drafts → reviews → revisions → synthesis), Quick synthesis (drafts → synthesis), or Compare (drafts only).
 4. Ask your question. Optionally attach a text, Markdown, CSV, JSON, or code file under 60 KB, one PNG, JPEG, or WebP image, and one PDF. Image and PDF bytes together must be under 4 MB. Images must be no larger than 8,000 pixels on either side. The preview shows exactly which image is attached.
