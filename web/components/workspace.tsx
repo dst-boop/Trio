@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { QualityCheck } from '@/components/quality-check';
+import { WorkComparison } from '@/components/work-comparison';
 import { WorkflowBriefs } from '@/components/workflow-briefs';
 import { WorkPlanPanel } from '@/components/work-plan';
 import { WorkBoard } from '@/components/work-board';
@@ -73,6 +74,7 @@ function browserTimeZone(): string | undefined { try { return Intl.DateTimeForma
 
 export default function Home({ account }: { account?: { userId: string; displayName: string; email: string } }) {
   const [qualityOpen, setQualityOpen] = useState(false);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
   const [branchPoint, setBranchPoint] = useState<number | null>(null);
@@ -272,6 +274,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
         <NewSessionButton busy={busy} onRequest={() => requestNavigation({ type: 'new' })} />
         <div className="side-label">YOUR WORKSPACE</div>
         {account && <button className="side-nav" disabled={busy} onClick={() => setQualityOpen(true)}><GitCompareArrows size={17} />Quality check</button>}
+        {account && <button className="side-nav" disabled={busy} onClick={() => setComparisonOpen(true)}><GitCompareArrows size={17} />Compare on your work</button>}
         <button className="side-nav" disabled={busy} onClick={() => setWorkOpen(true)}><Check size={17} />Your work<span className="nav-count">{workSummary(sessions).open}</span></button>
         <button className="side-nav selected" onClick={() => promptRef.current?.focus()}><Layers3 size={17} /> Collective intelligence</button>
         <button className="side-nav" onClick={() => setSettings(true)}><Settings2 size={17} /> Model connections <span className="nav-count">{connected}/3</span></button>
@@ -320,6 +323,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
     </main>
     <DraftNavigation destination={draftDestination} onCancel={() => setDraftDestination(null)} onDiscard={() => { if (draftDestination) navigate(draftDestination); }} onFocus={() => promptRef.current?.focus()} />
     {account && <QualityCheck key={account.userId} accountId={account.userId} open={qualityOpen} onOpenChange={setQualityOpen} live={!demo} onConnections={() => { setQualityOpen(false); setSettings(true); }} />}
+    {account && <WorkComparison key={'comparison-'+account.userId} accountId={account.userId} open={comparisonOpen} onOpenChange={setComparisonOpen} live={!demo} onConnections={() => { setComparisonOpen(false); setSettings(true); }} />}
     <WorkBoard sessions={sessions} busy={busy} open={workOpen} onOpenChange={setWorkOpen} onSave={saveWork} onOpenSession={id => requestNavigation({ type: 'session', id })} />
     <SessionActionDialogs action={sessionAction} sessions={sessions} busy={busy} clearsDraft={hasDraft && sessionAction?.id === current} onClose={() => setSessionAction(null)} onRename={(id, title) => { if (busy) return; try { setSessions(renameSession(sessions, id, title)); setSessionAction(null); toast.success('Session renamed'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not rename this session.'); } }} onDelete={id => { if (busy) return; setSessions(prev => prev.filter(s => s.id !== id)); if (current === id) newSession(); setSessionAction(null); toast.success('Session deleted'); }} />
     {account && <PersonalMemory accountId={account.userId} open={memoryOpen} onOpenChange={setMemoryOpen} memory={personalMemory} connections={connections} sessionId={current} sessionSaved={cloud.status === "Saved to your account"} busy={busy} />}

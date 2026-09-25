@@ -75,9 +75,10 @@ recorded is a decision, an unrecorded one is drift.
 | Web research, attachments, audio, image generation | no | yes |
 | Personal memory, work briefs, action plans, value ledger | no | yes |
 | In-app quality evaluation | no | yes |
+| Blinded comparison on user-supplied work with saved human ratings | no | yes, separate from exact-answer checks |
 | Access control | shared `APP_PASSWORD` | invite-only accounts |
-| Provider keys | server-side `.env`, shared by every caller | per-account encrypted, resolved per request |
-| Saved history | SQLite; the unguessable link is the capability | per-account online history + V5 portable backups |
+| Provider keys | server-side `.env`, shared by every caller | per-account encrypted, resolved per request; optional workspace-provided fallback |
+| Saved history | SQLite; the unguessable link is the capability | per-account online history + V6 portable backups |
 | Deleting a conversation | `DELETE /api/conversations/<id>` | Delete session in the UI |
 | Wire format | SSE (`data:` frames, terminal `done`) | NDJSON |
 | No-key demo | `TRIO_MOCK=1`, generated fake answers | Demo mode, prepared labeled examples |

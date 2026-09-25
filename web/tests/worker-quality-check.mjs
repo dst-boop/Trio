@@ -39,7 +39,9 @@ try {
   assert.equal((await call(start())).status,409,'Only one active run per account');
   let run=one.run;
   assert.equal((await json(await call(undefined,'/api/quality?id='+run.id))).report.finishedAt,null,'An unfinished report must not invent a finish time');
-  const competing=await Promise.all([call({action:'step',id:run.id,step:0}),call({action:'step',id:run.id,step:0})]);await Promise.all(competing.map(json));assert.equal(attempts,3,'Concurrent requests must not duplicate a billed phase');
+  // Consume each response as it arrives. A losing lease returns immediately;
+  // do not leave its body unread while waiting for the winning phase to finish.
+  await Promise.all([call({action:'step',id:run.id,step:0}).then(json),call({action:'step',id:run.id,step:0}).then(json)]);assert.equal(attempts,3,'Concurrent requests must not duplicate a billed phase');
   run=(await json(await call(undefined,'/api/quality?id='+run.id))).run;assert.equal(run.completedSteps,1);
   await json(await call({action:'step',id:run.id,step:0}));assert.equal(attempts,3,'Replayed cursor cannot spend');
   assert.equal((await call({action:'step',id:run.id,step:1},'/api/quality','bob')).status,404);assert.equal((await call(undefined,'/api/quality?id='+run.id,'bob')).status,404);

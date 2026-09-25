@@ -48,3 +48,27 @@ export const qualityPhases = sqliteTable('quality_phases', {
   step: integer('step').notNull(),
   report: text('report').notNull(),
 }, t => [primaryKey({columns:[t.userId,t.runId,t.step]})]);
+
+export const workComparisonRuns = sqliteTable('work_comparison_runs', {
+  userId: text('user_id').notNull(),
+  id: text('id').notNull(),
+  status: text('status').notNull(),
+  config: text('config').notNull(),
+  startedAt: integer('started_at').notNull(),
+  deadline: integer('deadline').notNull(),
+  finishedAt: integer('finished_at'),
+  cursor: integer('cursor').notNull().default(0),
+  calls: integer('calls').notNull().default(0),
+  lease: text('lease'),
+  leaseUntil: integer('lease_until'),
+  blindSeed: text('blind_seed').notNull(),
+  ratings: text('ratings'),
+  ratedAt: integer('rated_at'),
+}, t => [primaryKey({columns:[t.userId,t.id]}), uniqueIndex('work_comparison_one_active_account').on(t.userId).where(sql`${t.status} = 'running' OR ${t.lease} IS NOT NULL`)]);
+
+export const workComparisonPhases = sqliteTable('work_comparison_phases', {
+  userId: text('user_id').notNull(),
+  runId: text('run_id').notNull(),
+  step: integer('step').notNull(),
+  report: text('report').notNull(),
+}, t => [primaryKey({columns:[t.userId,t.runId,t.step]})]);
