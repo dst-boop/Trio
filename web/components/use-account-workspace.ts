@@ -65,7 +65,7 @@ export function useAccountWorkspace(accountId: string | undefined, sessions: Ses
     window.addEventListener('beforeunload', warn); document.addEventListener('visibilitychange', hidden);
     return () => { window.removeEventListener('beforeunload', warn); document.removeEventListener('visibilitychange', hidden); };
   }, [enabled, flush]);
-  return { ready, status, error, conflict, reload: () => setTick(t => t + 1), retry: () => {
+  return { ready, status, error, conflict, revision: state.current.revision, reload: () => setTick(t => t + 1), retry: () => {
     try { state.current.pending = serializeSessions(sessions); }
     catch { setError('This workspace exceeds the save limit. Download a backup and remove older sessions.'); return; }
     state.current.blocked = false; setError(''); void flush();

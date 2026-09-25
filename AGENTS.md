@@ -75,6 +75,7 @@ recorded is a decision, an unrecorded one is drift.
 | Deep Council revision round | no | yes |
 | Web research, attachments, audio, image generation | no | yes |
 | Personal memory, work briefs, action plans, value ledger | no | yes |
+| Draft a checklist from a saved answer | no | one explicit provider call; review, use in editor, then save; no inferred completion |
 | In-app quality evaluation | no | yes |
 | Blinded comparison on user-supplied work with saved human ratings | no | yes, separate from exact-answer checks |
 | Access control | shared `APP_PASSWORD` | invite-only accounts |
