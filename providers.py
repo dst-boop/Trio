@@ -27,13 +27,29 @@ PRICES = {
     "gemini-3.8-flash": (0.75, 3.75),  # intro rate; $1.50/$7.50 from Jan 2027
 }
 
+# Anthropic prompt caching, as multiples of the model's input rate: writing an
+# entry costs more than sending the tokens plain, reading one costs far less.
+CACHE_WRITE_RATE = 1.25
+CACHE_READ_RATE = 0.10
 
-def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
-    """Estimated USD for one call, or None when the model has no price entry."""
+
+def estimate_cost(model: str, input_tokens: int, output_tokens: int,
+                  cache_write: int = 0, cache_read: int = 0) -> float | None:
+    """Estimated USD for one call, or None when the model has no price entry.
+
+    `input_tokens` counts every input token billed, cached ones included, so
+    the cached portions are taken back out here before their own rates apply.
+    """
     price = PRICES.get(model)
     if not price:
         return None
-    return (input_tokens * price[0] + output_tokens * price[1]) / 1_000_000
+    uncached = max(input_tokens - cache_write - cache_read, 0)
+    return (
+        uncached * price[0]
+        + cache_write * price[0] * CACHE_WRITE_RATE
+        + cache_read * price[0] * CACHE_READ_RATE
+        + output_tokens * price[1]
+    ) / 1_000_000
 
 
 class ProviderError(Exception):
@@ -102,17 +118,63 @@ async def _sse(client: httpx.AsyncClient, url: str, headers: dict, body: dict) -
 
 # --------------------------------------------------------------------------
 # Claude (Anthropic Messages API)
+#
+# Claude is the only one of the three without automatic prompt caching, so
+# Trio places the breakpoint itself. A cache write costs more than plain
+# input and only pays for itself when the same prefix is sent again, which
+# rules out the review and synthesis calls: their prompts are built fresh
+# every run (the drafts are shuffled) and never repeat. A draft call in a
+# thread that already has history does repeat - on the next turn, and on the
+# non-streaming retry after a broken stream - so that is where it goes.
 # --------------------------------------------------------------------------
+def _claude_messages(messages: list[Message]) -> list[Message]:
+    """Messages for Anthropic, with a cache breakpoint once a thread has history.
+
+    The marker goes on the final message, so the cached prefix is the system
+    prompt plus every earlier turn plus this question - the longest prefix the
+    next turn can read back. Short prompts simply never reach the model's
+    minimum cacheable length and are billed as ordinary input.
+
+    Returns a new list: `messages` is shared with the other two providers
+    drafting concurrently and must not be mutated.
+    """
+    if len(messages) < 2:
+        return messages
+    last = messages[-1]
+    cached = {"type": "text", "text": last["content"], "cache_control": {"type": "ephemeral"}}
+    return [*messages[:-1], {"role": last["role"], "content": [cached]}]
+
+
+def _claude_input_usage(u: dict, usage: dict | None) -> None:
+    """Record the input side of one Claude call.
+
+    `input_tokens` counts only what was neither read from nor written to the
+    cache, so all three are summed into `input`: a bill that shrank because
+    the cache absorbed the tokens would otherwise read as fewer tokens sent.
+    """
+    if usage is None:
+        return
+    write = u.get("cache_creation_input_tokens") or 0
+    read = u.get("cache_read_input_tokens") or 0
+    usage["input"] = (u.get("input_tokens") or 0) + write + read
+    if write:
+        usage["cache_write"] = write
+    if read:
+        usage["cache_read"] = read
+
+
 async def ask_claude(client, model, key, system: str, messages: list[Message], usage: dict | None = None) -> str:
     data = await _post(
         client,
         "https://api.anthropic.com/v1/messages",
         {"x-api-key": key, "anthropic-version": "2023-06-01"},
-        {"model": model, "max_tokens": _max_tokens(), "system": system, "messages": messages},
+        {"model": model, "max_tokens": _max_tokens(), "system": system,
+         "messages": _claude_messages(messages)},
     )
     if usage is not None:
         u = data.get("usage") or {}
-        usage.update(input=u.get("input_tokens") or 0, output=u.get("output_tokens") or 0)
+        _claude_input_usage(u, usage)
+        usage["output"] = u.get("output_tokens") or 0
     text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
     if not text.strip():
         raise ProviderError("No text returned. The response may be blocked or its output limit exhausted.")
@@ -125,7 +187,7 @@ async def stream_claude(client, model, key, system: str, messages: list[Message]
         "https://api.anthropic.com/v1/messages",
         {"x-api-key": key, "anthropic-version": "2023-06-01"},
         {"model": model, "max_tokens": _max_tokens(), "system": system,
-         "messages": messages, "stream": True},
+         "messages": _claude_messages(messages), "stream": True},
     )
     done = False
     async for data in events:
@@ -136,8 +198,7 @@ async def stream_claude(client, model, key, system: str, messages: list[Message]
             if delta.get("type") == "text_delta" and delta.get("text"):
                 yield delta["text"]
         elif kind == "message_start" and usage is not None:
-            u = (ev.get("message") or {}).get("usage") or {}
-            usage["input"] = u.get("input_tokens") or 0
+            _claude_input_usage((ev.get("message") or {}).get("usage") or {}, usage)
         elif kind == "message_delta" and usage is not None:
             u = ev.get("usage") or {}
             usage["output"] = u.get("output_tokens") or usage.get("output", 0)

@@ -13,12 +13,14 @@ import asyncio
 import hmac
 import json
 import os
+import time
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -37,8 +39,57 @@ STATIC = Path(__file__).parent / "static"
 RUN_SLOTS = asyncio.Semaphore(int(os.getenv("MAX_CONCURRENT_RUNS", "8")))
 
 
+class RateLimiter:
+    """Sliding-window cap on how often one caller may ask a question.
+
+    `MAX_CONCURRENT_RUNS` bounds what runs at once; this bounds how fast one
+    address can start runs at all, so a leaked password or an open instance
+    cannot burn credits at machine speed. It is deliberately a brake, not a
+    billing guarantee: the counters live in this process, so several server
+    instances each allow the limit separately.
+    """
+
+    def __init__(self, per_minute: int, window: float = 60.0):
+        self.per_minute, self.window = per_minute, window
+        self._hits: dict[str, deque[float]] = {}
+        self._lock = asyncio.Lock()
+
+    async def retry_after(self, caller: str) -> int:
+        """Seconds this caller must wait, or 0 when the request may proceed."""
+        if self.per_minute <= 0:  # disabled
+            return 0
+        async with self._lock:
+            now = time.monotonic()
+            for who, seen in list(self._hits.items()):  # idle callers must not accumulate
+                while seen and now - seen[0] >= self.window:
+                    seen.popleft()
+                if not seen:
+                    del self._hits[who]
+            seen = self._hits.setdefault(caller, deque())
+            if len(seen) >= self.per_minute:
+                return max(1, int(self.window - (now - seen[0])) + 1)
+            seen.append(now)
+            return 0
+
+
+def caller_address(request: Request) -> str:
+    """Who to count a question against.
+
+    Behind a proxy the socket address is the proxy's, so every caller shares
+    one counter until TRUST_PROXY_HEADER=1 opts into X-Forwarded-For. That
+    header is not trusted by default: anyone can send it, and an unverified
+    one lets a caller reset their own counter at will.
+    """
+    if os.getenv("TRUST_PROXY_HEADER") == "1":
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.limiter = RateLimiter(int(os.getenv("ASK_RATE_LIMIT_PER_MINUTE", "20")))
     app.state.conversations = ConversationStore(os.getenv("TRIO_DB", "./trio.db"))
     await asyncio.to_thread(app.state.conversations.initialize)
     # One shared connection pool for all outbound calls.
@@ -122,7 +173,12 @@ async def status(x_app_password: str | None = Header(default=None)):
 
 
 @app.post("/api/ask")
-async def ask(req: AskRequest, x_app_password: str | None = Header(default=None)):
+async def ask(req: AskRequest, request: Request, x_app_password: str | None = Header(default=None)):
+    # Counted before the password check, so a brute-force attempt is throttled too.
+    wait = await app.state.limiter.retry_after(caller_address(request))
+    if wait:
+        raise HTTPException(429, "Too many questions from this address. Try again shortly.",
+                            headers={"Retry-After": str(wait)})
     check_password(x_app_password)
     configured = {provider.key for provider in active_providers()}
     if req.models is not None and (len(set(req.models)) != len(req.models) or not set(req.models) <= configured):

@@ -70,6 +70,8 @@ see [.env.example](.env.example) for the full list.
 | `MAX_OUTPUT_TOKENS` | `4000` | Response length cap per model call |
 | `MODEL_TIMEOUT_SECONDS` | `240` | Per-call timeout |
 | `MAX_CONCURRENT_RUNS` | `8` | Simultaneous questions per server instance |
+| `ASK_RATE_LIMIT_PER_MINUTE` | `20` | Questions per minute from one address; `0` disables |
+| `TRUST_PROXY_HEADER` | off | `1` = read the caller's address from `X-Forwarded-For` |
 | `TRIO_DB` | `./trio.db` | SQLite file for saved conversations; use a persistent volume in containers |
 
 ## API
@@ -101,6 +103,24 @@ Consumers should ignore event types and fields they don't recognise. With
 
 `GET /api/status` reports which models are configured; `GET /healthz` is the
 health check. If `APP_PASSWORD` is set, send it as the `X-App-Password` header.
+
+`/api/ask` also caps how often one address may ask
+(`ASK_RATE_LIMIT_PER_MINUTE`, 20 by default), answering `429` with a
+`Retry-After` header once the cap is reached. The count is kept in the server
+process, so running several instances allows the limit on each one, and it is
+counted before the password check so guessing the password is throttled too.
+Behind a proxy every caller shares the proxy's address until you set
+`TRUST_PROXY_HEADER=1`; leave it off otherwise, because an unverified
+`X-Forwarded-For` is attacker-controlled and would defeat the limit entirely.
+
+Trio sets one Anthropic prompt-caching breakpoint on the last message of a
+Claude draft call once a conversation has history, so each later turn re-reads
+the earlier turns at the cached rate instead of the full input rate. First
+questions, reviews and syntheses are not cached: their prompts are never sent
+twice, and a cache write costs more than plain input. When a call uses the
+cache, its `usage` entry adds `cache_write` and `cache_read` token counts;
+`input` continues to count every input token billed, cached ones included, and
+`cost` prices the cached portions at their own rates.
 
 ## Saved conversations (Python app)
 
