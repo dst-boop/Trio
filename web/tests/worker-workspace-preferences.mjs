@@ -41,6 +41,8 @@ try {
   assert.equal(await db.prepare("SELECT revision FROM workspace_preferences WHERE user_id = 'new-account'").first(),null,'Invalid first write cannot create a default record');
   await db.prepare("INSERT INTO provider_credentials (user_id,provider,cipher,iv,model,enabled,revision,updated_at) VALUES ('disabled','gemini','fixture-cipher','fixture-iv','model',0,1,'now')").run();
   assert.equal((await (await call('GET',undefined,'disabled','disabled','https://trio.test','/included')).json()).lead,'openai','Disabled saved key remains disabled; included fallback only fills an empty connection');
+  await db.prepare("INSERT INTO provider_credentials (user_id,provider,cipher,iv,model,enabled,revision,updated_at) VALUES ('disabled-empty','gemini',NULL,NULL,'model',0,1,'now')").run();
+  assert.equal((await (await call('GET',undefined,'disabled-empty','disabled-empty','https://trio.test','/included')).json()).lead,'openai','An included key does not enable a disabled key-less connection');
   for (const body of [{...defaults,key:'synthetic-secret'}, {...defaults,accountId:'bob'}, {...defaults,mode:'bad'}, {...defaults,revision:-1}]) assert.equal((await call('PUT',body)).status,400);
   const oversized = await call('PUT',{...defaults,junk:'x'.repeat(2000)}); assert.equal(oversized.status,413); assert.ok(!(await oversized.text()).includes('xxx'));
   const first = {...defaults,demo:false,mode:'fast',lead:'claude'};
