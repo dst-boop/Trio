@@ -39,7 +39,10 @@ test('instructions survive research, stream recovery and synthesis failover', as
     calls++; const id = String(url).includes('openai') ? 'openai' : 'claude';
     const body = JSON.parse(init!.body as string), system = body.instructions ?? body.system;
     const parsed = JSON.parse(body.input ?? body.messages[0].content); assert.equal((parsed.task ?? parsed).session_instructions, instructions);
-    if (body.tools) return Response.json({ status: 'completed', output: [{ type: 'web_search_call', status: 'completed' }, { content: [{ type: 'output_text', text: 'Evidence', annotations: [{ type: 'url_citation', url: 'https://example.org', title: 'Evidence' }] }] }] });
+    if (body.tools) {
+      assert.ok(!system.includes('Answer format:'), 'Research remains a cited evidence brief, not a constrained final answer');
+      return Response.json({ status: 'completed', output: [{ type: 'web_search_call', status: 'completed' }, { content: [{ type: 'output_text', text: 'Evidence', annotations: [{ type: 'url_citation', url: 'https://example.org', title: 'Evidence' }] }] }] });
+    }
     if (!broken && id === 'openai') { broken = true; return new Response('data: {"type":"response.output_text.delta","delta":"Partial"}\n\n', { headers: { 'content-type': 'text/event-stream' } }); }
     if (system.startsWith('Write the final') && id === 'claude') return new Response('{}', { status: 429 });
     return response(id);

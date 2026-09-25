@@ -2,6 +2,8 @@
 
 A multi-user online workspace for OpenAI, Claude, and Gemini. Ask once, get independent perspectives, review disagreements, and combine the strongest ideas.
 
+Explicit answer formats (such as JSON only, exact labels, or CSV) take precedence over default Markdown, next steps, and correction summaries in drafts, revisions, and synthesis. Reviews still explain factual and format problems; web research still produces an evidence brief. This is prompt guidance, not schema-enforced output: nonconforming model responses stay visible, with no automatic rewriting or extra repair calls. Quality checks retain their strict scorer. Cases used to tune these prompts are regression checks, not independent evidence of improved accuracy.
+
 ## Guided work and recorded results
 
 **Put Trio to work** prepares an editable brief for a client meeting, a workday, or a growth experiment. Existing question text is preserved in the brief's notes; oversized notes block preparation instead of truncating them. Applying a brief explicitly switches to Live mode without making a model call. Current attachments, instructions, and answer-mode selection remain in place. Review the question and choose Ask Trio to submit it.
