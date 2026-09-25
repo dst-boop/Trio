@@ -98,6 +98,15 @@ try {
   const lost=(await json(await call(start()))).run;await db.prepare("UPDATE work_comparison_runs SET lease='lost',lease_until=?,calls=1 WHERE user_id='alice' AND id=?").bind(Date.now()-1,lost.id).run();const lostBefore=attempts;assert.equal((await step(lost)).status,'interrupted');assert.equal(attempts,lostBefore,'Lost phases are not replayed');
   const expired=(await json(await call(start()))).run;await db.prepare("UPDATE work_comparison_runs SET deadline=? WHERE user_id='alice' AND id=?").bind(Date.now()-1,expired.id).run();assert.equal((await step(expired)).status,'timeout');assert.equal(attempts,lostBefore);
   const pinned=(await json(await call(start()))).run;await db.prepare("UPDATE provider_credentials SET revision=revision+1 WHERE user_id='alice' AND provider='claude'").run();assert.equal((await step(pinned)).status,'interrupted');assert.equal(attempts,lostBefore);
+  assert.match((await report(pinned)).phases[0].notes.join(' '),/Claude.*Reload Connections/,'A changed-key preparation failure retains an actionable provider-specific diagnostic');
+  // A damaged, unselected saved key must fail closed for redaction, but the
+  // already-paid output and a safe repair hint survive for the account owner.
+  let damaged=(await json(await call(start(randomUUID(),{providers:['openai','claude']})))).run;damaged=await step(damaged);
+  const originalRow=await db.prepare("SELECT cipher,iv FROM provider_credentials WHERE user_id='alice' AND provider='gemini'").first();
+  await db.prepare("UPDATE provider_credentials SET cipher='invalid-fixture-ciphertext' WHERE user_id='alice' AND provider='gemini'").run();
+  const damagedBefore=attempts;damaged=await step(damaged);assert.equal(attempts,damagedBefore);assert.equal(damaged.status,'interrupted');
+  const damagedReport=await report(damaged);assert.equal(damagedReport.phases[0].state,'complete');assert.equal(damagedReport.phases[1].state,'failed');assert.match(damagedReport.phases[1].notes.join(' '),/Gemini.*Reload Connections/);assert.ok(!JSON.stringify(damagedReport).includes('invalid-fixture-ciphertext'));noSecrets(damagedReport);
+  await db.prepare("UPDATE provider_credentials SET cipher=?,iv=? WHERE user_id='alice' AND provider='gemini'").bind(originalRow.cipher,originalRow.iv).run();
   // Fixed seeds exercise both label assignments deterministically. A constant
   // single=A implementation must fail without relying on random test luck.
   const assignments=[];
@@ -111,6 +120,10 @@ try {
     assert.equal(receipt.run.calls,6,'Two-provider comparisons make six nominal calls');
   }
   assert.deepEqual(assignments,['single','council']);responses='normal';
+  const revision=(await db.prepare("SELECT revision FROM provider_credentials WHERE user_id='alice' AND provider='gemini'").first()).revision;
+  assert.equal((await mf.dispatchFetch('https://trio.test/api/connections',{method:'PUT',headers:{'fixture-user':'alice','X-Trio-Account':'alice',Origin:'https://trio.test','Content-Type':'application/json'},body:JSON.stringify({provider:'gemini',key:'x',model:models.gemini,enabled:false,revision})})).status,200);
+  const placeholder=await call({...start(randomUUID(),{providers:['openai','claude']}),task:{...task,context:'Example notes'}});assert.equal(placeholder.status,409);assert.match((await placeholder.json()).error,/Gemini.*placeholder key/,'The error identifies a disabled placeholder connection without echoing its value');
+  assert.equal((await mf.dispatchFetch('https://trio.test/api/connections',{method:'PUT',headers:{'fixture-user':'alice','X-Trio-Account':'alice',Origin:'https://trio.test','Content-Type':'application/json'},body:JSON.stringify({provider:'gemini',key:keys.gemini,model:models.gemini,enabled:true,revision:revision+1})})).status,200);
   // Viewing/rating saved results never calls a provider, including after keys
   // are disabled or deleted. Ratings do not require the run's pinned revision.
   const disabled=await complete();await db.prepare("UPDATE provider_credentials SET enabled=0,revision=revision+1 WHERE user_id='alice'").run();const disabledBefore=attempts;assert.equal((await json(await call({action:'rate',id:disabled.id,ratings:grades}))).view,'revealed');assert.equal(attempts,disabledBefore);

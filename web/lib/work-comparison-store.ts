@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { orchestrate } from './orchestrate.ts';
 import { redactReport } from '../evaluation/runner.ts';
-import { freshConnections, providers, type ProviderId, type Usage } from './trio.ts';
+import { freshConnections, providers, type Connections, type ProviderId, type Usage } from './trio.ts';
 import { readSavedConnections, resolveCredential } from './credential-store.ts';
 import { savedKeyReference } from './saved-connections.ts';
 import { blindComparisonText, comparisonAccounting, comparisonLimitations, comparisonSettings, type ComparisonTask, type ComparisonSettings, type ComparisonRatings, type ComparisonPhase, type AnswerLabel } from './work-comparison.ts';
@@ -36,10 +36,20 @@ async function resolveConnections(db:D1Database,master:string|undefined,request:
   const saved=(await readSavedConnections(db,user)).connections;
   for(const p of providers) {
     connections[p.id]={key:'',model:config.models[p.id]??p.model,enabled:config.settings.providers.includes(p.id)};
-    if(connections[p.id].enabled)connections[p.id].key=await resolveCredential(db,master,request,user,p.id,savedKeyReference,config.revisions[p.id]);
-    else if(saved.some(c=>c.provider===p.id&&c.saved))connections[p.id].key=await resolveCredential(db,master,request,user,p.id,savedKeyReference);
+    try {
+      if(connections[p.id].enabled)connections[p.id].key=await resolveCredential(db,master,request,user,p.id,savedKeyReference,config.revisions[p.id]);
+      else if(saved.some(c=>c.provider===p.id&&c.saved))connections[p.id].key=await resolveCredential(db,master,request,user,p.id,savedKeyReference);
+    } catch { throw new ComparisonError(`The saved ${p.name} connection changed or could not be read. Reload Connections and replace or remove it before starting another comparison. Disabled saved keys are also checked to protect your data.`); }
   }
   return connections;
+}
+function checkCredentialText(config:Config,connections:Connections) {
+  const serialized=JSON.stringify(config);
+  const matching=providers.filter(p=>{
+    const only=freshConnections();only[p.id]=connections[p.id];
+    return JSON.stringify(redactReport(config,only))!==serialized;
+  }).map(p=>p.name);
+  if(matching.length)throw new ComparisonError(`The task or model settings contain text matching your saved ${matching.join(', ')} connection. Remove credential text, or replace/remove a placeholder key in Connections. Disabled and unselected saved keys are checked too.`);
 }
 export async function listComparisons(db:D1Database,user:string) {
   await expire(db,user);
@@ -55,7 +65,7 @@ export async function startComparison(db:D1Database,master:string|undefined,requ
   if(selected.some(c=>!c?.saved||!c.enabled))throw new ComparisonError('Save and enable each selected provider in Connections first.');
   const config:Config={engineVersion:1,task,settings,models:Object.fromEntries(selected.map(c=>[c.provider,c.model])),revisions:Object.fromEntries(selected.map(c=>[c.provider,c.revision]))};
   const connections=await resolveConnections(db,master,request,user,config);
-  if(JSON.stringify(redactReport(config,connections))!==JSON.stringify(config))throw new ComparisonError('Remove credential text from the task and check your saved model IDs.');
+  checkCredentialText(config,connections);
   const now=Date.now();
   await db.prepare("INSERT INTO work_comparison_runs (user_id,id,status,config,started_at,deadline,blind_seed) VALUES (?,?,'running',?,?,?,?) ON CONFLICT DO NOTHING").bind(user,id,JSON.stringify(config),now,now+settings.timeoutSeconds*1000,crypto.randomUUID()).run();
   const run=await read(db,user,id);
@@ -79,7 +89,7 @@ export async function stepComparison(db:D1Database,master:string|undefined,reque
     const connections=await resolveConnections(db,master,request,user,config);
     // Unselected keys remain disabled and exist here only for redaction. A
     // pasted key must not become task data sent to another selected provider.
-    if(JSON.stringify(redactReport(config,connections))!==JSON.stringify(config))throw new ComparisonError('Remove credential text from the task.');
+    checkCredentialText(config,connections);
     const stop=new AbortController();
     const signal=AbortSignal.any([stop.signal,AbortSignal.timeout(Math.max(1,Math.min(phaseLimitMs,run.deadline-Date.now())))]);
     const guarded:typeof fetch=async(url,init)=>{
@@ -121,8 +131,15 @@ export async function stepComparison(db:D1Database,master:string|undefined,reque
       db.prepare('INSERT INTO work_comparison_phases (user_id,run_id,step,report) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM work_comparison_runs WHERE user_id = ? AND id = ? AND lease = ?) ON CONFLICT DO NOTHING').bind(user,id,step,JSON.stringify(redactReport(phase,connections)),user,id,token),
       db.prepare("UPDATE work_comparison_runs SET cursor = cursor + 1, status = CASE WHEN status = 'cancelled' THEN status ELSE ? END, finished_at = CASE WHEN status = 'cancelled' THEN finished_at WHEN ? = 'running' THEN NULL ELSE ? END, lease = NULL, lease_until = NULL WHERE user_id = ? AND id = ? AND lease = ?").bind(outcome,outcome,Date.now(),user,id,token),
     ]);
-  } catch {
-    await db.prepare("UPDATE work_comparison_runs SET status = CASE WHEN status = 'cancelled' THEN status ELSE 'interrupted' END, finished_at = COALESCE(finished_at, ?), lease = NULL, lease_until = NULL WHERE user_id = ? AND id = ? AND lease = ?").bind(Date.now(),user,id,token).run();
+  } catch(error) {
+    const latest=await required(db,user,id);
+    const failure:ComparisonPhase={arm:step===0?'single':'council',state:'failed',answer:'',elapsedMs:Date.now()-started,httpCalls:latest.calls-run.calls,degraded:true,notes:[error instanceof ComparisonError?error.message:'This step could not be confirmed. Check Connections before starting another comparison. Already-reserved calls may still be billed; this step will not be replayed automatically.']};
+    // Retain a fixed, actionable preparation/storage diagnostic across reloads.
+    // Raw crypto, database and upstream error text never enters a report.
+    await db.batch([
+      db.prepare('INSERT INTO work_comparison_phases (user_id,run_id,step,report) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM work_comparison_runs WHERE user_id = ? AND id = ? AND lease = ?) ON CONFLICT DO NOTHING').bind(user,id,step,JSON.stringify(failure),user,id,token),
+      db.prepare("UPDATE work_comparison_runs SET cursor = cursor + 1, status = CASE WHEN status = 'cancelled' THEN status ELSE 'interrupted' END, finished_at = COALESCE(finished_at, ?), lease = NULL, lease_until = NULL WHERE user_id = ? AND id = ? AND lease = ?").bind(Date.now(),user,id,token),
+    ]);
   }
   return publicRun(await required(db,user,id));
 }
