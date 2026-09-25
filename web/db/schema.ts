@@ -16,6 +16,13 @@ export const personalMemory = sqliteTable('personal_memory', {
   enabled: integer('enabled').notNull().default(0),
   notes: text('notes').notNull().default(''),
 });
+export const workspacePreferences = sqliteTable('workspace_preferences', {
+  userId: text('user_id').primaryKey(),
+  revision: integer('revision').notNull().default(0),
+  demo: integer('demo').notNull().default(1),
+  mode: text('mode').notNull().default('single'),
+  lead: text('lead').notNull().default('openai'),
+});
 export const providerCredentials = sqliteTable('provider_credentials', {
   userId: text('user_id').notNull(),
   provider: text('provider').notNull(),

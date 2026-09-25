@@ -71,6 +71,7 @@ recorded is a decision, an unrecorded one is drift.
 | Capability | Python root | Hosted `web/` |
 | --- | --- | --- |
 | Answer modes | Council, Quick (`thorough: false`), single model via `models` | Single, Quick synthesis, Council, Deep Council, Compare |
+| Remembered mode and preferred model | no | private account preferences; first-use Single answer, no automatic paid runs |
 | Deep Council revision round | no | yes |
 | Web research, attachments, audio, image generation | no | yes |
 | Personal memory, work briefs, action plans, value ledger | no | yes |
