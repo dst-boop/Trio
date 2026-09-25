@@ -156,7 +156,7 @@ those fields directly. A save failure never masquerades as a saved link.
 ## Deploy
 
 A `Dockerfile` is included and respects `PORT`, so Railway, Cloud Run, Fly.io
-and similar all work as-is. Two things before you expose it to the internet:
+and similar all work as-is. Three things before you expose it to the internet:
 
 1. **Set `APP_PASSWORD`** — anyone who can reach `/api/ask` is spending your
    API credits.
@@ -166,6 +166,41 @@ and similar all work as-is. Two things before you expose it to the internet:
    Cloud Run container filesystems can be ephemeral; an unmounted database may
    disappear on restart or redeploy. Keep SQLite on one server instance with a
    supported local volume; use a shared database before scaling across hosts.
+
+### Railway, step by step
+
+1. **New Project → Deploy from GitHub repo**, and pick your fork. Railway
+   finds the `Dockerfile` at the repository root and builds it; there is no
+   build command to configure. (This deploys the Python app at the root. The
+   hosted `web/` workspace is a separate deployment — see [web/](web/README.md).)
+2. **Variables** — add `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
+   `GEMINI_API_KEY` for the vendors you want, plus `APP_PASSWORD`. Do not set
+   `PORT`: Railway injects it, and the `Dockerfile` already binds `0.0.0.0` on it.
+3. **Add a volume** (`⌘K` → Volume, or right-click the canvas) attached to the
+   service, with mount path **`/app/data`**. Then set `TRIO_DB=/app/data/trio.db`.
+   The mount path must be absolute; the image's working directory is `/app`, so
+   a relative `./trio.db` would land in the container filesystem and be lost on
+   the next deploy. Volumes mount when the container *starts*, so nothing
+   written during the build persists.
+4. **Settings → Networking → Generate Domain** for a public URL, and set the
+   service's **healthcheck path** to `/healthz`. Railway waits for a 2xx there
+   before switching traffic to a new deployment, so a broken build keeps
+   serving the previous one instead of taking the app down.
+5. Confirm it worked: open `/api/status` with your `X-App-Password` header and
+   check the models you configured are listed. Then ask a question, reload the
+   `/c/<id>` link, and redeploy — the conversation should still open. If it
+   404s after the redeploy, `TRIO_DB` is not on the volume.
+
+Spend control: `APP_PASSWORD` keeps strangers out, `ASK_RATE_LIMIT_PER_MINUTE`
+caps how fast one address can ask, and `MAX_CONCURRENT_RUNS` caps how many
+questions run at once. Railway terminates TLS in front of your container, so
+set `TRUST_PROXY_HEADER=1` there — without it every caller is counted under
+the proxy's address and shares one rate-limit quota.
+
+Scaling past one instance needs a different database: SQLite on a Railway
+volume is attached to a single service instance, and replicas would each get
+their own. Volume backups are a Railway feature — turn them on if the saved
+conversations matter.
 
 ## Tests
 
