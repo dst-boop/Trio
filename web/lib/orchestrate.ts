@@ -68,7 +68,7 @@ export async function callProvider(id: ProviderId, key: string, model: string, i
   try { return readProviderText(id, data); } catch (error) { throw new Error(`${id}: ${(error as Error).message}`); }
 }
 
-export async function orchestrate(input: Input, emit: (event: RunEvent) => void, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<Result> {
+export async function orchestrate(input: Input, emit: (event: RunEvent) => void, signal: AbortSignal, fetcher: typeof fetch = fetch, taskTime?: Date): Promise<Result> {
   const started = Date.now();
   const active = providers.filter(p => input.connections[p.id]?.enabled && input.connections[p.id]?.key.trim());
   const result: Result = { ...(input.memory?.trim() ? { memory: input.memory.trim() } : {}), drafts: {}, reviews: {}, errors: [], answer: '', seconds: 0, demo: false };
@@ -77,7 +77,10 @@ export async function orchestrate(input: Input, emit: (event: RunEvent) => void,
   if (input.reviewAnswer && (input.mode !== 'council' || active.length < 2)) throw new Error('Team review requires Council and at least two connected models.');
   if (input.reviewAnswer) result.reviewedAnswer = input.reviewAnswer;
   const researcher = input.webResearch ? selectResearchProvider(input.connections, input.researchProvider) : undefined;
-  const currentTime = currentTimeContext(input.timeZone, new Date(started));
+  // A server-owned comparison may freeze the task clock across separately
+  // scheduled arms. Normal requests capture it here once as before. The API
+  // payload never supplies taskTime; this is an internal execution dependency.
+  const currentTime = currentTimeContext(input.timeZone, taskTime ?? new Date(started));
   let context = JSON.stringify({ current_time: currentTime, conversation: input.history ?? [], reference_text: input.context ?? '', personal_memory: input.memory?.trim() ?? '', session_instructions: input.instructions?.trim() ?? '', question: input.question });
   const usage: Partial<Record<ProviderId, ProviderUsage>> = {};
   const ask = async (id: ProviderId, phase: Phase, system: string, prompt: string) => {
