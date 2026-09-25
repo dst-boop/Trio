@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { orchestrate } from '../lib/orchestrate.ts';
 import { freshConnections, type Mode, type ProviderId, type RunEvent } from '../lib/trio.ts';
 import { scoreAnswer } from '../evaluation/cases.ts';
+import { representativeCases } from '../evaluation/representative-cases.ts';
 
 const question = 'Use reference_text to answer. Return only {"answer":number}, without commentary.';
 const instructions = 'Normally use a Markdown table.';
@@ -20,7 +21,7 @@ function response(id: ProviderId, text: string) {
   return Response.json(id === 'openai' ? { output: [{ content: [{ type: 'output_text', text }] }] } : id === 'claude' ? { content: [{ type: 'text', text }] } : { steps: [{ type: 'model_output', content: [{ type: 'text', text }] }] });
 }
 
-test('answer stages prioritize the current format while reviews can explain violations in every mode', async () => {
+test('every mode sends format-priority instructions only to answer stages without changing output or call counts', async () => {
   for (const [mode, expectedCalls] of Object.entries({ single: 1, compare: 3, fast: 4, council: 7, deep: 10 })) {
     let calls = 0;
     const fetcher = (async (url, init) => {
@@ -73,8 +74,10 @@ test('stream recovery, synthesis failover, and revised-answer fallback retain th
 });
 
 test('observed label-case and trailing-prose failures remain visible to the strict evaluator', () => {
-  assert.deepEqual(scoreAnswer('{"answer":"No"}', 'no'), { status: 'incorrect', value: 'No' });
-  assert.equal(scoreAnswer('{"answer":"no"}', 'no').status, 'pass');
-  assert.equal(scoreAnswer('{"answer":5}\n\nNote: the reference corrects the premise.', 5).status, 'format_error');
-  assert.equal(scoreAnswer('{"answer":5}', 5).status, 'pass');
+  const label = representativeCases.find(c => c.id === 'sunk-cost')!;
+  const reference = representativeCases.find(c => c.id === 'false-premise-reference')!;
+  assert.deepEqual(scoreAnswer('{"answer":"No"}', label.expected), { status: 'incorrect', value: 'No' });
+  assert.equal(scoreAnswer('{"answer":"no"}', label.expected).status, 'pass');
+  assert.equal(scoreAnswer('{"answer":5}\n\nNote: the reference corrects the premise.', reference.expected).status, 'format_error');
+  assert.equal(scoreAnswer('{"answer":5}', reference.expected).status, 'pass');
 });

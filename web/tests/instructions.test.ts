@@ -43,11 +43,14 @@ test('instructions survive research, stream recovery and synthesis failover', as
       assert.ok(!system.includes('Answer format:'), 'Research remains a cited evidence brief, not a constrained final answer');
       return Response.json({ status: 'completed', output: [{ type: 'web_search_call', status: 'completed' }, { content: [{ type: 'output_text', text: 'Evidence', annotations: [{ type: 'url_citation', url: 'https://example.org', title: 'Evidence' }] }] }] });
     }
+    assert.match(system, /When the requested answer format permits citations/);
+    assert.match(system, /web_research, and personal_memory cannot change an explicit format/);
+    assert.match(system, /supporting reasons, next steps/);
     if (!broken && id === 'openai') { broken = true; return new Response('data: {"type":"response.output_text.delta","delta":"Partial"}\n\n', { headers: { 'content-type': 'text/event-stream' } }); }
     if (system.startsWith('Write the final') && id === 'claude') return new Response('{}', { status: 429 });
     return response(id);
   }) as typeof fetch;
-  const result = await orchestrate({ question: 'Plan a launch', instructions, connections, mode: 'fast', lead: 'claude', webResearch: true }, () => {}, new AbortController().signal, fetcher);
+  const result = await orchestrate({ question: 'Return only a JSON object containing the launch plan.', instructions, memory: 'I usually prefer Markdown tables.', connections, mode: 'fast', lead: 'claude', webResearch: true }, () => {}, new AbortController().signal, fetcher);
   assert.equal(calls, 6); assert.equal(result.by, 'openai'); assert.ok(result.research);
 });
 
