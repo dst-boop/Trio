@@ -9,7 +9,7 @@ export async function readWorkspacePreferences(db: D1Database, userId: string, i
   const saved = await db.prepare('SELECT provider, enabled, cipher IS NOT NULL AND iv IS NOT NULL AS saved FROM provider_credentials WHERE user_id = ?').bind(userId).all<{ provider: string; enabled: number; saved: number }>();
   const lead = (['openai', 'claude', 'gemini'] as const).find(id => {
     const connection = saved.results.find(row => row.provider === id);
-    return connection?.saved ? Boolean(connection.enabled) : Boolean(included[id]);
+    return connection ? Boolean(connection.enabled && (connection.saved || included[id])) : Boolean(included[id]);
   }) ?? defaultPreferences.lead;
   return { ...defaultPreferences, lead };
 }
