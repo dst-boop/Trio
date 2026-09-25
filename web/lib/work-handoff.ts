@@ -22,7 +22,7 @@ export function visibleActionsMarkdown(items: WorkActionItem[], today: string, f
   if (!items.length) throw new Error('There are no actions in this view to copy.');
   return [
     '# My Trio actions', `Snapshot date: ${today}`, `View: ${filterNames[filter]}${search.trim() ? ` · Search: ${inline(search.trim())}` : ''}`,
-    'Planning dates are not reminders or confirmed deadlines. Completion is user-reported. This export does not execute tasks or record outcomes. Conversation labels may be shortened; the original plans remain in Trio.',
+    'Planning dates are not reminders or confirmed deadlines. Completion is user-reported. This export does not execute tasks or record outcomes. Conversation labels can contain the opening question and may be shortened; the original plans remain in Trio.',
     ...items.map(item => [
       `- [${item.action.completedAt ? 'x' : ' '}] ${inline(item.action.title)}`,
       `  - ${actionGroupLabels[item.group]}${item.action.due ? ` · Planned: ${item.action.due}` : ''}`,

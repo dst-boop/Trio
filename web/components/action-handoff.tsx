@@ -7,7 +7,7 @@ import { actionSourceFingerprint, prepareDayBrief, visibleActionsMarkdown, type 
 import type { ActionFilter } from '@/lib/work-action-view';
 
 const defaultGoal = 'Choose the most useful next steps for my workday';
-export function ActionHandoff({ items, today, filter, search, busy, hasDraft, onPrepare }: { items: WorkActionItem[]; today: string; filter: ActionFilter; search: string; busy: boolean; hasDraft: boolean; onPrepare: (prompt: string) => boolean }) {
+export function ActionHandoff({ items, today, filter, search, busy, hasDraft, onPrepare, onFocusFallback }: { items: WorkActionItem[]; today: string; filter: ActionFilter; search: string; busy: boolean; hasDraft: boolean; onPrepare: (prompt: string) => boolean; onFocusFallback: () => void }) {
   const [snapshot, setSnapshot] = useState<{ items: WorkActionItem[]; fingerprint: string; date: string } | null>(null);
   const [goal, setGoal] = useState(defaultGoal), [date, setDate] = useState(today), [minutes, setMinutes] = useState(''), [constraints, setConstraints] = useState('');
   const [discard, setDiscard] = useState(false), [error, setError] = useState('');
@@ -31,6 +31,7 @@ export function ActionHandoff({ items, today, filter, search, busy, hasDraft, on
     applying.current = false; setGoal(defaultGoal); setDate(today); setMinutes(''); setConstraints(''); setError(''); setDiscard(false);
     setSnapshot({ items: structuredClone(items), fingerprint: actionSourceFingerprint(items), date: today });
   }
+  function restoreTrigger() { if (trigger.current && !trigger.current.disabled) trigger.current.focus(); else onFocusFallback(); }
   function close() { if (dirty) setDiscard(true); else setSnapshot(null); }
   function prepare() {
     if (busy || stale || !preview) return;
@@ -50,7 +51,7 @@ export function ActionHandoff({ items, today, filter, search, busy, hasDraft, on
   }
   return <>
     <div className="action-handoff"><div className="action-handoff-buttons" role="group" aria-label="Action handoff" aria-describedby={helpId}><button className="subtle-button" disabled={!items.length} onClick={() => { try { void copy(visibleActionsMarkdown(items, today, filter, search)); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not copy these actions.'); } }}>Copy visible actions</button><button className="subtle-button" disabled={!items.length} onClick={download}>Download checklist</button><button ref={trigger} aria-describedby={helpId} className="subtle-button" disabled={!eligible || busy} onClick={start}>Prepare a day plan</button></div><small id={helpId}>Copying and preparation make no AI call. A day-plan brief can include 1–20 open actions from this view; narrow your filter or search when needed.</small></div>
-    <Dialog open={snapshot !== null} onOpenChange={open => { if (!open) close(); }}><DialogContent className="work-dialog" onCloseAutoFocus={event => { event.preventDefault(); if (!applying.current) trigger.current?.focus(); }}><DialogTitle>Plan from your saved actions</DialogTitle><DialogDescription>Prepare an editable question from the {snapshot?.items.length ?? 0} open actions you selected through this view. Nothing is sent to a model until you choose Ask Trio.</DialogDescription>
+    <Dialog open={snapshot !== null} onOpenChange={open => { if (!open) close(); }}><DialogContent className="work-dialog" onCloseAutoFocus={event => { event.preventDefault(); if (!applying.current) restoreTrigger(); }}><DialogTitle>Plan from your saved actions</DialogTitle><DialogDescription>Prepare an editable question from the {snapshot?.items.length ?? 0} open actions you selected through this view. Nothing is sent to a model until you choose Ask Trio.</DialogDescription>
       <form onSubmit={event => event.preventDefault()} onChangeCapture={() => setError('')}>
         <label>Desired result<input required maxLength={300} value={goal} onChange={event => setGoal(event.target.value)} /></label>
         <div className="work-time-fields"><label>Planning date<input type="date" required value={date} onChange={event => setDate(event.target.value)} /></label><label>Available minutes (optional)<input type="number" min={1} max={1440} step={1} value={minutes} onChange={event => setMinutes(event.target.value)} /></label></div>
@@ -58,11 +59,11 @@ export function ActionHandoff({ items, today, filter, search, busy, hasDraft, on
         <details className="day-brief-preview"><summary>Review the prepared question{preview ? ` · ${preview.length.toLocaleString()} characters` : ''}</summary>{preview && <textarea aria-label="Prepared daily-planning question" readOnly rows={10} value={preview} />}</details>
         {stale && <p role="alert">Your visible work changed while this brief was open. Close and reopen it to include the latest actions, or copy the original snapshot to keep your edits. Your source plans have not been changed.</p>}
         {previewError && <p role="alert">{previewError}</p>}{error && <p role="alert">{error}</p>}
-        <p className="muted">This starts a new conversation in Live mode. Your answer mode, model choices and personal-memory setting still apply. Source conversation labels may be shortened; action wording, goals and planning dates are kept.</p>
+        <p className="muted">This starts a new conversation in Live mode. Your answer mode, model choices and personal-memory setting still apply. Conversation labels can contain the opening question and may be shortened. Action wording, goals and planning dates are kept.</p>
         {hasDraft && <p className="day-brief-replacement">Your current unsent question, attachments and unsaved new-conversation instructions will be cleared if you replace the draft. Saved conversations and action plans stay intact. Copy this brief instead to keep your current draft.</p>}
         <div className="dialog-actions"><button ref={cancel} type="button" className="subtle-button" onClick={close}>Cancel</button><button type="button" className="subtle-button" disabled={!preview} onClick={() => void copy(preview)}>{stale ? 'Copy original snapshot' : 'Copy brief'}</button><button type="button" onClick={prepare} className="run-button" disabled={busy || stale || !preview}>{hasDraft ? 'Replace draft with day plan' : 'Use in new Live conversation'}</button></div>
       </form>
     </DialogContent></Dialog>
-    <AlertDialog open={discard} onOpenChange={setDiscard}><AlertDialogContent onCloseAutoFocus={event => { event.preventDefault(); (snapshot ? cancel.current : trigger.current)?.focus(); }}><AlertDialogTitle>Discard this planning brief?</AlertDialogTitle><AlertDialogDescription>Your edits in this brief will be discarded. Your current question and saved plans stay unchanged.</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep editing</AlertDialogCancel><AlertDialogAction onClick={() => { setDiscard(false); setSnapshot(null); }}>Discard brief</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <AlertDialog open={discard} onOpenChange={setDiscard}><AlertDialogContent onCloseAutoFocus={event => { event.preventDefault(); if (snapshot) cancel.current?.focus(); else restoreTrigger(); }}><AlertDialogTitle>Discard this planning brief?</AlertDialogTitle><AlertDialogDescription>Your edits in this brief will be discarded. Your current question and saved plans stay unchanged.</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep editing</AlertDialogCancel><AlertDialogAction onClick={() => { setDiscard(false); setSnapshot(null); }}>Discard brief</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>;
 }

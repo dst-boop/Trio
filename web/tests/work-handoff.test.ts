@@ -53,6 +53,15 @@ test('optional time stays unknown and source labels shorten without damaging Uni
   assert.match(prepareDayBrief([item], settings), /without inventing my available time/);
 });
 
+test('auto-derived conversation labels may include the opening question but are explicitly bounded', () => {
+  const opening = 'Opening question '.repeat(20), item = row({ sessionTitle: opening });
+  const brief = prepareDayBrief([item], settings), markdown = visibleActionsMarkdown([item], settings.date, 'open');
+  assert.equal(dataOf(brief).actions[0].source.conversation_label, opening.slice(0, 160) + '…');
+  assert.ok(markdown.includes(opening.slice(0, 160) + '…'));
+  assert.ok(!brief.includes(opening)); assert.ok(!markdown.includes(opening));
+  assert.match(markdown, /labels can contain the opening question/);
+});
+
 test('invalid, completed, duplicate, oversized and empty selections fail without truncating source work', () => {
   const item = row();
   for (const items of [[], [item, item], [row({ action: { ...item.action, completedAt: '2026-09-25T10:00:00Z' } })], Array.from({ length: 21 }, (_, n) => row({ sessionId: String(n) }))]) assert.throws(() => prepareDayBrief(items, settings));
