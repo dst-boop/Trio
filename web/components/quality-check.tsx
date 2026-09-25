@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { ActionConfirmation } from '@/components/action-confirmation';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,6 +17,8 @@ export function QualityCheck({accountId,open,onOpenChange,live,onConnections}:{a
   const [connections,setConnections]=useState<SavedConnection[]>([]);
   const [runs,setRuns]=useState<QualityRun[]>([]),[current,setCurrent]=useState<QualityRun|null>(null);
   const [report,setReport]=useState<Report|null>(null),[error,setError]=useState('');
+  const [revealId,setRevealId]=useState<string|null>(null);
+  useEffect(()=>{setRevealId(null);},[open,accountId,current?.id]);
   const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[executing,setExecuting]=useState(false),[paused,setPaused]=useState(false);
   const version=useRef(0),continueRun=useRef(false),startId=useRef(crypto.randomUUID());
   async function api(query='',body?:unknown) {
@@ -69,8 +72,7 @@ export function QualityCheck({accountId,open,onOpenChange,live,onConnections}:{a
     catch(e){if(epoch===version.current)setError((e as Error).message);}finally{if(epoch===version.current)setBusy(false);}
   }
   async function download(part:'report'|'sheet'|'key') {
-    if(!current)return;
-    if(part==='key'&&!window.confirm('Grade the blinded sheet before opening the identity key. Reveal and download identities now?'))return;
+    if(!current||busy)return;
     const epoch=version.current;setBusy(true);setError('');
     try{const data=await api('?id='+current.id+'&export='+part);if(epoch!==version.current)return;const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='trio-quality-'+current.id+'-'+part+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
     catch(e){if(epoch===version.current)setError((e as Error).message);}finally{if(epoch===version.current)setBusy(false);}
@@ -100,9 +102,10 @@ export function QualityCheck({accountId,open,onOpenChange,live,onConnections}:{a
         {current.status==='interrupted'&&<p className="quality-warning">A step could not be confirmed. It will not be retried automatically. Download the partial report; check Connections before starting another paid run.</p>}
         <div className="quality-actions">{current.status==='running'&&<>{executing?<button className="subtle-button" disabled={paused} onClick={()=>{continueRun.current=false;setPaused(true);}}>Pause after this step</button>:<button className="run-button" disabled={busy||!live||current.inFlight} onClick={()=>void drive(current)}>Continue quality check</button>}<button className="subtle-button" onClick={()=>void cancel()}>Cancel quality check</button></>}
         <button className="subtle-button" disabled={busy} onClick={()=>void load()}>Reload progress</button><button className="subtle-button" disabled={busy} onClick={()=>void view()}>View results</button></div>
-        <div className="quality-actions"><button className="subtle-button" disabled={busy} onClick={()=>void download('report')}>Download report</button><button className="subtle-button" disabled={busy||current.status==='running'||current.inFlight} onClick={()=>void download('sheet')}>Download blinded sheet</button><button className="subtle-button" disabled={busy||current.status==='running'||current.inFlight} onClick={()=>void download('key')}>Download identity key</button></div>
+        <div className="quality-actions"><button className="subtle-button" disabled={busy} onClick={()=>void download('report')}>Download report</button><button className="subtle-button" disabled={busy||current.status==='running'||current.inFlight} onClick={()=>void download('sheet')}>Download blinded sheet</button><button className="subtle-button" disabled={busy||current.status==='running'||current.inFlight} onClick={()=>setRevealId(current.id)}>Download identity key</button></div>
         {report&&<section className="quality-results"><h3>Your private results</h3><p>{report.summary.team.passed} / {report.summary.team.total} team answers passed the exact-answer check; {report.summary.team.notRun} unrun. {report.summary.degradedPhases} degraded phases.</p><p>{report.comparison.overall.eligible} comparable cases: {report.comparison.overall.correctedErrors} baseline-wrong/team-right; {report.comparison.overall.introducedErrors} baseline-right/team-wrong. Separate samples do not establish that collaboration caused either outcome.</p><p className="quality-note">{report.limitations}</p>{report.results.map(row=><details key={row.id}><summary>{row.id} · team: {row.team.status} · baseline: {row.baseline[current.settings.baseline]?.status}</summary><p>{row.question}</p>{row.context&&<pre>{row.context}</pre>}<p>Expected: {row.expected}</p>{providers.filter(p=>row.baseline[p.id]).map(p=><div key={p.id}><strong>{p.name}: {row.baseline[p.id]?.status}</strong><pre>{row.answers?.baseline[p.id]??'No saved answer'}</pre></div>)}<strong>Team: {row.team.status}</strong><pre>{row.answers?.team??'No saved answer'}</pre><p>{[...row.baselineRun.notes,...row.teamRun.notes].join(' ')}</p><p>Attempts: {row.baselineRun.httpCalls+row.teamRun.httpCalls}. Baseline: {row.baselineRun.elapsedMs??'—'} ms; team: {row.teamRun.elapsedMs??'—'} ms. Report download includes per-provider usage.</p></details>)}</section>}
       </div>}
     </>}{error&&<p role="alert" className="quality-warning">{error}</p>}
+    <ActionConfirmation open={revealId!==null} onOpenChange={value=>{if(!value)setRevealId(null);}} title="Reveal the identity key?" description="Grade the blinded sheet before viewing the identities. This downloads the provider and team labels for the selected quality check; revealing them can influence later ratings." confirmLabel="Reveal and download identities" cancelLabel="Keep identities hidden" disabled={busy||!current||current.id!==revealId||current.status==='running'||current.inFlight} onConfirm={()=>{if(busy||!current||current.id!==revealId||current.status==='running'||current.inFlight)return false;void download('key');}} />
   </DialogContent></Dialog>;
 }
