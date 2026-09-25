@@ -1,16 +1,18 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { workPlanSchema, type WorkPlan } from '@/lib/work-plan';
 import { ActionPlanSuggestion, type PlanDraftContext } from '@/components/action-plan-suggestion';
 
 export function WorkPlanPanel({ value, question, busy, onSave, reviewed = false, suggestionContext }: { reviewed?: boolean; value?: WorkPlan; question: string; busy: boolean; onSave: (plan: WorkPlan | null) => boolean; suggestionContext?: PlanDraftContext }) {
   const [drafting, setDrafting] = useState(false), [hasPreview, setHasPreview] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [open, setOpen] = useState(false), [draft, setDraft] = useState<WorkPlan>({ goal: '', actions: [] }), [initial, setInitial] = useState(''), [error, setError] = useState(''), [initialOutcome, setInitialOutcome] = useState('');
   const [recording, setRecording] = useState(false), [note, setNote] = useState(''), [minutesSaved, setMinutesSaved] = useState(''), [disposition, setDisposition] = useState<'used' | 'edited' | 'not-used'>('used'), [correction, setCorrection] = useState<'not-assessed' | 'confirmed' | 'rejected'>('not-assessed');
   const dirty = open && (recording ? JSON.stringify({ note, minutesSaved, disposition, correction }) !== initialOutcome : drafting || hasPreview || JSON.stringify(draft) !== initial);
   useEffect(() => { if (!dirty) return; const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
-  function close() { if (!dirty || window.confirm(drafting ? 'Stop drafting and discard this unsaved plan? A dispatched model request may still be billed.' : 'Discard these unsaved plan changes?')) setOpen(false); }
+  function close() { if (dirty) setDiscardOpen(true); else setOpen(false); }
   function edit() { const next = structuredClone(value ?? { goal: question.split('\n')[0].slice(0, 300), actions: [] }); setDraft(next); setInitial(JSON.stringify(next)); setRecording(false); setError(''); setHasPreview(false); setDrafting(false); setOpen(true); }
   function record() {
     const next = structuredClone(value ?? { goal: question.split('\n')[0].slice(0, 300), actions: [] });
@@ -35,5 +37,6 @@ export function WorkPlanPanel({ value, question, busy, onSave, reviewed = false,
         {error && <p role="alert">{error}</p>}<div className="dialog-actions"><button type="button" className="subtle-button" onClick={close}>Cancel</button><button type="submit" className="run-button" disabled={busy || drafting}>{recording ? 'Save outcome' : 'Save action plan'}</button></div>
       </form>
     </DialogContent></Dialog>
+    <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}><AlertDialogContent><AlertDialogTitle>{drafting ? 'Stop drafting and discard this plan?' : 'Discard unsaved plan changes?'}</AlertDialogTitle><AlertDialogDescription>{drafting ? 'A dispatched model request may still be billed. Closing stops waiting for its response and discards this unsaved editor.' : 'The changes and any unused checklist preview in this editor will be discarded. Your saved plan stays unchanged.'}</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep editing</AlertDialogCancel><AlertDialogAction onClick={() => { setDiscardOpen(false); setOpen(false); }}>{drafting ? 'Stop and discard' : 'Discard changes'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </section>;
 }
