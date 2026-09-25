@@ -270,6 +270,12 @@ The request contract follows [OpenAI's image-generation guide](https://developer
 The .openai/hosting.json manifest identifies this private Sites app. Keep its project ID when updating this deployment. The production build is packaged from dist/ and deployed with the Sites publishing workflow. Sharing changes are separate from publishing.
 
 
+## Find your next action
+
+**Your work → Next actions** brings saved checklist items together by past planned dates, today, upcoming dates, and no planned date. Filters and literal text search match the action, plan goal, or conversation title. Dates use the device's local calendar and refresh while the view is open; they do not schedule reminders or create deadlines. Open a source plan to change its dates, wording, or recorded outcome.
+
+Mark an action complete only when you have done it. The **Completed** filter lists marked actions and lets you reopen them. Completion changes exactly that action, keeps its planning date, and never records use, corrections, or minutes saved. The **Plans** and **Results · 7 days** views retain the full editors and the user-reported value ledger.
+
 ## Review an action-plan draft
 
 After a completed live answer finishes saving, choose **Create action plan**. In Live mode, **Draft actions · 1 API call** sends that saved question and answer to one enabled connected model. Select the model before starting; one non-streaming request is made with no automatic retry or paid repair. A long source is explicitly excerpted (4,000 question and 24,000 answer characters, balanced across Compare perspectives). Original files, earlier conversation, session instructions, personal memory and web research tools are excluded. Source excerpts may retain citations already present in the answer; they are not freshly checked.
