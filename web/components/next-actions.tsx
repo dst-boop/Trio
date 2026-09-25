@@ -14,7 +14,7 @@ export function NextActions({ sessions, busy, onSave, onOpenPlan, filter, setFil
   const identity = (item: (typeof actions)[number]) => JSON.stringify([item.sessionId, item.turnIndex, item.action.id]);
   useEffect(() => {
     const key = focusAfterSave.current; if (key === null) return; focusAfterSave.current = null;
-    const next = [...(root.current?.querySelectorAll<HTMLInputElement>('input[data-action-key]') ?? [])].find(input => input.dataset.actionKey === key);
+    const next = [...(root.current?.querySelectorAll<HTMLInputElement>('input[data-action-key]:not(:disabled)') ?? [])].find(input => input.dataset.actionKey === key);
     (next ?? filterRef.current)?.focus();
   }, [sessions]);
   useEffect(() => {
