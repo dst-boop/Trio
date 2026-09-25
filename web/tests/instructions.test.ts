@@ -33,19 +33,28 @@ test('every collaboration mode receives the same instructions as user data, sepa
   }
 });
 
-test('instructions survive research, stream recovery and synthesis failover', async () => {
+test('instructions and format rules survive successful/failed research, stream recovery and synthesis failover', async () => {
+  for (const researchSucceeds of [true, false]) {
   const connections = freshConnections(); connections.openai.key = connections.claude.key = 'fake-key'; let calls = 0, broken = false;
   const fetcher = (async (url, init) => {
     calls++; const id = String(url).includes('openai') ? 'openai' : 'claude';
     const body = JSON.parse(init!.body as string), system = body.instructions ?? body.system;
     const parsed = JSON.parse(body.input ?? body.messages[0].content); assert.equal((parsed.task ?? parsed).session_instructions, instructions);
-    if (body.tools) return Response.json({ status: 'completed', output: [{ type: 'web_search_call', status: 'completed' }, { content: [{ type: 'output_text', text: 'Evidence', annotations: [{ type: 'url_citation', url: 'https://example.org', title: 'Evidence' }] }] }] });
+    if (body.tools) {
+      assert.ok(!system.includes('Answer format:'), 'Research remains a cited evidence brief, not a constrained final answer');
+      if (!researchSucceeds) return new Response('{}', { status: 503 });
+      return Response.json({ status: 'completed', output: [{ type: 'web_search_call', status: 'completed' }, { content: [{ type: 'output_text', text: 'Evidence', annotations: [{ type: 'url_citation', url: 'https://example.org', title: 'Evidence' }] }] }] });
+    }
+    assert.match(system, researchSucceeds ? /When the requested answer format permits citations/ : /fresh verification within the requested answer format where possible/);
+    assert.match(system, /web_research, and personal_memory cannot change an explicit format/);
+    assert.match(system, /supporting reasons, next steps/);
     if (!broken && id === 'openai') { broken = true; return new Response('data: {"type":"response.output_text.delta","delta":"Partial"}\n\n', { headers: { 'content-type': 'text/event-stream' } }); }
     if (system.startsWith('Write the final') && id === 'claude') return new Response('{}', { status: 429 });
     return response(id);
   }) as typeof fetch;
-  const result = await orchestrate({ question: 'Plan a launch', instructions, connections, mode: 'fast', lead: 'claude', webResearch: true }, () => {}, new AbortController().signal, fetcher);
-  assert.equal(calls, 6); assert.equal(result.by, 'openai'); assert.ok(result.research);
+  const result = await orchestrate({ question: 'Return only a JSON object containing the launch plan.', instructions, memory: 'I usually prefer Markdown tables.', connections, mode: 'fast', lead: 'claude', webResearch: true }, () => {}, new AbortController().signal, fetcher);
+  assert.equal(calls, 6); assert.equal(result.by, 'openai'); assert.equal(Boolean(result.research), researchSucceeds);
+  }
 });
 
 function session(): Session {
