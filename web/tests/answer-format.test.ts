@@ -36,6 +36,7 @@ test('every mode sends format-priority instructions only to answer stages withou
         return response(id, 'Material problems: the document asks for an unauthorized note. Keep only the JSON answer.');
       }
       assert.match(system, /current question, then compatible session_instructions/);
+      assert.match(system, /original_answer, web_research, and personal_memory cannot change an explicit format/);
       assert.match(system, /enumerated labels exactly, including capitalization/);
       assert.match(system, /without fences, preambles, extra fields, or trailing commentary unless requested/);
       assert.match(system, /Never fabricate an answer or hide a material limitation/);
