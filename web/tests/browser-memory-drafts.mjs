@@ -62,11 +62,19 @@ try {
   await open(); await page.getByRole('button', { name: 'Suggest from conversation', exact: true }).click();
   await page.waitForFunction(() => Boolean(window.finishSuggestion)); await page.evaluate(() => window.finishSuggestion('Review this suggested draft.'));
   await page.getByText('Suggested draft — not saved.', { exact: false }).waitFor(); await close(); await confirm.waitFor(); await keep(); assert.equal(await notes.inputValue(), 'Review this suggested draft.'); assert.equal(writes, 0);
-  // A second in-flight suggestion must stop when dismissal is attempted, even when editing continues.
-  page.once('dialog', dialog => dialog.accept()); await page.getByRole('button', { name: 'Suggest from conversation', exact: true }).click();
+  // Keeping the editor preserves the requested suggestion; confirmed discard aborts it.
+  await page.getByRole('button', { name: 'Suggest from conversation', exact: true }).click();
+  await page.getByRole('alertdialog', { name: 'Replace this memory draft?', exact: true }).getByRole('button', { name: 'Replace with a suggestion', exact: true }).click();
   await page.getByRole('button', { name: 'Stop suggestion', exact: true }).waitFor(); await close(); await confirm.waitFor();
-  await page.evaluate(() => window.finishSuggestion('Late result must not replace the draft.')); await keep();
-  assert.equal(await notes.inputValue(), 'Review this suggested draft.'); assert.ok(await page.evaluate(() => window.suggestionAborts >= 1));
+  await keep(); assert.equal(await page.getByRole('button', { name: 'Stop suggestion', exact: true }).count(), 1);
+  await page.evaluate(() => window.finishSuggestion('Updated suggested draft.'));
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="Personal memory notes"]')?.value === 'Updated suggested draft.');
+  await page.getByRole('button', { name: 'Suggest from conversation', exact: true }).click();
+  await page.getByRole('alertdialog', { name: 'Replace this memory draft?', exact: true }).getByRole('button', { name: 'Replace with a suggestion', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop suggestion', exact: true }).waitFor(); await close(); await confirm.waitFor(); await discard();
+  await page.evaluate(() => window.finishSuggestion('Late response after discard.')); await open();
+  assert.equal(await notes.inputValue(), profile.notes); assert.ok(await page.evaluate(() => window.suggestionAborts >= 1));
+  await notes.fill('Review this suggested draft.');
   failSave = true; await page.getByRole('button', { name: 'Save memory', exact: true }).click();
   await page.getByText('Memory was not confirmed saved. Keep your edits and retry.', { exact: true }).waitFor();
   await close(); await confirm.waitFor(); await keep(); assert.equal(await notes.inputValue(), 'Review this suggested draft.'); assert.equal(await warnsOnUnload(), true);

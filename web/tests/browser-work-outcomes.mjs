@@ -13,14 +13,14 @@ try {
   await page.getByRole('button',{name:/Prepare a client meeting/}).click();
   await page.getByLabel('Desired outcome',{exact:true}).fill('Leave with clear next steps');
   await page.getByLabel('Workflow notes',{exact:true}).fill('We need a document before Thursday.');
-  page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'Keep editing',exact:true}).click();
   assert.equal(await page.getByLabel('Desired outcome',{exact:true}).inputValue(),'Leave with clear next steps');
   await page.getByRole('button',{name:'Use brief in Live mode',exact:true}).click();
   const brief=await page.getByLabel('Your question',{exact:true}).inputValue();assert.match(brief,/Leave with clear next steps/);assert.match(brief,/Never claim to send/);assert.equal(calls,0);
   await page.getByRole('button',{name:/Plan the workday/}).click();
   assert.equal(await page.getByLabel('Workflow notes',{exact:true}).inputValue(),brief);
   await page.getByLabel('Desired outcome',{exact:true}).fill('Finish two priorities');
-  page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await page.getByLabel('Your question',{exact:true}).inputValue(),brief);
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'Discard brief',exact:true}).click();assert.equal(await page.getByLabel('Your question',{exact:true}).inputValue(),brief);
   // Seed a completed live result without paid provider calls, then test real account persistence.
   let snapshot=await read();const headers={Origin:base,'X-Trio-Account':snapshot.accountId,'X-Trio-Workspace-Version':'6'};
   assert.equal((await page.request.put(base+'/api/workspace',{headers,data:{revision:snapshot.revision,sessions:[fixture]}})).status(),200);

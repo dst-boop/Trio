@@ -5,6 +5,7 @@ import { WorkComparison } from '@/components/work-comparison';
 import { WorkflowBriefs } from '@/components/workflow-briefs';
 import { WorkPlanPanel } from '@/components/work-plan';
 import { WorkBoard } from '@/components/work-board';
+import { ActionConfirmation } from '@/components/action-confirmation';
 import { setWorkPlan, workSummary } from '@/lib/work-actions';
 import type { WorkPlan } from '@/lib/work-plan';
 import type { Input as RunInput } from '@/lib/orchestrate';
@@ -78,6 +79,9 @@ export default function Home({ account }: { account?: { userId: string; displayN
   const [qualityOpen, setQualityOpen] = useState(false);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
+  const [workspaceRecovery, setWorkspaceRecovery] = useState<'reload' | 'signout' | null>(null);
+  const focusAfterReload = useRef(false);
+  useEffect(() => { setWorkspaceRecovery(null); }, [account?.userId]);
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
   const [branchPoint, setBranchPoint] = useState<number | null>(null);
   const [draftDestination, setDraftDestination] = useState<DraftDestination | null>(null);
@@ -122,6 +126,8 @@ export default function Home({ account }: { account?: { userId: string; displayN
   const cloud = useAccountWorkspace(account?.userId, sessions, saved => {
     setSessions(saved); setTurns([]); setCurrent(null); setInstructions(''); setWorking(null); setPrompt(''); clearContext(); clearImage(); clearPdf(); setLoaded(true);
   });
+  useEffect(() => { if (cloud.ready && focusAfterReload.current) { focusAfterReload.current = false; promptRef.current?.focus(); } }, [cloud.ready]);
+  useEffect(() => { if (workspaceRecovery && !cloud.error) setWorkspaceRecovery(null); }, [cloud.error, workspaceRecovery]);
   useEffect(() => {
     if (account) return;
     try {
@@ -293,13 +299,13 @@ export default function Home({ account }: { account?: { userId: string; displayN
         <SessionList sessions={sessions} current={current} busy={busy} query={sessionQuery} onQuery={setSessionQuery} onSelect={s => requestNavigation({ type: 'session', id: s.id })} onAction={setSessionAction} onExport={s => downloadSession(s.turns)} />
         <div className="sidebar-bottom-card"><span className="tiny-orbits">◎ <span>✳</span> ✦</span><strong>Different perspectives.<br />A stronger answer.</strong><p>Independent thinking.<br />Collective intelligence.</p><button onClick={() => setHelp(true)}>How Trio works <ChevronRight size={14} /></button></div>
       </SidebarContent>
-      <SidebarFooter className="sidebar-foot"><span className="avatar">Y</span><div title={account?.email}>{account?.displayName ?? "Guest workspace"}<small><ShieldCheck size={12} /> {account ? cloud.status : "Stored on this device"}</small>{account ? <a href="/signout-with-chatgpt?return_to=%2F" onClick={e => { if (busy || cloud.status === "Saving…") { e.preventDefault(); toast("Wait for the current run and save to finish before signing out."); } else if (cloud.error && !window.confirm("Some changes have not saved. Sign out anyway? Download a backup first to keep them.")) e.preventDefault(); }}>Sign out</a> : <a href="/signin-with-chatgpt?return_to=%2Fworkspace">Sign in to save online</a>}</div><button aria-label="About Trio" onClick={() => setHelp(true)}><CircleHelp size={17} /></button></SidebarFooter>
+      <SidebarFooter className="sidebar-foot"><span className="avatar">Y</span><div title={account?.email}>{account?.displayName ?? "Guest workspace"}<small><ShieldCheck size={12} /> {account ? cloud.status : "Stored on this device"}</small>{account ? <a href="/signout-with-chatgpt?return_to=%2F" onClick={e => { if (busy || cloud.status === "Saving…") { e.preventDefault(); toast("Wait for the current run and save to finish before signing out."); } else if (cloud.error) { e.preventDefault(); setWorkspaceRecovery('signout'); } }}>Sign out</a> : <a href="/signin-with-chatgpt?return_to=%2Fworkspace">Sign in to save online</a>}</div><button aria-label="About Trio" onClick={() => setHelp(true)}><CircleHelp size={17} /></button></SidebarFooter>
     </Sidebar>
     <main className="workspace">
       <header className="topbar"><div className="breadcrumb"><SidebarTrigger className="mobile-menu" /><span>Workspace</span><ChevronRight size={14} /><strong>New possibilities</strong></div><div className="top-actions"><span className={`mode-badge ${demo ? '' : 'live'}`}>{demo ? 'Demo workspace' : 'Live workspace'}</span><button className="subtle-button" aria-label="Connections" onClick={() => setSettings(true)}><Settings2 size={15} /><span>Connections</span></button></div></header>
       <div className="work-body">
         {sessions.length >= 30 && <div className="session-capacity" role="status"><strong>Conversation limit reached</strong><p>All 30 conversations are kept. You can continue an existing discussion, or back up and delete one before starting another.</p><button className="subtle-button" disabled={busy} onClick={() => setBackupsOpen(true)}>Back up conversations</button></div>}
-        {account && cloud.error && <div className="error-box" role="alert"><strong>Account history needs attention</strong><p>{cloud.error}</p><button disabled={busy} onClick={() => setBackupsOpen(true)}>Download a backup</button>{cloud.conflict ? <button disabled={busy} onClick={() => { if (window.confirm("Replace this tab’s sessions with the latest account history? Download a backup first to keep unsaved changes. Your unsent question, attached files, and new-conversation instructions will be cleared; copy them first if needed.")) cloud.reload(); }}>Load latest workspace</button> : <button onClick={cloud.retry}>Retry saving</button>}</div>}
+        {account && cloud.error && <div className="error-box" role="alert"><strong>Account history needs attention</strong><p>{cloud.error}</p><button disabled={busy} onClick={() => setBackupsOpen(true)}>Download a backup</button>{cloud.conflict ? <button disabled={busy} onClick={() => setWorkspaceRecovery('reload')}>Load latest workspace</button> : <button onClick={cloud.retry}>Retry saving</button>}</div>}
         {storageError && <div className="error-box" role="alert"><strong>Browser history could not be updated</strong><p>{remember ? 'Recent changes are only in this tab. Export important sessions before closing or refreshing; the previous saved copy may be older.' : 'Browser storage is unavailable. Previously saved history may still be on this device.'}</p>{turns.length > 0 && <button onClick={exportSession}>Export current session</button>}</div>}
         <div className="page-intro"><div><div className="eyebrow"><span className="mini-line" /> COLLECTIVE INTELLIGENCE</div><h1>One question. <span>Three perspectives.</span></h1><p>Choose a single answer or bring in the team.</p></div><span className="intro-symbol" aria-hidden>◈</span></div>
         <div className="connection-summary"><span>{demo ? 'Prepared example · no live answers' : connected + ' model' + (connected === 1 ? '' : 's') + ' connected'}</span><button disabled={busy || preferences.loading || savedConnections.loading} onClick={() => { if (demo && connected) setDemo(false); else setSettings(true); }}>{demo ? connected ? 'Use live models' : 'Set up live answers' : 'Manage connections'}</button></div>
@@ -334,6 +340,12 @@ export default function Home({ account }: { account?: { userId: string; displayN
     <DraftNavigation destination={draftDestination} onCancel={() => setDraftDestination(null)} onDiscard={() => { if (draftDestination) navigate(draftDestination); }} onFocus={() => promptRef.current?.focus()} />
     {account && <QualityCheck key={account.userId} accountId={account.userId} open={qualityOpen} onOpenChange={setQualityOpen} live={!demo} onConnections={() => { setQualityOpen(false); setSettings(true); }} />}
     {account && <WorkComparison key={'comparison-'+account.userId} accountId={account.userId} open={comparisonOpen} onOpenChange={setComparisonOpen} live={!demo} onConnections={() => { setComparisonOpen(false); setSettings(true); }} />}
+    <ActionConfirmation open={workspaceRecovery !== null} onOpenChange={next => { if (!next) setWorkspaceRecovery(null); }} title={workspaceRecovery === 'reload' ? 'Load the latest account history?' : 'Sign out with unsaved changes?'} description={workspaceRecovery === 'reload' ? 'This replaces this tab’s sessions with the latest saved account history. Download a backup first to keep unsaved changes. Your unsent question, attachments and new-conversation instructions will also be cleared; copy them first if needed.' : 'Some workspace changes have not saved. Signing out may lose those changes and your unsent question or attachments. Cancel and download a backup first to keep the workspace changes.'} confirmLabel={workspaceRecovery === 'reload' ? 'Replace this tab with saved history' : 'Sign out anyway'} cancelLabel="Keep this tab" destructive disabled={busy || cloud.status === 'Saving…' || !cloud.error || (workspaceRecovery === 'reload' && !cloud.conflict)} onConfirm={() => {
+      if (busy || cloud.status === 'Saving…' || !cloud.error || (workspaceRecovery === 'reload' && !cloud.conflict)) return false;
+      if (workspaceRecovery === 'reload') { focusAfterReload.current = true; cloud.reload(); }
+      else if (workspaceRecovery === 'signout') window.location.assign('/signout-with-chatgpt?return_to=%2F');
+      else return false;
+    }} />
     <WorkBoard sessions={sessions} busy={busy} hasDraft={hasDraft} onPrepareDay={text => {
       if (busy || preferences.loading) { toast('Wait for the workspace to finish loading before preparing a new question.'); return false; }
       if (sessions.length >= 30) { toast.error('Your workspace has 30 saved conversations. Back up and remove an older conversation before starting another. You can still copy this brief.'); return false; }

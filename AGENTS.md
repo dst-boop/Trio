@@ -78,6 +78,7 @@ recorded is a decision, an unrecorded one is drift.
 | Draft a checklist from a saved answer | no | one explicit provider call; review, use in editor, then save; no inferred completion |
 | Dated next-action view | no | local-calendar groups, search, explicit completion/reopening, linked source plans |
 | Action handoff and daily planning | no | local checklist copy/download; review a brief from visible open actions before explicitly asking a model |
+| Draft/recovery confirmations | no | in-app dialogs preserve drafts on cancel and re-check removal/reveal targets |
 | In-app quality evaluation | no | yes |
 | Blinded comparison on user-supplied work with saved human ratings | no | yes, separate from exact-answer checks |
 | Access control | shared `APP_PASSWORD` | invite-only accounts |

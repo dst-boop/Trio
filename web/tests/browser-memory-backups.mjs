@@ -57,7 +57,7 @@ try {
   await save(); await dialog.getByText('Personal memory changed on another device. Reload before saving.', { exact: true }).waitFor();
   assert.equal(await notes.inputValue(), 'Restored draft for conflict'); assert.equal(profile.notes, 'Changed on another device');
   exported = await download('Download memory draft'); assert.equal(exported.memory.notes, 'Restored draft for conflict'); assert.equal(exported.memory.enabled, false);
-  page.once('dialog', d => d.accept()); await dialog.getByRole('button', { name: 'Reload saved memory', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Reload saved memory', exact: true }).click(); await page.getByRole('alertdialog', { name: 'Reload saved memory?', exact: true }).getByRole('button', { name: 'Discard draft and reload', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="Personal memory notes"]')?.value === 'Changed on another device');
   assert.equal(await warns(), false);
   await choose('{private-file-fragment'); await dialog.getByRole('alert').waitFor(); assert.equal(await notes.inputValue(), profile.notes); assert.ok(!(await dialog.getByRole('alert').innerText()).includes('private-file-fragment'));
