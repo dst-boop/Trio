@@ -64,6 +64,9 @@ test('completion and reopening touch one action only, preserve dates and outcome
   assert.deepEqual(changed.outcome, plan.outcome); assert.deepEqual(changed.actions[0], plan.actions[0]); assert.equal(plan.actions[1].completedAt, undefined);
   assert.equal(changeActionCompletion(changed, id(2), true, new Date('2026-09-26')).actions[1].completedAt, now.toISOString(), 'An already-completed action retains its timestamp');
   assert.deepEqual(changeActionCompletion(changed, id(2), false), plan);
+  const undated = changeActionCompletion(plan, id(4), true, now);
+  assert.equal(Object.hasOwn(undated.actions[3], 'due'), false);
+  assert.equal(Object.hasOwn(changeActionCompletion(undated, id(4), false).actions[3], 'due'), false);
   assert.throws(() => changeActionCompletion(plan, id(99), true), /no longer available/);
   sessions[0].turns[0].work = changeActionCompletion(original, id(2), true, now);
   assert.equal(workSummary(sessions, now).outcomes, 0); assert.equal(workSummary(sessions, now).weekly.measured, 0);

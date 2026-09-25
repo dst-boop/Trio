@@ -22,7 +22,7 @@ export function workActionView(sessions: Session[], today: string, filter: Actio
     const match = filter === 'open' ? item.group !== 'completed' : filter === 'today' ? item.group === 'past' || item.group === 'today' : item.group === filter;
     return match && (!query || [item.action.title, item.goal, item.sessionTitle].some(text => text.toLocaleLowerCase().includes(query)));
   }).sort((a, b) => rank[a.group] - rank[b.group] || (a.group === 'completed'
-    ? b.action.completedAt!.localeCompare(a.action.completedAt!)
+    ? Date.parse(b.action.completedAt!) - Date.parse(a.action.completedAt!)
     : (a.action.due ?? '').localeCompare(b.action.due ?? '')));
 }
 

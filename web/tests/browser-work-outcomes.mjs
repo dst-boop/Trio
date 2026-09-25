@@ -40,11 +40,15 @@ try {
   turn=(await read()).sessions[0].turns[0];assert.equal(turn.work.actions[0].completedAt,undefined);assert.equal(turn.work.outcome.disposition,'edited');
   await page.getByRole('button',{name:/^Your work/}).click();
   const board=page.getByRole('dialog');await board.getByRole('heading',{name:'Your work',exact:true}).waitFor();
+  assert.equal(await board.getByRole('tab',{name:'Next actions',exact:true}).getAttribute('data-state'),'active');
+  assert.equal(await board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).count(),1);
+  await board.getByRole('tab',{name:'Results · 7 days',exact:true}).click();
   assert.match(await board.innerText(),/12 minutes saved/);assert.match(await board.innerText(),/1 corrections confirmed/);
-  await board.getByLabel('Work filter',{exact:true}).selectOption('all');
+  await board.getByRole('tab',{name:'Plans',exact:true}).click();
+  await board.getByLabel('Show plans',{exact:true}).selectOption('all');
   await board.locator('details > summary').click();await save(()=>board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).check());
   assert.ok((await read()).sessions[0].turns[0].work.actions[0].completedAt);
-  await board.getByLabel('Work filter',{exact:true}).selectOption('all');
+  await board.getByLabel('Show plans',{exact:true}).selectOption('all');
   await page.setViewportSize({width:390,height:844});
   await page.waitForFunction(()=>{const r=document.querySelector('.work-board')?.getBoundingClientRect();return r&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;},null,{timeout:4000});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await board.evaluate(el=>el.scrollWidth>el.clientWidth),false);
@@ -55,7 +59,7 @@ try {
   assert.ok(await panel.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).isChecked());
   await panel.getByRole('button',{name:'Edit result record',exact:true}).click();await page.getByLabel('Minutes saved',{exact:true}).fill('-4');await save(()=>page.getByRole('button',{name:'Save outcome',exact:true}).click());
   const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export session as Markdown',exact:true}).click();const stream=await (await download).createReadStream();let markdown='';for await(const chunk of stream)markdown+=chunk;assert.match(markdown,/Estimated minutes saved: -4/);assert.match(markdown,/Review and send the follow-up/);assert.match(markdown,/not scheduled reminders/);
-  await page.getByRole('button',{name:/^Your work/}).click();assert.match(await page.getByRole('dialog').innerText(),/4 minutes extra time spent/);
+  await page.getByRole('button',{name:/^Your work/}).click();await page.getByRole('dialog').getByRole('tab',{name:'Results · 7 days',exact:true}).click();assert.match(await page.getByRole('dialog').innerText(),/4 minutes extra time spent/);
   assert.equal(calls,0,'Briefs, plans, receipts and ledger must never execute provider calls');assert.deepEqual(errors,[]);
   console.log('Work outcomes browser checks passed: guided brief with draft protection, independent result recording, action checklist, account sign-in persistence, weekly ledger, signed estimates, export, mobile, no external execution.');
 } finally {await browser.close();}
