@@ -7,8 +7,9 @@ import { selectResearchProvider } from '@/lib/research';
 import { instructionsSchema } from '@/lib/instructions';
 import { timeZoneSchema } from '@/lib/current-time';
 import { env } from 'cloudflare:workers';
-import { CredentialError, resolveCredential } from '@/lib/credential-store';
-import { savedKeyReference } from '@/lib/saved-connections';
+import { CredentialError } from '@/lib/credential-store';
+import { savedKeyReference, workspaceKeyReference } from '@/lib/saved-connections';
+import { resolveRequestKey } from '@/lib/workspace-keys';
 import { providers, type RunEvent } from '@/lib/trio';
 import { readMemory } from '@/lib/memory-store';
 import { imageSchema } from '@/lib/images';
@@ -37,9 +38,9 @@ export async function POST(request: Request) {
       const connection = parsed.data.connections[provider.id];
       const researchNeeded = parsed.data.webResearch && (parsed.data.researchProvider && parsed.data.researchProvider !== 'auto' ? provider.id === parsed.data.researchProvider : provider.id === 'openai' || provider.id === 'claude');
       const needed = connection.enabled && (parsed.data.mode !== 'single' || provider.id === parsed.data.lead || researchNeeded);
-      if (connection.key !== savedKeyReference) continue;
+      if (connection.key !== savedKeyReference && connection.key !== workspaceKeyReference) continue;
       if (!needed) { connection.key = ''; continue; }
-      try { connection.key = await resolveCredential(env.DB, env.TRIO_CREDENTIAL_KEY, request, user.userId, provider.id, connection.key); }
+      try { connection.key = await resolveRequestKey(env, request, user.userId, provider.id, connection.key); }
       catch (error) {
         if (!(error instanceof CredentialError) || error.status === 401 || error.status === 403) throw error;
         unavailableStatus = error.status; connection.key = ''; connection.enabled = false;
