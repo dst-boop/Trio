@@ -67,6 +67,9 @@ def _tally(totals: dict, key: str, u: dict, lost_stream: bool = False) -> None:
         t = totals["models"].setdefault(key, {"input": 0, "output": 0})
         t["input"] += u.get("input", 0)
         t["output"] += u.get("output", 0)
+        for cached in ("cache_write", "cache_read"):  # priced apart from plain input
+            if u.get(cached):
+                t[cached] = t.get(cached, 0) + u[cached]
     if lost_stream and "output" not in u:
         totals["incomplete"] = True
 
@@ -84,7 +87,8 @@ def _usage_summary(providers: list[Provider], totals: dict) -> dict | None:
     models = {k: dict(v) for k, v in totals["models"].items()}
     cost, cost_known = 0.0, True
     for k, v in models.items():
-        c = estimate_cost(model_of.get(k, ""), v["input"], v["output"])
+        c = estimate_cost(model_of.get(k, ""), v["input"], v["output"],
+                          v.get("cache_write", 0), v.get("cache_read", 0))
         if c is None:
             cost_known = False
         elif totals["incomplete"]:

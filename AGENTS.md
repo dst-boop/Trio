@@ -56,6 +56,38 @@ async generator of plain dict events that drives all three frontends.
   agent's PR is open, don't duplicate its scope — build on it or pick a
   different issue.
 
+## Two apps, one product
+
+The repository root and `web/` are two implementations of Trio, and they are
+**not** converging. The hosted app is where product work happens; the Python
+root is **maintenance only** - keep it working, fix its bugs, do not port
+hosted features into it unless the owner asks. Neither is a reference
+implementation of the other.
+
+Read the table before assuming a feature exists on both sides. When you add
+something to one app, update the row here in the same PR: a divergence
+recorded is a decision, an unrecorded one is drift.
+
+| Capability | Python root | Hosted `web/` |
+| --- | --- | --- |
+| Answer modes | Council, Quick (`thorough: false`), single model via `models` | Single, Quick synthesis, Council, Deep Council, Compare |
+| Deep Council revision round | no | yes |
+| Web research, attachments, audio, image generation | no | yes |
+| Personal memory, work briefs, action plans, value ledger | no | yes |
+| In-app quality evaluation | no | yes |
+| Access control | shared `APP_PASSWORD` | invite-only accounts |
+| Provider keys | server-side `.env`, shared by every caller | per-account encrypted, resolved per request |
+| Saved history | SQLite; the unguessable link is the capability | per-account online history + V5 portable backups |
+| Deleting a conversation | `DELETE /api/conversations/<id>` | Delete session in the UI |
+| Wire format | SSE (`data:` frames, terminal `done`) | NDJSON |
+| No-key demo | `TRIO_MOCK=1`, generated fake answers | Demo mode, prepared labeled examples |
+| Claude prompt caching | yes, on draft calls with history | no |
+| Per-address rate limit | yes (`ASK_RATE_LIMIT_PER_MINUTE`) | no; invite-only, per-account keys |
+
+The two wire formats are separate contracts. The event names overlap because
+the pipelines are alike, not because the payloads are interchangeable - never
+port a consumer from one to the other without reading both.
+
 ## Hosted workspace
 
 - **Invite-only access is the owner's current requirement.** Keep the Sites

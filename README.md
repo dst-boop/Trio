@@ -70,6 +70,8 @@ see [.env.example](.env.example) for the full list.
 | `MAX_OUTPUT_TOKENS` | `4000` | Response length cap per model call |
 | `MODEL_TIMEOUT_SECONDS` | `240` | Per-call timeout |
 | `MAX_CONCURRENT_RUNS` | `8` | Simultaneous questions per server instance |
+| `ASK_RATE_LIMIT_PER_MINUTE` | `20` | Questions per minute from one address; `0` disables |
+| `TRUST_PROXY_HEADER` | off | `1` = read the caller's address from `X-Forwarded-For` |
 | `TRIO_DB` | `./trio.db` | SQLite file for saved conversations; use a persistent volume in containers |
 
 ## API
@@ -101,6 +103,24 @@ Consumers should ignore event types and fields they don't recognise. With
 
 `GET /api/status` reports which models are configured; `GET /healthz` is the
 health check. If `APP_PASSWORD` is set, send it as the `X-App-Password` header.
+
+`/api/ask` also caps how often one address may ask
+(`ASK_RATE_LIMIT_PER_MINUTE`, 20 by default), answering `429` with a
+`Retry-After` header once the cap is reached. The count is kept in the server
+process, so running several instances allows the limit on each one, and it is
+counted before the password check so guessing the password is throttled too.
+Behind a proxy every caller shares the proxy's address until you set
+`TRUST_PROXY_HEADER=1`; leave it off otherwise, because an unverified
+`X-Forwarded-For` is attacker-controlled and would defeat the limit entirely.
+
+Trio sets one Anthropic prompt-caching breakpoint on the last message of a
+Claude draft call once a conversation has history, so each later turn re-reads
+the earlier turns at the cached rate instead of the full input rate. First
+questions, reviews and syntheses are not cached: their prompts are never sent
+twice, and a cache write costs more than plain input. When a call uses the
+cache, its `usage` entry adds `cache_write` and `cache_read` token counts;
+`input` continues to count every input token billed, cached ones included, and
+`cost` prices the cached portions at their own rates.
 
 ## Saved conversations (Python app)
 
@@ -136,7 +156,7 @@ those fields directly. A save failure never masquerades as a saved link.
 ## Deploy
 
 A `Dockerfile` is included and respects `PORT`, so Railway, Cloud Run, Fly.io
-and similar all work as-is. Two things before you expose it to the internet:
+and similar all work as-is. Three things before you expose it to the internet:
 
 1. **Set `APP_PASSWORD`** — anyone who can reach `/api/ask` is spending your
    API credits.
@@ -146,6 +166,41 @@ and similar all work as-is. Two things before you expose it to the internet:
    Cloud Run container filesystems can be ephemeral; an unmounted database may
    disappear on restart or redeploy. Keep SQLite on one server instance with a
    supported local volume; use a shared database before scaling across hosts.
+
+### Railway, step by step
+
+1. **New Project → Deploy from GitHub repo**, and pick your fork. Railway
+   finds the `Dockerfile` at the repository root and builds it; there is no
+   build command to configure. (This deploys the Python app at the root. The
+   hosted `web/` workspace is a separate deployment — see [web/](web/README.md).)
+2. **Variables** — add `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
+   `GEMINI_API_KEY` for the vendors you want, plus `APP_PASSWORD`. Do not set
+   `PORT`: Railway injects it, and the `Dockerfile` already binds `0.0.0.0` on it.
+3. **Add a volume** (`⌘K` → Volume, or right-click the canvas) attached to the
+   service, with mount path **`/app/data`**. Then set `TRIO_DB=/app/data/trio.db`.
+   The mount path must be absolute; the image's working directory is `/app`, so
+   a relative `./trio.db` would land in the container filesystem and be lost on
+   the next deploy. Volumes mount when the container *starts*, so nothing
+   written during the build persists.
+4. **Settings → Networking → Generate Domain** for a public URL, and set the
+   service's **healthcheck path** to `/healthz`. Railway waits for a 2xx there
+   before switching traffic to a new deployment, so a broken build keeps
+   serving the previous one instead of taking the app down.
+5. Confirm it worked: open `/api/status` with your `X-App-Password` header and
+   check the models you configured are listed. Then ask a question, reload the
+   `/c/<id>` link, and redeploy — the conversation should still open. If it
+   404s after the redeploy, `TRIO_DB` is not on the volume.
+
+Spend control: `APP_PASSWORD` keeps strangers out, `ASK_RATE_LIMIT_PER_MINUTE`
+caps how fast one address can ask, and `MAX_CONCURRENT_RUNS` caps how many
+questions run at once. Railway terminates TLS in front of your container, so
+set `TRUST_PROXY_HEADER=1` there — without it every caller is counted under
+the proxy's address and shares one rate-limit quota.
+
+Scaling past one instance needs a different database: SQLite on a Railway
+volume is attached to a single service instance, and replicas would each get
+their own. Volume backups are a Railway feature — turn them on if the saved
+conversations matter.
 
 ## Tests
 
