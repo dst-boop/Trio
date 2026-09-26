@@ -1,4 +1,4 @@
-import { openQuestionOptions } from './workspace-ui.mjs';
+import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -41,6 +41,8 @@ try {
   await dialog.getByRole('button', { name: 'Connections', exact: true }).click();
   for (let i = 0; i < 3; i++) await page.getByPlaceholder('Paste your API key').nth(i).fill('fake-image-key-' + i);
   await page.getByRole('switch', { name: 'Demo mode', exact: true }).click(); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  // Closing the parent panel must preserve the description retained via Connections.
+  await openQuestionOptions(page); await closeQuestionOptions(page);
   await page.getByRole('textbox', { name: 'Your question', exact: true }).fill('Review this visual concept.');
   await open(); assert.equal(await prompt.inputValue(), 'A luminous observatory'); assert.equal(await page.evaluate(() => window.imageCalls.length), 0);
   await dialog.getByRole('button', { name: 'Use current question as description', exact: true }).click(); assert.equal(await prompt.inputValue(), 'Review this visual concept.');

@@ -1,7 +1,7 @@
 'use client';
 import './image-generation.css';
 import { useEffect, useRef, useState } from 'react';
-import { ImagePlus, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
@@ -10,8 +10,8 @@ import { readImageFile, type AttachedImage } from '@/lib/images';
 import { readProviderJson } from '@/lib/provider-response';
 
 type Preview = GenerationOptions & { image: AttachedImage; url: string };
-export function ImageGeneration({ accountId, apiKey, live, disabled, question, replacingImage, onAttach, onConnections }: { accountId?: string; apiKey: string; live: boolean; disabled: boolean; question: string; replacingImage: boolean; onAttach: (image: AttachedImage) => void; onConnections: () => void }) {
-  const [open, setOpen] = useState(false), [discard, setDiscard] = useState(false);
+export function ImageGeneration({ accountId, apiKey, live, open, onOpenChange: setOpen, question, replacingImage, onAttach, onConnections }: { accountId?: string; apiKey: string; live: boolean; open: boolean; onOpenChange: (open: boolean) => void; question: string; replacingImage: boolean; onAttach: (image: AttachedImage) => void; onConnections: () => void }) {
+  const [discard, setDiscard] = useState(false);
   const [prompt, setPrompt] = useState(''), [size, setSize] = useState<GenerationOptions['size']>('1024x1024'), [quality, setQuality] = useState<GenerationOptions['quality']>('medium');
   const [result, setResult] = useState<Preview | null>(null), [running, setRunning] = useState(false), [error, setError] = useState('');
   const version = useRef(0), controller = useRef<AbortController | null>(null), timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,7 +47,6 @@ export function ImageGeneration({ accountId, apiKey, live, disabled, question, r
   function download() { if (!result) return; const link = document.createElement('a'); link.href = result.url; link.download = 'trio-generated-' + new Date().toISOString().slice(0, 10) + '.jpg'; link.click(); }
   function attach() { if (!result || running) return; try { onAttach(result.image); reset(); toast.success('Generated image attached. Add your question, then Ask Trio.'); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not attach the image. Download it to keep a copy.'); } }
   return <>
-    <button className="attach-button" disabled={disabled} onClick={() => setOpen(true)}><ImagePlus size={17} /><span>Create image</span></button>
     <Dialog open={open} onOpenChange={close}><DialogContent className="image-generation-dialog"><DialogTitle>Create an image</DialogTitle><DialogDescription>Describe a visual, generate it with OpenAI, then download it or ask your Trio team to review it.</DialogDescription>
       {!ready && <p className="image-generation-note">{!accountId ? 'Sign in to generate images.' : <>Enable OpenAI with your API key and switch to Live in <button onClick={() => { setOpen(false); onConnections(); if (prompt) toast('Description kept. Reopen Create image after connecting.'); }}>Connections</button>.</>}</p>}
       <label className="image-generation-prompt">Image description<textarea aria-label="Image description" value={prompt} maxLength={imageDescriptionLimit} disabled={running} onChange={event => setPrompt(event.target.value)} placeholder="A luminous observatory above a quiet ocean, cinematic lighting, blue and violet palette…" rows={4} /><small>{prompt.length.toLocaleString()} / 4,000 characters</small></label>
