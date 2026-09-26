@@ -10,6 +10,7 @@ const read=async()=>{const response=await page.request.get(base+'/api/workspace'
 const save=async action=>{const response=page.waitForResponse(r=>r.url().endsWith('/api/workspace')&&r.request().method()==='PUT');await action();assert.equal((await response).status(),200);};
 try {
   await page.goto(base+'/signin-with-chatgpt?return_to=%2Fworkspace',{waitUntil:'networkidle'});
+  await page.getByText('Guided workflows', { exact: true }).click();
   await page.getByRole('button',{name:/Prepare a client meeting/}).click();
   await page.getByLabel('Desired outcome',{exact:true}).fill('Leave with clear next steps');
   await page.getByLabel('Workflow notes',{exact:true}).fill('We need a document before Thursday.');

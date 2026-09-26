@@ -1,3 +1,4 @@
+import { openQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -38,7 +39,7 @@ try {
     await select('Beta'); await confirm.getByRole('button', { name: 'Discard and switch', exact: true }).click();
     assert.equal(await question.inputValue(), ''); assert.equal(await page.locator('.attachment').count(), 0); assert.equal(await page.locator('.session-open.active').getAttribute('title'), 'Beta'); assert.equal(await warns(), false);
     // New-conversation instructions are not yet in saved history, so protect them too.
-    await start(); await page.locator('.session-instructions > summary').click();
+    await start(); await openQuestionOptions(page); await page.locator('.session-instructions > summary').click();
     const instructions = page.getByRole('textbox', { name: 'Session instructions', exact: true }); await instructions.fill('Unsaved project requirements');
     await start(); await confirm.getByRole('button', { name: 'Keep editing', exact: true }).click(); assert.equal(await instructions.inputValue(), 'Unsaved project requirements');
     await start(); await confirm.getByRole('button', { name: 'Discard and start new', exact: true }).click(); assert.equal(await instructions.inputValue(), ''); assert.equal(await warns(), false);

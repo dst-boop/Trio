@@ -9,8 +9,8 @@ const errors=[];page.on('pageerror',e=>errors.push(e.message));
 await mkdir('test-output',{recursive:true});
 try {
  await page.goto(`${base}/signin-with-chatgpt?return_to=%2Fdemo`,{waitUntil:'networkidle'});
- assert.equal(await page.getByRole('combobox',{name:'Answer mode',exact:true}).inputValue(),'council','Existing default stays unchanged');
- await page.getByRole('combobox',{name:'Answer mode',exact:true}).selectOption('single');
+ assert.equal(await page.getByRole('radio', { name: 'Single answer', exact: true }).isChecked(), true, 'First-use default is Single answer');
+ await page.getByRole('radio', { name: 'Single answer', exact: true }).check();
  await page.getByRole('button',{name:'Run demo',exact:true}).click();
  await page.getByRole('tab',{name:'Perspectives 1'}).waitFor();
  await page.getByRole('button',{name:'Connections',exact:true}).click();
@@ -43,7 +43,8 @@ try {
  await page.locator('.image-context').getByText('next.png',{exact:true}).waitFor();
  await page.getByLabel('Choose PDF',{exact:true}).setInputFiles({name:'next.pdf',mimeType:'application/pdf',buffer:Buffer.from(samplePdf+'\n% New follow-up document')});
  await page.locator('.pdf-context').getByText('next.pdf',{exact:true}).waitFor();
- await page.getByRole('combobox',{name:'Answer model'}).selectOption('openai');
+ await page.getByRole('combobox', { name: 'Answer model' }).click();
+ await page.getByRole('option', { name: 'ChatGPT', exact: true }).click();
  await page.getByRole('button',{name:'Have the team check this'}).click();
  await page.getByText('Correction from review',{exact:true}).waitFor();
  const review=requests[1];assert.equal(review.mode,'council');assert.equal(review.question,requests[0].question);assert.equal(review.reviewAnswer,'Original marker answer');assert.equal(review.context,'Original reference context');assert.deepEqual(review.history,[],'Original answer must not enter independent drafting through history');

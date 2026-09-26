@@ -1,3 +1,4 @@
+import { openQuestionOptions } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ try {
   await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
   await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByRole('switch', { name: 'Web research', exact: true }).click();
+  await openQuestionOptions(page); await page.getByRole('switch', { name: 'Web research', exact: true }).click();
   if (await page.getByLabel('Research provider', { exact: true }).count()) await page.getByLabel('Research provider', { exact: true }).selectOption('openai');
   await page.getByRole('textbox', { name: 'Your question' }).fill('Research current facts');
   await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
@@ -44,7 +45,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await mkdir('test-output', { recursive: true }); await page.locator('.research-panel').screenshot({ path: 'test-output/research-mobile.png' });
   await page.setViewportSize({ width: 1440, height: 1050 });
-  await page.getByRole('switch', { name: 'Web research', exact: true }).click();
+  await openQuestionOptions(page); await page.getByRole('switch', { name: 'Web research', exact: true }).click();
   if (await page.getByLabel('Research provider', { exact: true }).count()) await page.getByLabel('Research provider', { exact: true }).selectOption('openai');
   await ask('Follow up without another search');
   assert.equal(await page.locator('.results-section > .research-panel').count(), 0);

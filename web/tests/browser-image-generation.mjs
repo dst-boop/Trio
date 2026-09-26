@@ -1,3 +1,4 @@
+import { openQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -27,7 +28,7 @@ try {
   // A deterministic raster fixture, not an actual generated image or a paid request.
   const jpeg = await page.evaluate(() => { const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 1024; const ctx = canvas.getContext('2d'); ctx.fillStyle = '#342255'; ctx.fillRect(0, 0, 1024, 1024); ctx.fillStyle = '#e1caff'; ctx.font = '48px sans-serif'; ctx.fillText('Local image fixture', 285, 520); return canvas.toDataURL('image/jpeg').split(',')[1]; });
   const image = { mimeType: 'image/jpeg', data: jpeg };
-  const open = () => page.getByRole('button', { name: 'Create image', exact: true }).click();
+  const open = async () => { await openQuestionOptions(page); await page.getByRole('button', { name: 'Create image', exact: true }).click(); };
   const dialog = page.getByRole('dialog', { name: 'Create an image', exact: true });
   const prompt = page.getByRole('textbox', { name: 'Image description', exact: true });
   const preview = page.getByAltText('AI-generated result for your image description');

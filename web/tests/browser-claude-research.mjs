@@ -1,3 +1,4 @@
+import { openQuestionOptions } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -13,7 +14,7 @@ try {
   await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
   await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByRole('switch', { name: 'Web research', exact: true }).click();
+  await openQuestionOptions(page); await page.getByRole('switch', { name: 'Web research', exact: true }).click();
   assert.equal(await page.getByLabel('Research provider', { exact: true }).inputValue(), 'auto');
   const research = { text: 'Claude found [evidence](https://example.org/evidence).', sources: [{ title: 'Claude source', url: 'https://example.org/evidence' }], at: '2026-09-22T00:00:00Z', provider: 'claude' };
   let calls = 0;

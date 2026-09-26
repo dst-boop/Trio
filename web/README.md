@@ -334,3 +334,7 @@ Each phase is claimed atomically, every actual HTTP attempt is durably reserved 
 ### Recovery dialogs
 
 Guided-brief discard, personal-memory replacement/reload/forget, plan removal, quality identity-key reveal, and stale-workspace reload/sign-out use in-app confirmations. Cancellation preserves the current draft, closing decisions retain their wording through the exit animation, and focus returns to a connected control or parent dialog. Plan removal and identity reveal re-check their exact target. An in-flight memory suggestion continues when you keep editing; confirmed discard stops waiting and fences late responses. A dispatched request may still be billed. Memory suggestions have a 150-second browser deadline, allowing the 120-second provider limit to report first. Browser-managed warnings on leaving an unsaved page remain in place.
+
+### Compact workspace and answer modes
+
+The question box and all five answer modes appear above responses. During a run, settings explicitly apply to the next question; the current run keeps the mode and provider captured when it started. Team review identifies itself as Council even when the next-question preference is Single answer. The sticky toolbar keeps Stop and Question & modes reachable. Long current and historical responses use keyboard-accessible scroll regions with an optional full-page view; copy and export retain the complete text. Extra tools and context stay available in an expandable section.
