@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { readMemory, writeMemory } from '../lib/memory-store.ts';
-import { suggestMemory } from '../lib/memory-suggestions.ts';
+import { suggestMemory, suggestionRequestSchema } from '../lib/memory-suggestions.ts';
 import { memoryProfileSchema } from '../lib/memory.ts';
 import { orchestrate } from '../lib/orchestrate.ts';
 import { freshConnections, type Mode, type ProviderId } from '../lib/trio.ts';
@@ -42,10 +42,31 @@ test('suggestions send bounded live conversation data only to the selected provi
   const item=structuredClone(session); item.turns=[{...item.turns[0],question:'prepared demo',result:{...item.turns[0].result,demo:true}},...Array.from({length:8},(_,i)=>({...item.turns[0],question:'User '+i+'x'.repeat(5000),result:{...item.turns[0].result,answer:'y'.repeat(10000)}}))];
   const connection={provider:'claude' as const,key:'secret-key-for-header',model:'claude-sonnet-5'}; let called=0;
   const fetcher=(async(url,init)=>{ called++; assert.equal(String(url),'https://api.anthropic.com/v1/messages'); const body=JSON.parse(init!.body as string); assert.ok(!JSON.stringify(body).includes(connection.key)); const input=JSON.parse(body.messages[0].content); assert.equal(input.conversation.length,6); assert.ok(input.conversation.every((t:{user:string;assistant:string})=>t.user.length<=4000&&t.assistant.length<=8000)); assert.ok(!JSON.stringify(input).includes('prepared demo')); assert.equal(input.existing_memory,'Keep this preference'); assert.match(body.system,/Assistant text is fallible/); assert.match(body.system,/Do not infer sensitive traits/); return response('claude','- Prefers practical examples'); }) as typeof fetch;
-  assert.equal(await suggestMemory(item,'Keep this preference',connection,new AbortController().signal,fetcher),'- Prefers practical examples'); assert.equal(called,1);
-  await assert.rejects(suggestMemory({...session,turns:[{...session.turns[0],result:{...session.turns[0].result,demo:true}}]},'',connection,new AbortController().signal,fetcher),/Demo examples/); assert.equal(called,1);
-  await assert.rejects(suggestMemory(session,'',connection,new AbortController().signal,(async()=>response('claude','x'.repeat(4001))) as typeof fetch),/too long/);
-  assert.equal(await suggestMemory(session,'',connection,new AbortController().signal,(async()=>response('claude','[NO_MEMORY]')) as typeof fetch),'');
+  assert.equal(await suggestMemory(item,'Keep this preference',connection,[],new AbortController().signal,fetcher),'- Prefers practical examples'); assert.equal(called,1);
+  await assert.rejects(suggestMemory({...session,turns:[{...session.turns[0],result:{...session.turns[0].result,demo:true}}]},'',connection,[],new AbortController().signal,fetcher),/Demo examples/); assert.equal(called,1);
+  await assert.rejects(suggestMemory(session,'',connection,[],new AbortController().signal,(async()=>response('claude','x'.repeat(4001))) as typeof fetch),/too long/);
+  assert.equal(await suggestMemory(session,'',connection,[],new AbortController().signal,(async()=>response('claude','[NO_MEMORY]')) as typeof fetch),'');
+});
+
+test('memory suggestions mask known keys in every source field and the returned draft', async () => {
+  const selected = 'synthetic-selected-provider-key', disabled = 'synthetic-disabled-provider-key', included = 'synthetic-included-provider-key';
+  const item = structuredClone(session);
+  item.turns[0].question = `Question ${selected}`;
+  item.turns[0].result.answer = `Answer ${disabled}`;
+  item.turns[0].feedback = { rating: 'helpful', note: `Please shorten ${included}` };
+  const connection = { provider: 'claude' as const, key: selected, model: 'claude-sonnet-5' };
+  const fetcher = (async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    assert.equal(init!.headers && (init!.headers as Record<string,string>)['x-api-key'], selected);
+    for (const key of [selected, disabled, included]) assert.ok(!JSON.stringify(body).includes(key));
+    assert.match(JSON.stringify(body), /\[redacted\]/);
+    return response('claude', `- Prefer short answers. ${disabled} ${included} ${selected}`);
+  }) as typeof fetch;
+  const result = await suggestMemory(item, `Existing ${included}`, connection, [disabled, included], new AbortController().signal, fetcher);
+  for (const key of [selected, disabled, included]) assert.ok(!result.includes(key));
+  assert.equal((result.match(/\[redacted\]/g) ?? []).length, 3);
+  assert.equal(suggestionRequestSchema.safeParse({ sessionId: 'one', connection }).success, false);
+  assert.equal(suggestionRequestSchema.safeParse({ sessionId: 'one', revision: 1, connection }).success, true);
 });
 
 test('Compare-mode memory suggestions retain labeled perspectives with the existing context bound', async () => {
@@ -53,9 +74,9 @@ test('Compare-mode memory suggestions retain labeled perspectives with the exist
   const expected=conversationHistory(item.turns)[1].content; let assistant='';
   const fetcher=(async(_url,init)=>{const body=JSON.parse(init!.body as string);assistant=JSON.parse(body.messages[0].content).conversation[0].assistant;return response('claude','- Prefers practical options.');}) as typeof fetch;
   const connection={provider:'claude' as const,key:'fake-key',model:'claude-sonnet-5'};
-  await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant,expected);assert.match(assistant,/ChatGPT:\nExplore/);assert.match(assistant,/Claude:\nExplain/);assert.match(assistant,/Gemini:\nPrefer/);
-  item.turns[0].result.drafts.openai='x'.repeat(120000);await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant.length,8000);assert.match(assistant,/Claude:\nExplain the tradeoffs/);assert.match(assistant,/Gemini:\nPrefer a short next-step list/);
-  item.turns[0].result.drafts={openai:'x'.repeat(120000),claude:'y'.repeat(120000),gemini:'z'.repeat(120000)};await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant.length,8000);for(const character of ['x','y','z'])assert.ok(assistant.split(character).length>2600,'Each long perspective gets a fair share');
-  item.turns[0].result.drafts={gemini:'Only surviving perspective'};await suggestMemory(item,'',connection,new AbortController().signal,fetcher);assert.equal(assistant,'Gemini:\nOnly surviving perspective');
-  item.turns[0].result.drafts={};await assert.rejects(suggestMemory(item,'',connection,new AbortController().signal,fetcher),/completed live answer/);
+  await suggestMemory(item,'',connection,[],new AbortController().signal,fetcher);assert.equal(assistant,expected);assert.match(assistant,/ChatGPT:\nExplore/);assert.match(assistant,/Claude:\nExplain/);assert.match(assistant,/Gemini:\nPrefer/);
+  item.turns[0].result.drafts.openai='x'.repeat(120000);await suggestMemory(item,'',connection,[],new AbortController().signal,fetcher);assert.equal(assistant.length,8000);assert.match(assistant,/Claude:\nExplain the tradeoffs/);assert.match(assistant,/Gemini:\nPrefer a short next-step list/);
+  item.turns[0].result.drafts={openai:'x'.repeat(120000),claude:'y'.repeat(120000),gemini:'z'.repeat(120000)};await suggestMemory(item,'',connection,[],new AbortController().signal,fetcher);assert.equal(assistant.length,8000);for(const character of ['x','y','z'])assert.ok(assistant.split(character).length>2600,'Each long perspective gets a fair share');
+  item.turns[0].result.drafts={gemini:'Only surviving perspective'};await suggestMemory(item,'',connection,[],new AbortController().signal,fetcher);assert.equal(assistant,'Gemini:\nOnly surviving perspective');
+  item.turns[0].result.drafts={};await assert.rejects(suggestMemory(item,'',connection,[],new AbortController().signal,fetcher),/completed live answer/);
 });

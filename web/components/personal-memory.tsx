@@ -35,8 +35,9 @@ export function usePersonalMemory(accountId?: string) {
   return { profile, error, loading, reload, save };
 }
 type MemoryState = ReturnType<typeof usePersonalMemory>;
-export function PersonalMemory({ accountId, open, onOpenChange, memory, connections, sessionId, sessionSaved, busy }: { accountId: string; open: boolean; onOpenChange: (open: boolean) => void; memory: MemoryState; connections: Connections; sessionId: string | null; sessionSaved: boolean; busy: boolean }) {
+export function PersonalMemory({ accountId, open, onOpenChange, memory, connections, sessionId, workspaceRevision, sessionSaved, busy }: { accountId: string; open: boolean; onOpenChange: (open: boolean) => void; memory: MemoryState; connections: Connections; sessionId: string | null; workspaceRevision: number; sessionSaved: boolean; busy: boolean }) {
   const [notes, setNotes] = useState(''), [enabled, setEnabled] = useState(false), [error, setError] = useState('');
+  const [errorKind, setErrorKind] = useState<'memory' | 'suggestion'>('memory');
   const [saving, setSaving] = useState(false), [suggesting, setSuggesting] = useState(false), [suggested, setSuggested] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [discardHadRequest, setDiscardHadRequest] = useState(false);
@@ -50,7 +51,8 @@ export function PersonalMemory({ accountId, open, onOpenChange, memory, connecti
   const edited = Boolean(memory.profile && (notes !== memory.profile.notes || enabled !== memory.profile.enabled));
   const dirty = edited || importPending || suggesting;
   useEffect(() => { setConfirmation(null); }, [open, accountId, memory.profile]);
-  useEffect(() => { version.current++; abort.current?.abort(); setSuggesting(false); setNotes(memory.profile?.notes ?? ''); setEnabled(memory.profile?.enabled ?? false); setError(''); setSuggested(false); setImported(false); setImportPending(false); setDiscardOpen(false); }, [open, memory.profile]);
+  useEffect(() => { version.current++; abort.current?.abort(); setSuggesting(false); setNotes(memory.profile?.notes ?? ''); setEnabled(memory.profile?.enabled ?? false); setError(''); setErrorKind('memory'); setSuggested(false); setImported(false); setImportPending(false); setDiscardOpen(false); }, [open, memory.profile]);
+  useEffect(() => () => { version.current++; abort.current?.abort(); }, [accountId, sessionId, workspaceRevision]);
   useEffect(() => () => { version.current++; abort.current?.abort(); }, []);
   useEffect(() => {
     if (!open || !dirty) return;
@@ -71,7 +73,7 @@ export function PersonalMemory({ accountId, open, onOpenChange, memory, connecti
     if (!memory.profile || saving || suggesting || busy || importPending) return;
     setSaving(true); setError('');
     try { await memory.save({ revision: memory.profile.revision, notes: forget ? '' : notes.trim(), enabled: forget ? false : enabled }); toast.success(forget ? 'Personal memory forgotten' : 'Personal memory saved'); onOpenChange(false); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Could not save memory.'); }
+    catch (e) { setErrorKind('memory'); setError(e instanceof Error ? e.message : 'Could not save memory.'); }
     finally { setSaving(false); }
   }
   async function suggest() {
@@ -79,10 +81,10 @@ export function PersonalMemory({ accountId, open, onOpenChange, memory, connecti
     const request = ++version.current; const controller = new AbortController(); abort.current = controller;
     setSuggesting(true); setError('');
     try {
-      const data = z.object({ suggestion: z.string().max(maxMemoryCharacters) }).parse(await decoded(await fetch('/api/memory/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trio-Account': accountId }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(150_000)]), body: JSON.stringify({ sessionId, connection: { provider, key: connections[provider].key, model: connections[provider].model } }) })));
+      const data = z.object({ suggestion: z.string().max(maxMemoryCharacters) }).parse(await decoded(await fetch('/api/memory/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trio-Account': accountId }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(150_000)]), body: JSON.stringify({ sessionId, revision: workspaceRevision, connection: { provider, key: connections[provider].key, model: connections[provider].model } }) })));
       if (request === version.current) { setNotes(data.suggestion); setSuggested(true); }
-    } catch (e) { if (request === version.current && !controller.signal.aborted) setError(e instanceof DOMException && e.name === 'TimeoutError' ? 'The suggestion timed out. Your current notes are unchanged; a dispatched request may still be billed.' : e instanceof Error ? e.message : 'Could not suggest memory.'); }
-    finally { if (request === version.current) setSuggesting(false); }
+    } catch (e) { if (request === version.current && !controller.signal.aborted) { setErrorKind('suggestion'); setError(e instanceof DOMException && e.name === 'TimeoutError' ? 'The suggestion timed out. Your current notes are unchanged; a dispatched request may still be billed.' : e instanceof Error ? e.message : 'Could not suggest memory.'); } }
+    finally { if (abort.current === controller) { abort.current = null; setSuggesting(false); } }
   }
   return <Dialog open={open} onOpenChange={changeOpen}><DialogContent ref={memoryDialog} className="memory-dialog" onOpenAutoFocus={() => { origin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => { if (origin.current?.isConnected) { event.preventDefault(); origin.current.focus(); } }}><DialogTitle>Personal memory</DialogTitle><DialogDescription>Keep useful goals, background, and preferences in your private account. You decide what Trio remembers. This provides context to your models; it does not train their weights or guarantee accuracy.</DialogDescription>
     {memory.loading ? <p role="status">Loading personal memory…</p> : !memory.profile ? <div role="alert"><p>{memory.error}</p><button className="subtle-button" onClick={() => void memory.reload()}>Retry loading memory</button></div> : <>
@@ -92,7 +94,7 @@ export function PersonalMemory({ accountId, open, onOpenChange, memory, connecti
       {imported && <p className="revision-note" role="status">Imported draft — not saved. Review your notes and the Use personal memory setting, then Save memory to update your account.</p>}
       <MemoryBackup key={memory.profile.revision} notes={notes} enabled={enabled} draft={edited} busy={busy || saving || suggesting} open={open} onPending={setImportPending} onUse={draft => { setNotes(draft.notes); setEnabled(draft.enabled); setSuggested(false); setImported(true); setError(''); }} />
       <section className="memory-suggest"><h3>Learn from this conversation</h3><p>Send up to six recent live question-and-answer pairs from the currently open, saved conversation, including any feedback you recorded on those answers, plus your existing memory, to one connected model. One API request is billed by that provider. Nothing is remembered automatically.</p><label>Model for suggestions<select aria-label="Model for memory suggestions" value={provider ?? ''} disabled={busy || suggesting || saving || !available.length} onChange={e => setChosen(e.target.value as ProviderId)}>{!available.length && <option value="">Connect a model first</option>}{available.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><button className="subtle-button" disabled={busy || saving || suggesting || importPending || !provider || !sessionId || !sessionSaved} onClick={() => { if (notes !== memory.profile?.notes) setConfirmation('suggest'); else void suggest(); }}>Suggest from conversation</button>{suggesting && <button className="subtle-button" onClick={() => { version.current++; abort.current?.abort(); setSuggesting(false); }}>Stop suggestion</button>}{(!sessionId || !sessionSaved) && <small>Open a conversation and wait for it to finish saving first.</small>}</section>
-      {error && <div className="error-box" role="alert"><p>{error}</p><button className="subtle-button" disabled={saving || suggesting} onClick={() => setConfirmation('reload')}>Reload saved memory</button></div>}
+      {error && <div className="error-box" role="alert"><p>{error}</p>{errorKind === 'memory' && <button className="subtle-button" disabled={saving || suggesting} onClick={() => setConfirmation('reload')}>Reload saved memory</button>}</div>}
       <div className="dialog-actions"><button className="subtle-button" disabled={busy || saving || suggesting || importPending || !memory.profile.notes} onClick={() => setConfirmation('forget')}>Forget memory</button><button className="run-button" disabled={busy || saving || suggesting || importPending} onClick={() => void save()}>{saving ? 'Saving…' : 'Save memory'}</button></div><small>Forgetting clears future personalization. Earlier answers retain the memory they used; delete those conversations separately if needed.</small>
     </>}
     <ActionConfirmation open={confirmation !== null} onOpenChange={value => { if (!value) setConfirmation(null); }} title={confirmation === 'forget' ? 'Forget personal memory?' : confirmation === 'suggest' ? 'Replace this memory draft?' : 'Reload saved memory?'} description={confirmation === 'forget' ? 'This clears saved personal memory for future answers. Earlier answer snapshots and downloaded backups are retained.' : confirmation === 'suggest' ? 'A new suggestion will replace the notes currently in this editor when it succeeds. Copy any edits you want to keep first. One request is billed by the selected provider; the suggestion is not saved automatically.' : 'This discards the notes and setting currently in this editor and loads the latest saved memory. Copy edits you want to keep first.'} confirmLabel={confirmation === 'forget' ? 'Forget memory' : confirmation === 'suggest' ? 'Replace with a suggestion' : 'Discard draft and reload'} cancelLabel="Keep current notes" destructive={confirmation === 'forget'} disabled={busy || saving || suggesting || importPending || memory.loading} onConfirm={() => {
