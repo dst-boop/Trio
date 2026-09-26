@@ -1,5 +1,4 @@
-/** Expand the workspace's optional tools before interacting with a nested control. */
+/** Open optional workspace tools before interacting with a nested control. */
 export async function openQuestionOptions(page) {
-  const details = page.locator('.question-options').filter({ has: page.locator('.creation-tools') });
-  if (!await details.evaluate(element => element.open)) await details.locator(':scope > summary').click();
+  if (!await page.getByRole('dialog', { name: 'Tools & context', exact: true }).isVisible()) await page.getByRole('button', { name: /^Tools & context/ }).click();
 }
