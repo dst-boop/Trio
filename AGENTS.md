@@ -82,7 +82,7 @@ recorded is a decision, an unrecorded one is drift.
 | Draft/recovery confirmations | no | in-app dialogs preserve drafts on cancel and re-check removal/reveal targets |
 | In-app quality evaluation | no | yes |
 | Blinded comparison on user-supplied work with saved human ratings | no | yes, separate from exact-answer checks |
-| Access control | shared `APP_PASSWORD` | invite-only accounts |
+| Access control | shared `APP_PASSWORD` | invite-only Sites accounts or standalone Cloudflare Access email-code login |
 | Provider keys | server-side `.env`, shared by every caller | per-account encrypted, resolved per request; optional workspace-provided fallback |
 | Saved history | SQLite; the unguessable link is the capability | per-account online history + V6 portable backups |
 | Deleting a conversation | `DELETE /api/conversations/<id>` | Delete session in the UI |

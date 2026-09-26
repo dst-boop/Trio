@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trio-workspace",
+  "main": "worker/access-entry.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": { "binding": "ASSETS", "run_worker_first": true },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "trio-workspace",
+    "database_id": "00000000-0000-4000-8000-000000000000",
+    "migrations_dir": "drizzle"
+  }],
+  "vars": {
+    "TRIO_AUTH_PROVIDER": "cloudflare-access",
+    "TRIO_ACCESS_TEAM_DOMAIN": "",
+    "TRIO_ACCESS_AUD": "",
+    "TRIO_ACCESS_ALLOWED_EMAILS": ""
+  }
+}
