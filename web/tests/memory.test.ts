@@ -80,3 +80,26 @@ test('Compare-mode memory suggestions retain labeled perspectives with the exist
   item.turns[0].result.drafts={gemini:'Only surviving perspective'};await suggestMemory(item,'',connection,[],new AbortController().signal,fetcher);assert.equal(assistant,'Gemini:\nOnly surviving perspective');
   item.turns[0].result.drafts={};await assert.rejects(suggestMemory(item,'',connection,[],new AbortController().signal,fetcher),/completed live answer/);
 });
+
+test('memory masks complete credentials before question, answer, feedback and perspective cutoffs', async () => {
+  const secret = 'BOUNDARY-CREDENTIAL-MUST-NEVER-REACH-ANOTHER-PROVIDER-' + 's'.repeat(100);
+  const item = structuredClone(session);
+  item.turns[0].question = 'q'.repeat(3970) + secret;
+  item.turns[0].result.answer = 'a'.repeat(7900) + secret;
+  item.turns[0].feedback = { rating: 'helpful', note: 'f'.repeat(1970) + secret };
+  const before = structuredClone(item);
+  const connection = { provider: 'claude' as const, key: 'selected-test-key', model: 'claude-sonnet-5' };
+  const fetcher = (async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    assert.ok(!JSON.stringify(body).includes('BOUNDARY-CREDENTIAL'), 'No key prefix may survive truncation');
+    const turn = JSON.parse(body.messages[0].content).conversation[0];
+    assert.ok(turn.user.length <= 4000 && turn.assistant.length <= 8000 && turn.user_feedback.note.length <= 2000);
+    return response('claude', '[NO_MEMORY]');
+  }) as typeof fetch;
+  await suggestMemory(item, '', connection, [secret], new AbortController().signal, fetcher);
+  assert.deepEqual(item, before, 'Redaction must not modify saved source content');
+  item.turns[0].mode = 'compare';
+  item.turns[0].result.answer = '';
+  item.turns[0].result.drafts = Object.fromEntries(['openai', 'claude', 'gemini'].map(id => [id, 'd'.repeat(2560) + secret + 'e'.repeat(3000)]));
+  await suggestMemory(item, '', connection, [secret], new AbortController().signal, fetcher);
+});
