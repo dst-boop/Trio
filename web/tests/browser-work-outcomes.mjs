@@ -1,3 +1,4 @@
+import { openQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -10,7 +11,7 @@ const read=async()=>{const response=await page.request.get(base+'/api/workspace'
 const save=async action=>{const response=page.waitForResponse(r=>r.url().endsWith('/api/workspace')&&r.request().method()==='PUT');await action();assert.equal((await response).status(),200);};
 try {
   await page.goto(base+'/signin-with-chatgpt?return_to=%2Fworkspace',{waitUntil:'networkidle'});
-  await page.getByText('Guided workflows', { exact: true }).click();
+  await openQuestionOptions(page); await page.getByText('Guided workflows', { exact: true }).click();
   await page.getByRole('button',{name:/Prepare a client meeting/}).click();
   await page.getByLabel('Desired outcome',{exact:true}).fill('Leave with clear next steps');
   await page.getByLabel('Workflow notes',{exact:true}).fill('We need a document before Thursday.');
@@ -18,6 +19,7 @@ try {
   assert.equal(await page.getByLabel('Desired outcome',{exact:true}).inputValue(),'Leave with clear next steps');
   await page.getByRole('button',{name:'Use brief in Live mode',exact:true}).click();
   const brief=await page.getByLabel('Your question',{exact:true}).inputValue();assert.match(brief,/Leave with clear next steps/);assert.match(brief,/Never claim to send/);assert.equal(calls,0);
+  await openQuestionOptions(page); await page.getByText('Guided workflows', { exact: true }).click();
   await page.getByRole('button',{name:/Plan the workday/}).click();
   assert.equal(await page.getByLabel('Workflow notes',{exact:true}).inputValue(),brief);
   await page.getByLabel('Desired outcome',{exact:true}).fill('Finish two priorities');
