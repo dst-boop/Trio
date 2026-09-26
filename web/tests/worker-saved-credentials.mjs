@@ -51,7 +51,7 @@ const consumerBodies = [
   ['/api/ask',{question:'Fixture',connections,mode:'single',lead:'openai'}],
   ['/api/transcribe',{key:ref,audio:{format:'wav',data:Buffer.from('RIFF0000WAVEfmt 0000000000000000').toString('base64')}}],
   ['/api/images/generate',{key:ref,prompt:'Fixture',size:'1024x1024',quality:'low'}],
-  ['/api/memory/suggest',{sessionId:'one',connection:{provider:'openai',key:ref,model:'model'}}],
+  ['/api/memory/suggest',{sessionId:'one',revision:1,connection:{provider:'openai',key:ref,model:'model'}}],
 ];
 try {
   const db = await mf.getD1Database('DB');

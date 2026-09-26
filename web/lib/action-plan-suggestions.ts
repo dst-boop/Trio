@@ -3,6 +3,7 @@ import { callProvider } from './orchestrate.ts';
 import { conversationAnswerExcerpt, resultSchema, type Turn } from './sessions.ts';
 import { estimateStandardCost, summarizeUsage, type Tokens } from './usage.ts';
 import { providerIdSchema } from './saved-connections.ts';
+import { redactKnownSecrets } from './secret-redaction.ts';
 
 export const planConnectionSchema = z.object({
   provider: providerIdSchema,
@@ -47,7 +48,7 @@ export function actionPlanSource(turn: Turn) {
   return { question, answer: answer.text, shortened: question.length < turn.question.length || answer.shortened };
 }
 export function redactPlanText(value: string, keys: string[]) {
-  return [...new Set(keys)].filter(Boolean).sort((a,b) => b.length-a.length).reduce((text,key) => text.split(key).join('[redacted]'), value);
+  return redactKnownSecrets(value, keys);
 }
 
 /** A single non-streaming call. A failed or malformed result never triggers a paid repair. */

@@ -55,6 +55,6 @@ test('memory suggestions receive explicit bounded feedback as data with accuracy
     assert.ok(!body.system.includes(feedback.note));
     return Response.json({ content: [{ type: 'text', text: '- Prefers short worked examples.' }] });
   }) as typeof fetch;
-  assert.equal(await suggestMemory(records[0], '', { provider: 'claude', key: 'fake-key', model: 'claude-sonnet-5' }, new AbortController().signal, fetcher), '- Prefers short worked examples.');
+  assert.equal(await suggestMemory(records[0], '', { provider: 'claude', key: 'fake-key', model: 'claude-sonnet-5' }, [], new AbortController().signal, fetcher), '- Prefers short worked examples.');
   assert.equal(calls, 1); assert.deepEqual(records, snapshot);
 });
