@@ -1,4 +1,4 @@
-import { openQuestionOptions } from './workspace-ui.mjs';
+import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -24,6 +24,7 @@ try {
   assert.equal(await page.getByLabel('Workflow notes',{exact:true}).inputValue(),brief);
   await page.getByLabel('Desired outcome',{exact:true}).fill('Finish two priorities');
   await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'Discard brief',exact:true}).click();assert.equal(await page.getByLabel('Your question',{exact:true}).inputValue(),brief);
+  await closeQuestionOptions(page);
   // Seed a completed live result without paid provider calls, then test real account persistence.
   let snapshot=await read();const headers={Origin:base,'X-Trio-Account':snapshot.accountId,'X-Trio-Workspace-Version':'6'};
   assert.equal((await page.request.put(base+'/api/workspace',{headers,data:{revision:snapshot.revision,sessions:[fixture]}})).status(),200);

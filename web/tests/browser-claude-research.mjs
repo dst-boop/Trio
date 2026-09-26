@@ -1,4 +1,4 @@
-import { openQuestionOptions } from './workspace-ui.mjs';
+import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -25,7 +25,7 @@ try {
     const events = [{ type: 'stage', stage: 'research', provider: 'claude' }, { type: 'research', research }, { type: 'final', result }, { type: 'future_event', phase: 'research' }];
     await route.fulfill({ contentType: 'application/x-ndjson', body: events.map(e => JSON.stringify(e)).join('\n') + '\n' });
   });
-  const ask = async question => { await page.getByRole('textbox', { name: 'Your question' }).fill(question); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click(); await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor(); };
+  const ask = async question => { await closeQuestionOptions(page); await page.getByRole('textbox', { name: 'Your question' }).fill(question); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click(); await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor(); };
   await ask('Research with my connected Claude model');
   await page.getByText('Claude research answer 1', { exact: true }).waitFor();
   await page.locator('.research-panel summary').filter({ hasText: 'Claude' }).click();
@@ -33,11 +33,12 @@ try {
   let saved = JSON.parse(await page.evaluate(() => localStorage.getItem('trio-sessions')));
   assert.equal(saved[0].turns[0].result.research.provider, 'claude'); assert.equal(saved[0].turns[0].result.researchBy, 'claude');
   assert.ok(!JSON.stringify(saved).includes('fake-claude-only'));
-  await page.getByLabel('Research provider', { exact: true }).selectOption('openai');
+  await openQuestionOptions(page); await page.getByLabel('Research provider', { exact: true }).selectOption('openai');
+  await closeQuestionOptions(page);
   await page.getByRole('textbox', { name: 'Your question' }).fill('Unavailable explicit researcher'); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
   await page.getByRole('heading', { name: 'Connect your AI team' }).waitFor(); await page.getByText('Web research requires an enabled OpenAI API connection.', { exact: true }).waitFor();
   assert.equal(calls, 1); await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByLabel('Research provider', { exact: true }).selectOption('claude');
+  await openQuestionOptions(page); await page.getByLabel('Research provider', { exact: true }).selectOption('claude');
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.getByText('Web research requires an enabled OpenAI API connection.', { exact: true }).waitFor({ state: 'hidden' });
   await mkdir('test-output', { recursive: true }); await page.locator('.research-setting').screenshot({ path: 'test-output/claude-research-mobile.png' });

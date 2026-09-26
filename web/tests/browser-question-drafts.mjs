@@ -1,4 +1,4 @@
-import { openQuestionOptions } from './workspace-ui.mjs';
+import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -40,9 +40,9 @@ try {
     assert.equal(await question.inputValue(), ''); assert.equal(await page.locator('.attachment').count(), 0); assert.equal(await page.locator('.session-open.active').getAttribute('title'), 'Beta'); assert.equal(await warns(), false);
     // New-conversation instructions are not yet in saved history, so protect them too.
     await start(); await openQuestionOptions(page); await page.locator('.session-instructions > summary').click();
-    const instructions = page.getByRole('textbox', { name: 'Session instructions', exact: true }); await instructions.fill('Unsaved project requirements');
-    await start(); await confirm.getByRole('button', { name: 'Keep editing', exact: true }).click(); assert.equal(await instructions.inputValue(), 'Unsaved project requirements');
-    await start(); await confirm.getByRole('button', { name: 'Discard and start new', exact: true }).click(); assert.equal(await instructions.inputValue(), ''); assert.equal(await warns(), false);
+    const instructions = page.getByRole('textbox', { name: 'Session instructions', exact: true }); await instructions.fill('Unsaved project requirements'); await closeQuestionOptions(page);
+    await start(); await confirm.getByRole('button', { name: 'Keep editing', exact: true }).click(); await openQuestionOptions(page); await page.locator('.session-instructions > summary').click(); assert.equal(await instructions.inputValue(), 'Unsaved project requirements'); await closeQuestionOptions(page);
+    await start(); await confirm.getByRole('button', { name: 'Discard and start new', exact: true }).click(); await openQuestionOptions(page); await page.locator('.session-instructions > summary').click(); assert.equal(await instructions.inputValue(), ''); await closeQuestionOptions(page); assert.equal(await warns(), false);
     // A pending file may finish while the user decides; Keep retains it and Discard invalidates late reads.
     await page.evaluate(() => { const original = File.prototype.text; File.prototype.text = function () { return this.name.startsWith('slow-') ? new Promise(resolve => window.finishDraftFile = resolve) : original.call(this); }; });
     await upload('slow-keep.txt'); await page.getByText('Loading context…', { exact: true }).waitFor(); await select('Alpha'); await confirm.waitFor();

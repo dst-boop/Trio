@@ -1,14 +1,13 @@
 'use client';
 import './audio-transcription.css';
 import { useEffect, useRef, useState } from 'react';
-import { AudioLines } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { appendTranscript, readAudioFile, transcriptionModel, type AttachedAudio } from '@/lib/audio';
 import { readProviderJson } from '@/lib/provider-response';
 
-export function AudioTranscription({ accountId, apiKey, live, disabled, question, onAppend, onConnections }: { accountId?: string; apiKey: string; live: boolean; disabled: boolean; question: string; onAppend: (question: string) => void; onConnections: () => void }) {
-  const [open, setOpen] = useState(false), [discard, setDiscard] = useState(false);
+export function AudioTranscription({ accountId, apiKey, live, open, onOpenChange: setOpen, question, onAppend, onConnections }: { accountId?: string; apiKey: string; live: boolean; open: boolean; onOpenChange: (open: boolean) => void; question: string; onAppend: (question: string) => void; onConnections: () => void }) {
+  const [discard, setDiscard] = useState(false);
   const [audio, setAudio] = useState<AttachedAudio | null>(null), [preview, setPreview] = useState('');
   const [transcript, setTranscript] = useState(''), [completed, setCompleted] = useState(false);
   const [loading, setLoading] = useState(false), [running, setRunning] = useState(false), [error, setError] = useState('');
@@ -63,7 +62,6 @@ export function AudioTranscription({ accountId, apiKey, live, disabled, question
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not add the transcript.'); }
   }
   return <>
-    <button className="attach-button" disabled={disabled} onClick={() => setOpen(true)} title="Review a recording as text before asking Trio"><AudioLines size={17} /><span>Audio to text</span></button>
     <Dialog open={open} onOpenChange={close}><DialogContent className="audio-dialog"><DialogTitle>Turn a recording into a question</DialogTitle><DialogDescription>Transcribe a short voice note, review what was heard, then add the text to your question.</DialogDescription>
       <p className="audio-note">MP3, WAV, M4A, or WebM under 4 MB. Use short clips; long recordings may produce incomplete transcripts. Check names, numbers, and missing words against the recording.</p>
       {!ready && <p className="audio-note">{!accountId ? 'Sign in to use audio transcription.' : <>Switch to Live and enable OpenAI with your API key in <button className="text-link" onClick={() => { reset(); onConnections(); }}>Connections</button>.</>}</p>}

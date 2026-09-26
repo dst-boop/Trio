@@ -1,4 +1,4 @@
-import { openQuestionOptions } from './workspace-ui.mjs';
+import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -9,7 +9,9 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
+  await openQuestionOptions(page);
   assert.equal(await page.getByRole('switch', { name: 'Web research', exact: true }).isDisabled(), true);
+  await closeQuestionOptions(page);
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').nth(1).fill('fake-claude-research');
   await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
@@ -17,6 +19,7 @@ try {
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await openQuestionOptions(page); await page.getByRole('switch', { name: 'Web research', exact: true }).click();
   if (await page.getByLabel('Research provider', { exact: true }).count()) await page.getByLabel('Research provider', { exact: true }).selectOption('openai');
+  await closeQuestionOptions(page);
   await page.getByRole('textbox', { name: 'Your question' }).fill('Research current facts');
   await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
   await page.getByRole('heading', { name: 'Connect your AI team' }).waitFor();
@@ -30,7 +33,7 @@ try {
     const result = { drafts: { openai: 'Perspective', claude: 'Another perspective' }, reviews: {}, answer: `Answer ${calls}`, by: 'openai', errors: [], seconds: 1, demo: false, ...(calls === 1 ? { researchRequested: true, research } : {}) };
     await route.fulfill({ contentType: 'application/x-ndjson', body: (calls === 1 ? [{ type: 'stage', stage: 'research' }, { type: 'research', research }, { type: 'stage', stage: 'draft' }, { type: 'final', result }] : [{ type: 'final', result }]).map(e => JSON.stringify(e)).join('\n') + '\n' });
   });
-  const ask = async question => { await page.getByRole('textbox', { name: 'Your question' }).fill(question); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click(); await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor(); };
+  const ask = async question => { await closeQuestionOptions(page); await page.getByRole('textbox', { name: 'Your question' }).fill(question); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click(); await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor(); };
   await ask('Research current facts');
   await page.getByText('Answer 1', { exact: true }).waitFor();
   await page.locator('.research-panel summary').click();
