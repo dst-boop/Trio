@@ -16,6 +16,17 @@ export async function checkConnection(input: unknown, signal: AbortSignal, fetch
     // without forwarding the API key to another destination.
     const response = await fetcher(endpoints[provider] + encodeURIComponent(model), { method: 'GET', headers, signal: combined, redirect: 'manual', cache: 'no-store' });
     if (!response.ok) {
+      // Google reports an invalid API key as HTTP 400. Read only a bounded
+      // error envelope and translate its exact machine code to fixed copy;
+      // messages, metadata, keys and all other vendor diagnostics stay private.
+      if (provider === 'gemini' && response.status === 400) {
+        try {
+          const data = await readProviderJson(response, combined, 16_384);
+          const details = data.error?.details;
+          if (Array.isArray(details) && details.some(detail => detail?.['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && detail.domain === 'googleapis.com' && detail.reason === 'API_KEY_INVALID')) return 'geminiKey';
+        } catch { combined.throwIfAborted(); }
+        return 'rejected';
+      }
       // Vendor diagnostics can contain credentials. Never read or forward them.
       void response.body?.cancel().catch(() => {});
       if (response.status === 401 || response.status === 403) return 'credentials';
