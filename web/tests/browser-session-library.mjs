@@ -1,3 +1,4 @@
+import { openQuestionOptions } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -49,7 +50,7 @@ try {
   await page.getByRole('textbox', { name: 'Your question' }).fill('Draft to clear');
   await menu('Launch project'); await page.getByRole('menuitem', { name: 'Delete session' }).click(); await page.getByRole('button', { name: 'Delete session', exact: true }).click();
   assert.equal(await page.getByRole('textbox', { name: 'Your question' }).inputValue(), ''); assert.equal(await page.evaluate(() => localStorage.getItem('trio-active-session')), '');
-  await page.locator('.session-instructions > summary').click(); assert.equal(await page.getByRole('textbox', { name: 'Session instructions', exact: true }).inputValue(), '');
+  await openQuestionOptions(page); await page.locator('.session-instructions > summary').click(); assert.equal(await page.getByRole('textbox', { name: 'Session instructions', exact: true }).inputValue(), '');
   saved = JSON.parse(await page.evaluate(() => localStorage.getItem('trio-sessions'))); assert.equal(saved.length, 1); assert.equal(saved[0].title, 'Writing on mobile');
   assert.ok(!JSON.stringify(saved).includes('fake-library-key')); assert.equal(calls, 1); assert.deepEqual(errors, []);
 } finally { await browser.close(); }

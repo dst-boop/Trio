@@ -1,3 +1,4 @@
+import { openQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -23,7 +24,7 @@ try {
     };
   });
   await page.goto(base + '/workspace', { waitUntil: 'networkidle' });
-  const open = () => page.getByRole('button', { name: 'Audio to text', exact: true }).click();
+  const open = async () => { await openQuestionOptions(page); await page.getByRole('button', { name: 'Audio to text', exact: true }).click(); };
   const dialog = page.getByRole('dialog', { name: 'Turn a recording into a question', exact: true });
   const start = () => dialog.getByRole('button', { name: 'Transcribe with OpenAI', exact: true }).click();
   const close = () => dialog.getByRole('button', { name: 'Close', exact: true }).last().click();

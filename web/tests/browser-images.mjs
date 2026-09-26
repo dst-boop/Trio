@@ -40,7 +40,7 @@ try {
   await ask('Which card is in the middle?');
   await page.getByRole('button', { name: 'Remove image', exact: true }).click();
   await ask('Summarize without the image');
-  await page.getByRole('combobox', { name: 'Answer mode', exact: true }).selectOption('compare');
+  await page.getByRole('radio', { name: 'Compare', exact: true }).check();
   await page.getByText('Up to 3 calls + retries', { exact: true }).waitFor();
   await page.getByLabel('Choose image').setInputFiles(file);
   await page.getByAltText('Attached image preview').waitFor();

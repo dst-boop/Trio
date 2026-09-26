@@ -8,7 +8,7 @@ import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Answer } from '@/components/answer';
+import { AnswerReader as Answer } from '@/components/answer-reader';
 import { ResearchPanel } from '@/components/research-panel';
 import { RunCoverage } from '@/components/run-coverage';
 import { InstructionsUsed, MemoryUsed } from '@/components/session-instructions';
