@@ -10,6 +10,7 @@ import { env } from 'cloudflare:workers';
 import { CredentialError } from '@/lib/credential-store';
 import { savedKeyReference, workspaceKeyReference } from '@/lib/saved-connections';
 import { resolveRequestKey } from '@/lib/workspace-keys';
+import { enabledFeatures } from '@/lib/features';
 import { assertWorkspaceCallsLeft, chargeWorkspaceCalls } from '@/lib/workspace-budget';
 
 const runTimeLimitSeconds = (env: { TRIO_RUN_TIMEOUT_SECONDS?: string }) => { const value = Number(env.TRIO_RUN_TIMEOUT_SECONDS?.trim()); return Number.isInteger(value) && value >= 1 && value <= 3600 ? value : 600; };
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
   if (parsed.data.reviewAnswer && available.length < 2) return reply({ error: 'Team review needs at least two available models. Reload saved connections or replace the unavailable key.' }, 409);
   if (parsed.data.webResearch) { try { selectResearchProvider(parsed.data.connections, parsed.data.researchProvider); } catch { return reply({ error: 'Your research provider is unavailable. Reload saved connections, choose another provider, or turn off web research.' }, credentialErrors.length ? 409 : 400); } }
   let memory: string | undefined;
-  if (parsed.data.personalize) {
+  if (parsed.data.personalize && enabledFeatures(env).memory) {
     if (request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Your account changed. Reload before starting a personalized answer.' }, 401);
     try { if (!env.DB) throw new Error(); const profile = await readMemory(env.DB, user.userId); if (profile.enabled) memory = profile.notes; }
     catch { return reply({ error: 'Personal memory could not be checked. Retry before running your models.' }, 503); }

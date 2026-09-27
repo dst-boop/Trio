@@ -92,6 +92,7 @@ recorded is a decision, an unrecorded one is drift.
 | No-key demo | `TRIO_MOCK=1`, generated fake answers | Demo mode, prepared labeled examples |
 | Claude prompt caching | yes, on draft calls with history | no |
 | Per-address rate limit | yes (`ASK_RATE_LIMIT_PER_MINUTE`), plus wrong-password lockout on every endpoint (`PASSWORD_FAILURES_PER_MINUTE`) | no; invite-only, per-account keys |
+| Operator can turn optional tools off | n/a | `TRIO_DISABLED_FEATURES` hides quality, comparison, work, audio, image or memory and refuses their routes |
 | Spend cap on operator-paid keys | n/a (every call uses the server's keys; see rate limit) | per-account daily provider-call allowance on included keys (`TRIO_WORKSPACE_DAILY_CALLS`); own keys uncounted |
 
 The two wire formats are separate contracts. The event names overlap because

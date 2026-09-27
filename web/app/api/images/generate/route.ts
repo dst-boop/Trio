@@ -4,12 +4,14 @@ import { JsonBodyError, readJsonBody } from '@/lib/request-json';
 import { imageGenerationSchema } from '@/lib/image-generation';
 import { generateImage } from '@/lib/generate-image';
 import { env } from 'cloudflare:workers';
+import { featureDisabled } from '@/lib/features';
 import { CredentialError } from '@/lib/credential-store';
 import { resolveRequestKey } from '@/lib/workspace-keys';
 import { chargeWorkspaceCalls } from '@/lib/workspace-budget';
 import { workspaceKeyReference } from '@/lib/saved-connections';
 
 export async function POST(request: Request) {
+  const off = featureDisabled(env, 'image'); if (off) return off;
   const user = await getChatGPTUser();
   if (!user || request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Sign in again to create images.' }, 401);
   if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);

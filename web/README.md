@@ -72,6 +72,8 @@ Included connections are capped per account at `TRIO_WORKSPACE_DAILY_CALLS` prov
 
 A live run is stopped after `TRIO_RUN_TIMEOUT_SECONDS` (default 600, up to 3600). Each provider attempt already has its own 120-second timeout, but retries and synthesis fallbacks can chain; at the limit the stream reports an error event, keeps the partial text visible, saves no completed answer and closes.
 
+**Turning optional tools off.** Set `TRIO_DISABLED_FEATURES` to a comma-separated list of `quality` (Quality check), `comparison` (Compare on your work), `work` (Your work board and action-plan drafts), `audio` (Audio to text), `image` (Create image) and `memory` (Personal memory). Everything is on when it is unset. A listed tool disappears from the workspace and demo, and its API routes answer 404 before any provider call, so it cannot be reached directly. With `memory` off, answers are never personalized. Saved data is kept, so turning a tool back on restores it.
+
 Usage on included connections bills the workspace owner's provider accounts, so keep the audience invite-only and watch provider spending. In-app quality checks still require the account's own saved keys because their calls are pinned to saved-key revisions.
 
 ## Provider access checks

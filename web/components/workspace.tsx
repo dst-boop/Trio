@@ -50,6 +50,7 @@ import { ToolsDialog } from '@/components/tools-dialog';
 import { WorkspaceSidebar, type WorkspacePanel } from '@/components/workspace-sidebar';
 import { useDraftAttachments } from '@/components/use-draft-attachments';
 import { runDemo, demoQuestion } from '@/lib/demo-run';
+import { allFeatures, type Features } from '@/lib/features';
 
 const emptyResult = (demo: boolean): Result => ({ drafts: {}, reviews: {}, errors: [], answer: '', seconds: 0, demo });
 type ReviewTarget = { result: Result; request: Pick<RunInput, 'question' | 'instructions' | 'context' | 'image' | 'pdf' | 'history' | 'webResearch' | 'researchProvider'>; imageName?: string; pdfName?: string };
@@ -57,7 +58,7 @@ const noTurns: Turn[] = [];
 
 function browserTimeZone(): string | undefined { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; } }
 
-export default function Home({ account }: { account?: { userId: string; displayName: string; email: string } }) {
+export default function Home({ account, features = allFeatures }: { account?: { userId: string; displayName: string; email: string }; features?: Features }) {
   const [qualityOpen, setQualityOpen] = useState(false);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
@@ -75,7 +76,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
   const savedConnections = useSavedConnections(account?.userId, setConnections);
   const [sessionQuery, setSessionQuery] = useState(''), [sessionAction, setSessionAction] = useState<SessionAction>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
-  const personalMemory = usePersonalMemory(account?.userId);
+  const personalMemory = usePersonalMemory(features.memory ? account?.userId : undefined);
   const memoryStatus = personalMemory.loading ? 'Loading…' : personalMemory.error || !personalMemory.profile ? 'Unavailable' : personalMemory.profile.enabled ? 'On' : 'Off';
   const [backupsOpen, setBackupsOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -217,7 +218,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
         // Keep each partial result, so a stopped demo still shows what arrived.
         result = await runDemo(chosenMode, lead, result, controller.signal, { result: partial => { result = partial; setWorking(partial); }, stage: setStage, answerReady: () => setTab('answer') });
       } else {
-        result = await runLiveRequest(JSON.stringify({ ...request, timeZone: browserTimeZone(), personalize: Boolean(account), connections, mode: chosenMode, lead, ...(target ? { reviewAnswer: target.result.answer } : {}) }), { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, controller.signal, event => {
+        result = await runLiveRequest(JSON.stringify({ ...request, timeZone: browserTimeZone(), personalize: Boolean(account) && features.memory, connections, mode: chosenMode, lead, ...(target ? { reviewAnswer: target.result.answer } : {}) }), { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, controller.signal, event => {
           if (event.type === 'stage') { setStage(event.stage!); if (event.stage === 'synthesis') setTab('answer'); }
           result = applyRunEvent(result, event);
           if (event.type === 'final' && chosenMode !== 'compare') setTab('answer');
@@ -241,7 +242,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
   // saved sessions are ready: hydration can otherwise erase an early question.
   if (!loaded || (account && !cloud.ready)) return <main className="account-loading"><h1>Your Trio workspace</h1><p role="status">{account ? cloud.status : 'Getting your workspace ready…'}</p>{account && cloud.error ? <><p role="alert">{cloud.error}</p><button className="run-button" onClick={cloud.reload}>Retry loading</button></> : <p>If loading does not finish, <a href={account ? '/workspace' : '/demo'}>reload your workspace</a>.</p>}<noscript><p>Trio needs JavaScript to run. Enable it in your browser, then reload this page.</p></noscript>{account && <a href="/signout-with-chatgpt?return_to=%2F">Sign out</a>}</main>;
   return <SidebarProvider style={{ '--sidebar-width': '248px' } as React.CSSProperties}>
-    <WorkspaceSidebar account={account} busy={busy} status={account ? cloud.status : 'Stored on this device'} openActions={openActions} connected={connected} memoryStatus={memoryStatus} sessions={sessions} current={current} query={sessionQuery} onQuery={setSessionQuery}
+    <WorkspaceSidebar account={account} features={features} busy={busy} status={account ? cloud.status : 'Stored on this device'} openActions={openActions} connected={connected} memoryStatus={memoryStatus} sessions={sessions} current={current} query={sessionQuery} onQuery={setSessionQuery}
       onNavigate={requestNavigation} onSessionAction={setSessionAction} onExport={s => downloadSession(s.turns)} onOpen={openPanel} onFocusComposer={() => promptRef.current?.focus()}
       onSignOut={e => { if (busy || cloud.status === 'Saving…') { e.preventDefault(); toast('Wait for the current run and save to finish before signing out.'); } else if (cloud.error) { e.preventDefault(); setWorkspaceRecovery('signout'); } }} />
     <main className="workspace conversation-workspace">
@@ -263,7 +264,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
           {!working && turns.at(-1)?.imageName && <p className="revision-note">Image used: {turns.at(-1)?.imageName}. Image data is not saved; reattach it to revisit visual details.</p>}{!working && turns.at(-1)?.pdfName && <p className="revision-note">PDF used: {turns.at(-1)?.pdfName}. PDF data is not saved; reattach it to revisit document details.</p>}{displayed.usage && !displayed.demo && <UsageSummary usage={displayed.usage} />}
           {displayed.errors.length > 0 && <div className="error-box" role="alert"><strong>Some steps could not finish</strong>{Array.from(new Set(displayed.errors)).map((e, i) => <p key={i}>{e}</p>)}<button onClick={() => setSettings(true)}>Check connections</button></div>}
           {!busy && !working && !displayed.demo && (displayed.answer || Object.values(displayed.drafts).some(Boolean)) && <AnswerFeedback key={current + ':' + (turns.length - 1)} value={turns.at(-1)?.feedback} busy={busy} account={!!account} onSave={value => saveFeedback(turns.length - 1, value)} />}
-          {!working && current && !turns.at(-1)?.result.demo && <WorkPlanPanel suggestionContext={account ? { accountId: account.userId, sessionId: current, turnIndex: turns.length - 1, revision: cloud.revision, ready: cloud.ready && !cloud.error && cloud.status === 'Saved to your account', live: !demo, connections, preferred: lead } : undefined} reviewed={!!turns.at(-1)?.result.reviewedAnswer} key={'work:' + current + ':' + (turns.length - 1)} value={turns.at(-1)?.work} question={turns.at(-1)?.question ?? ''} busy={busy} onSave={plan => saveWork(current, turns.length - 1, plan)} />}
+          {features.work && !working && current && !turns.at(-1)?.result.demo && <WorkPlanPanel suggestionContext={account ? { accountId: account.userId, sessionId: current, turnIndex: turns.length - 1, revision: cloud.revision, ready: cloud.ready && !cloud.error && cloud.status === 'Saved to your account', live: !demo, connections, preferred: lead } : undefined} reviewed={!!turns.at(-1)?.result.reviewedAnswer} key={'work:' + current + ':' + (turns.length - 1)} value={turns.at(-1)?.work} question={turns.at(-1)?.question ?? ''} busy={busy} onSave={plan => saveWork(current, turns.length - 1, plan)} />}
           <ConversationHistory onWork={current ? (index, plan) => saveWork(current, index, plan) : undefined} account={!!account} onFeedback={saveFeedback} key={current ?? 'new'} turns={working ? turns : turns.slice(0, -1)} busy={busy} onBranch={current ? setBranchPoint : undefined} />
         </section>}
 
@@ -274,14 +275,14 @@ export default function Home({ account }: { account?: { userId: string; displayN
         onRun={() => void run()} onStop={() => abortRef.current?.abort()} onOpenTools={() => setToolsOpen(true)} /></div>
     </main>
     {/* Keep media drafts mounted independently of the optional tools panel. */}
-    <AudioTranscription open={mediaTool === 'audio'} onOpenChange={open => setMediaTool(open ? 'audio' : null)} accountId={account?.userId} apiKey={connections.openai.enabled ? connections.openai.key : ''} live={!demo} question={prompt} onAppend={value => { setPrompt(value); promptRef.current?.focus(); }} onConnections={() => setSettings(true)} />
-    <ImageGeneration open={mediaTool === 'image'} onOpenChange={open => setMediaTool(open ? 'image' : null)} accountId={account?.userId} apiKey={connections.openai.enabled ? connections.openai.key : ''} live={!demo} question={prompt} replacingImage={Boolean(attachments.image)} onAttach={attachments.attachGeneratedImage} onConnections={() => setSettings(true)} />
-    <ToolsDialog open={toolsOpen} onOpenChange={setToolsOpen} onRestoreFocus={() => { if (!mediaTool) promptRef.current?.focus(); }} busy={busy} demo={demo} temporaryDemo={temporaryDemo} mode={mode} attachmentsLoading={attachments.imageLoading || attachments.pdfLoading} onMedia={setMediaTool}
+    {features.audio && <AudioTranscription open={mediaTool === 'audio'} onOpenChange={open => setMediaTool(open ? 'audio' : null)} accountId={account?.userId} apiKey={connections.openai.enabled ? connections.openai.key : ''} live={!demo} question={prompt} onAppend={value => { setPrompt(value); promptRef.current?.focus(); }} onConnections={() => setSettings(true)} />}
+    {features.image && <ImageGeneration open={mediaTool === 'image'} onOpenChange={open => setMediaTool(open ? 'image' : null)} accountId={account?.userId} apiKey={connections.openai.enabled ? connections.openai.key : ''} live={!demo} question={prompt} replacingImage={Boolean(attachments.image)} onAttach={attachments.attachGeneratedImage} onConnections={() => setSettings(true)} />}
+    <ToolsDialog media={{ audio: features.audio, image: features.image }} open={toolsOpen} onOpenChange={setToolsOpen} onRestoreFocus={() => { if (!mediaTool) promptRef.current?.focus(); }} busy={busy} demo={demo} temporaryDemo={temporaryDemo} mode={mode} attachmentsLoading={attachments.imageLoading || attachments.pdfLoading} onMedia={setMediaTool}
       followUp={turns.length > 0 ? followUpContext : null} sessionKey={current ?? 'new'} instructions={instructions} onInstructions={changeInstructions} webResearch={webResearch} onWebResearch={setWebResearch} researchProvider={researchProvider} onResearchProvider={setResearchProvider}
       preferences={preferences} prompt={prompt} onApplyBrief={text => { setPrompt(text); setDemo(false); promptRef.current?.focus(); }} />
     <DraftNavigation destination={draftDestination} onCancel={() => setDraftDestination(null)} onDiscard={() => { if (draftDestination) navigate(draftDestination); }} onFocus={() => promptRef.current?.focus()} />
-    {account && <QualityCheck key={account.userId} accountId={account.userId} open={qualityOpen} onOpenChange={setQualityOpen} live={!demo} onConnections={() => { setQualityOpen(false); setSettings(true); }} />}
-    {account && <WorkComparison key={'comparison-'+account.userId} accountId={account.userId} open={comparisonOpen} onOpenChange={setComparisonOpen} live={!demo} onConnections={() => { setComparisonOpen(false); setSettings(true); }} />}
+    {account && features.quality && <QualityCheck key={account.userId} accountId={account.userId} open={qualityOpen} onOpenChange={setQualityOpen} live={!demo} onConnections={() => { setQualityOpen(false); setSettings(true); }} />}
+    {account && features.comparison && <WorkComparison key={'comparison-'+account.userId} accountId={account.userId} open={comparisonOpen} onOpenChange={setComparisonOpen} live={!demo} onConnections={() => { setComparisonOpen(false); setSettings(true); }} />}
     <ActionConfirmation open={workspaceRecovery !== null} onOpenChange={next => { if (!next) setWorkspaceRecovery(null); }} title={workspaceRecovery === 'reload' ? 'Load the latest account history?' : 'Sign out with unsaved changes?'} description={workspaceRecovery === 'reload' ? 'This replaces this tab’s sessions with the latest saved account history. Download a backup first to keep unsaved changes. Your unsent question, attachments and new-conversation instructions will also be cleared; copy them first if needed.' : 'Some workspace changes have not saved. Signing out may lose those changes and your unsent question or attachments. Cancel and download a backup first to keep the workspace changes.'} confirmLabel={workspaceRecovery === 'reload' ? 'Replace this tab with saved history' : 'Sign out anyway'} cancelLabel="Keep this tab" destructive disabled={busy || cloud.status === 'Saving…' || !cloud.error || (workspaceRecovery === 'reload' && !cloud.conflict)} onConfirm={() => {
       if (busy || cloud.status === 'Saving…' || !cloud.error || (workspaceRecovery === 'reload' && !cloud.conflict)) return false;
       if (workspaceRecovery === 'reload') { focusAfterReload.current = true; cloud.reload(); }
@@ -289,14 +290,14 @@ export default function Home({ account }: { account?: { userId: string; displayN
       else if (workspaceRecovery === 'signout') window.location.assign('/signout-with-chatgpt?return_to=%2F');
       else return false;
     }} />
-    <WorkBoard sessions={sessions} busy={busy} hasDraft={hasDraft} onPrepareDay={text => {
+    {features.work && <WorkBoard sessions={sessions} busy={busy} hasDraft={hasDraft} onPrepareDay={text => {
       if (busy || preferences.loading) { toast('Wait for the workspace to finish loading before preparing a new question.'); return false; }
       if (sessions.length >= 30) { toast.error('Your workspace has 30 saved conversations. Back up and remove an older conversation before starting another. You can still copy this brief.'); return false; }
       if (!text.trim() || text.length > 20000) { toast.error('The prepared question must contain 1–20,000 characters.'); return false; }
       newSession(); setPrompt(text); setDemo(false); toast('Day-planning question prepared. Review the text, models and settings, then choose Ask Trio.'); return true;
-    }} onFocusComposer={() => promptRef.current?.focus()} open={workOpen} onOpenChange={setWorkOpen} onSave={saveWork} onOpenSession={id => requestNavigation({ type: 'session', id })} />
+    }} onFocusComposer={() => promptRef.current?.focus()} open={workOpen} onOpenChange={setWorkOpen} onSave={saveWork} onOpenSession={id => requestNavigation({ type: 'session', id })} />}
     <SessionActionDialogs action={sessionAction} sessions={sessions} busy={busy} clearsDraft={hasDraft && sessionAction?.id === current} onClose={() => setSessionAction(null)} onRename={(id, title) => { if (busy) return; try { setSessions(renameSession(sessions, id, title)); setSessionAction(null); toast.success('Session renamed'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not rename this session.'); } }} onDelete={id => { if (busy) return; setSessions(prev => prev.filter(s => s.id !== id)); if (current === id) newSession(); setSessionAction(null); toast.success('Session deleted'); }} />
-    {account && <PersonalMemory accountId={account.userId} open={memoryOpen} onOpenChange={setMemoryOpen} memory={personalMemory} connections={connections} sessionId={current} workspaceRevision={cloud.revision} sessionSaved={cloud.ready && !cloud.error && cloud.status === 'Saved to your account'} busy={busy} />}
+    {account && features.memory && <PersonalMemory accountId={account.userId} open={memoryOpen} onOpenChange={setMemoryOpen} memory={personalMemory} connections={connections} sessionId={current} workspaceRevision={cloud.revision} sessionSaved={cloud.ready && !cloud.error && cloud.status === 'Saved to your account'} busy={busy} />}
     <SessionBackups sessions={sessions} busy={busy} remember={account ? true : remember} account={Boolean(account)} open={backupsOpen} onOpenChange={setBackupsOpen} onImport={incoming => { if (busy) return; setSessions(mergeBackup(sessions, incoming).sessions); }} />
     <BranchConversation source={sessions.find(s => s.id === current)} turnIndex={branchPoint} count={sessions.length} busy={busy} hasUnsent={Boolean(prompt) || attachments.present} onClose={() => setBranchPoint(null)} onCreate={createBranch} />
     <ConnectionsDialog open={settings} onOpenChange={setSettings} account={account} busy={busy} connected={connected} demo={demo} temporaryDemo={temporaryDemo} onDemo={setDemo} preferences={preferences} savedConnections={savedConnections} connections={connections} onConnections={setConnections} lead={lead} onLead={setLead} remember={remember} onRemember={setRemember}

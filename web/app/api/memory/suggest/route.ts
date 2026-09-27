@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { featureDisabled } from '@/lib/features';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { accountReply as reply } from '@/lib/account-api';
 import { readJsonBody, JsonBodyError } from '@/lib/request-json';
@@ -11,6 +12,7 @@ import { chargeWorkspaceCalls } from '@/lib/workspace-budget';
 import { savedKeyReference, workspaceKeyReference } from '@/lib/saved-connections';
 import { providers } from '@/lib/trio';
 export async function POST(request: Request) {
+  const off = featureDisabled(env, 'memory'); if (off) return off;
   const user = await getChatGPTUser();
   if (!user || request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Your account changed. Reload Trio before suggesting memory.' }, 401);
   if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);

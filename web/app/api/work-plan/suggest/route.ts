@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { featureDisabled } from '@/lib/features';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { accountReply as reply } from '@/lib/account-api';
 import { readJsonBody, JsonBodyError } from '@/lib/request-json';
@@ -11,6 +12,7 @@ import { providers } from '@/lib/trio';
 import { actionPlanSource, planSuggestionRequestSchema, suggestActionPlan, PlanSuggestionError } from '@/lib/action-plan-suggestions';
 
 export async function POST(request: Request) {
+  const off = featureDisabled(env, 'work'); if (off) return off;
   const user = await getChatGPTUser();
   if (!user || request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Your account changed. Reload Trio before drafting an action plan.' }, 401);
   if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);

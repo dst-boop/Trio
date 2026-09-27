@@ -1,15 +1,18 @@
 import { env } from 'cloudflare:workers';
+import { featureDisabled } from '@/lib/features';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { accountReply as reply, readSmallJson } from '@/lib/account-api';
 import { memoryProfileSchema } from '@/lib/memory';
 import { readMemory, writeMemory } from '@/lib/memory-store';
 export async function GET(request: Request) {
+  const off = featureDisabled(env, 'memory'); if (off) return off;
   const user = await getChatGPTUser();
   if (!user || request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Sign in again to load personal memory.' }, 401);
   try { if (!env.DB) throw new Error(); return reply(await readMemory(env.DB, user.userId)); }
   catch { return reply({ error: 'Could not load personal memory. Retry before using it.' }, 503); }
 }
 export async function PUT(request: Request) {
+  const off = featureDisabled(env, 'memory'); if (off) return off;
   const user = await getChatGPTUser();
   if (!user || request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Your account changed. Reload before saving memory.' }, 401);
   if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
