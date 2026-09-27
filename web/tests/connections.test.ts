@@ -38,6 +38,24 @@ test('metadata must be valid and bounded, and a stalled body can be cancelled', 
   const result=checkConnection(input,controller.signal,(async()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('{'));queueMicrotask(()=>controller.abort());},cancel(){cancelled=true;}}))) as typeof fetch);
   assert.equal(await result,'cancelled');assert.ok(cancelled);
 });
+test('Gemini HTTP 400 invalid-key errors become fixed guidance without exposing diagnostics', async () => {
+  const gemini = { provider: 'gemini', key: 'secret-key', model: 'gemini-3.8-flash' };
+  const detail = { '@type': 'type.googleapis.com/google.rpc.ErrorInfo', domain: 'googleapis.com', reason: 'API_KEY_INVALID', metadata: { key: 'secret-key' } };
+  const check = (body: string) => checkConnection(gemini, new AbortController().signal, (async () => new Response(body, { status: 400 })) as typeof fetch);
+  const result = await check(JSON.stringify({ error: { code: 400, message: 'secret-key private vendor diagnostic', details: [detail] } }));
+  assert.equal(result, 'geminiKey');
+  assert.ok(!connectionMessages[result].includes('secret-key'));
+  for (const body of [
+    JSON.stringify({ error: { message: 'API_KEY_INVALID secret-key' } }),
+    JSON.stringify({ error: { details: [{ ...detail, reason: 'UNKNOWN secret-key' }] } }),
+    JSON.stringify({ error: { details: [{ ...detail, domain: 'other.test' }] } }),
+    'not JSON secret-key',
+    JSON.stringify({ padding: 'x'.repeat(16_384), error: { details: [detail] } }),
+  ]) assert.equal(await check(body), 'rejected');
+  const controller = new AbortController(); let cancelled = false;
+  const pending = checkConnection(gemini, controller.signal, (async () => new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{')); queueMicrotask(() => controller.abort()); }, cancel() { cancelled = true; } }), { status: 400 })) as typeof fetch);
+  assert.equal(await pending, 'cancelled'); assert.ok(cancelled);
+});
 test('checks stop at the deadline without leaking timeout diagnostics', async t => {
   t.mock.method(AbortSignal,'timeout',()=>AbortSignal.abort(new DOMException('private diagnostic','TimeoutError')));
   assert.equal(await checkConnection(input,new AbortController().signal,(async()=>{assert.fail('Already timed out');}) as typeof fetch),'timeout');

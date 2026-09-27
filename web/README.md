@@ -16,6 +16,10 @@ Plans and results use the existing private account history, conflict handling, o
 
 ## Accounts and online history
 
+For hosting independently of ChatGPT Sites with invited email-code login,
+see [STANDALONE.md](STANDALONE.md). The separate Cloudflare deployment validates
+Access tokens before serving the application and uses its own D1 database.
+
 Trio is **invite-only**. Keep the Sites audience `custom`, preserving its invitation allowlist, until the owner explicitly asks to open registration. The Sites edge checks access before serving the site, including the welcome page at / and /demo. Invitees sign in with the account matching their invited email; /workspace additionally requires **Sign in with ChatGPT**. Sites handles identity and sign-out, and injects verified identity headers at its edge. Deploy this app behind that trusted edge, not a server that accepts arbitrary identity headers from clients. The local Vite plugin strips those headers and supplies a localhost-only test identity after its mock sign-in. No app passwords are collected.
 
 Each account has its own D1 history, keyed only by the authenticated server identity. GET/PUT /api/workspace and live POST /api/ask require sign-in. History responses are private/no-store; writes require same-origin and a matching account identity, so a stale tab cannot save one person's data into another signed-in account. Original image/PDF bytes remain ephemeral. API keys explicitly saved in Connections are encrypted in separate account-scoped records, excluded from history and exports.

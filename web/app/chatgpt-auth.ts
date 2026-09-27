@@ -1,5 +1,10 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { env } from 'cloudflare:workers';
+
+export function signInLabel() {
+  return env.TRIO_AUTH_PROVIDER === 'cloudflare-access' ? 'Sign in with email' : 'Sign in with ChatGPT';
+}
 
 export type ChatGPTUser = {
   userId: string;

@@ -13,6 +13,7 @@ export const connectionMessages = {
   signin: 'Sign in again before checking access.',
   origin: 'Reload Trio and try again.',
   credentials: 'The provider rejected access. Check your API key and its permissions in the provider console.',
+  geminiKey: 'Google rejected this API key as invalid. Copy a Gemini API key from Google AI Studio, paste it into the Gemini API key field, then check access and save the replacement. A Gemini subscription does not supply an API key.',
   model: 'This model was not found or is unavailable to this key. Check the model ID and your provider account.',
   limited: 'The provider is limiting requests. Check your account limits and try again later.',
   rejected: 'The provider could not check this key and model. Check both values and your account restrictions.',

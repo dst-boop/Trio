@@ -49,3 +49,4 @@ next-env.d.ts
 /work/
 *.tsbuildinfo
 /test-output/
+/wrangler.standalone.local.json
