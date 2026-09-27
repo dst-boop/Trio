@@ -12,7 +12,7 @@ try {
   await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   await page.getByRole('radio', { name: 'Council', exact: true }).check();
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
-  for (const index of [0, 1, 2]) await page.getByPlaceholder('Paste your API key').nth(index).fill('offline-test-key-' + index);
+  for (const index of [0, 1]) await page.getByPlaceholder('Paste your API key').nth(index).fill('offline-test-key-' + index);
   await setDemoMode(page, false);
   const writerSwitch = page.getByRole('switch', { name: 'Final answer by a model that did not draft' });
   assert.equal(await writerSwitch.getAttribute('aria-checked'), 'false', 'off by default');
@@ -24,7 +24,13 @@ try {
     const result = { drafts: { openai: 'Draft one', gemini: 'Draft two' }, reviews: {}, answer: 'An independently written answer', errors: [], seconds: 2, demo: false, by: 'claude', ...(body.independentWriter ? { independentWriter: true } : {}) };
     await route.fulfill({ contentType: 'application/x-ndjson', body: [{ type: 'stage', stage: 'draft' }, { type: 'final', result }].map(e => JSON.stringify(e)).join('\n') });
   });
+  // With only two models the run is blocked and explained, never silently run the normal way.
   await page.getByRole('textbox', { name: 'Your question' }).fill('Plan the launch');
+  await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
+  await page.getByText(/needs three connected models/).first().waitFor();
+  assert.equal(bodies.length, 0, 'nothing is sent while the option cannot be honored');
+  await page.getByPlaceholder('Paste your API key').nth(2).fill('offline-test-key-2');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
   await page.getByText('An independently written answer', { exact: true }).waitFor();
   assert.equal(bodies[0].independentWriter, true); assert.equal(bodies[0].mode, 'council');
@@ -38,4 +44,4 @@ try {
   assert.equal(bodies[1].independentWriter, false);
   assert.deepEqual(errors, []);
 } finally { await browser.close(); }
-console.log('Independent writer browser checks passed: off by default, sent for Council with three models, not for Compare, and labelled on the answer.');
+console.log('Independent writer browser checks passed: off by default, blocked and explained with two models, sent for Council with three, not for Compare, and labelled on the answer.');

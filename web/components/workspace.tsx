@@ -206,6 +206,8 @@ export default function Home({ account, features = allFeatures }: { account?: { 
     if (!question) return;
     if (!demo && !connected) { setSettings(true); toast('Add an API key to start a live session.'); return; }
     if (!demo && chosenMode === 'single' && !(connections[lead].enabled && connections[lead].key.trim())) { setSettings(true); toast('Connect the selected answer model or choose another model.'); return; }
+    const writerApplies = independentWriter && ['fast', 'council', 'deep'].includes(chosenMode);
+    if (!demo && writerApplies && connected < 3) { setSettings(true); toast.error('A final writer that did not draft needs three connected models. Connect another model or turn the option off.'); return; }
     let researcher: 'openai' | 'claude' | undefined;
     if (!demo && request.webResearch) { try { researcher = selectResearchProvider(connections, request.researchProvider); } catch (error) { setSettings(true); toast.error(error instanceof Error ? error.message : 'Connect a research provider.'); return; } }
     document.getElementById("conversation-scroll")?.scrollTo({ top: 0 });
@@ -219,7 +221,7 @@ export default function Home({ account, features = allFeatures }: { account?: { 
         // Keep each partial result, so a stopped demo still shows what arrived.
         result = await runDemo(chosenMode, lead, result, controller.signal, { result: partial => { result = partial; setWorking(partial); }, stage: setStage, answerReady: () => setTab('answer') });
       } else {
-        result = await runLiveRequest(JSON.stringify({ ...request, timeZone: browserTimeZone(), personalize: Boolean(account) && features.memory, connections, mode: chosenMode, lead, independentWriter: independentWriter && connected >= 3 && ['fast', 'council', 'deep'].includes(chosenMode), ...(target ? { reviewAnswer: target.result.answer } : {}) }), { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, controller.signal, event => {
+        result = await runLiveRequest(JSON.stringify({ ...request, timeZone: browserTimeZone(), personalize: Boolean(account) && features.memory, connections, mode: chosenMode, lead, independentWriter: writerApplies, ...(target ? { reviewAnswer: target.result.answer } : {}) }), { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, controller.signal, event => {
           if (event.type === 'stage') { setStage(event.stage!); if (event.stage === 'synthesis') setTab('answer'); }
           result = applyRunEvent(result, event);
           if (event.type === 'final' && chosenMode !== 'compare') setTab('answer');
@@ -266,7 +268,7 @@ export default function Home({ account, features = allFeatures }: { account?: { 
           {displayed.errors.length > 0 && <div className="error-box" role="alert"><strong>Some steps could not finish</strong>{Array.from(new Set(displayed.errors)).map((e, i) => <p key={i}>{e}</p>)}<button onClick={() => setSettings(true)}>Check connections</button></div>}
           {!busy && !working && !displayed.demo && (displayed.answer || Object.values(displayed.drafts).some(Boolean)) && <AnswerFeedback key={current + ':' + (turns.length - 1)} value={turns.at(-1)?.feedback} busy={busy} account={!!account} onSave={value => saveFeedback(turns.length - 1, value)} />}
           {features.work && !working && current && !turns.at(-1)?.result.demo && <WorkPlanPanel suggestionContext={account ? { accountId: account.userId, sessionId: current, turnIndex: turns.length - 1, revision: cloud.revision, ready: cloud.ready && !cloud.error && cloud.status === 'Saved to your account', live: !demo, connections, preferred: lead } : undefined} reviewed={!!turns.at(-1)?.result.reviewedAnswer} key={'work:' + current + ':' + (turns.length - 1)} value={turns.at(-1)?.work} question={turns.at(-1)?.question ?? ''} busy={busy} onSave={plan => saveWork(current, turns.length - 1, plan)} />}
-          <ConversationHistory onWork={current ? (index, plan) => saveWork(current, index, plan) : undefined} account={!!account} onFeedback={saveFeedback} key={current ?? 'new'} turns={working ? turns : turns.slice(0, -1)} busy={busy} onBranch={current ? setBranchPoint : undefined} />
+          <ConversationHistory onWork={features.work && current ? (index, plan) => saveWork(current, index, plan) : undefined} account={!!account} onFeedback={saveFeedback} key={current ?? 'new'} turns={working ? turns : turns.slice(0, -1)} busy={busy} onBranch={current ? setBranchPoint : undefined} />
         </section>}
 
 
