@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { savedConnectionsSchema, savedConnectionSchema, savedKeyReference, workspaceKeyReference, type SavedConnection } from '@/lib/saved-connections';
 import { applyWorkspaceConnections } from '@/lib/workspace-keys';
 import { freshConnections, type Connections, type ProviderId } from '@/lib/trio';
@@ -12,7 +12,9 @@ export function useSavedConnections(accountId: string | undefined, setConnection
   const [saving, setSaving] = useState<ProviderId | 'all' | null>(null);
   const active = useRef<AbortController | null>(null);
   const account = useRef(accountId);
-  useEffect(() => { account.current = accountId; }, [accountId]);
+  // Updated during the commit itself, so a previous account's response that settles
+  // after the switch is rejected before a passive effect could run.
+  useLayoutEffect(() => { account.current = accountId; }, [accountId]);
   const [generation, setGeneration] = useState(0);
   const reload = useCallback(() => setGeneration(value => value + 1), []);
   // Another account's keys never carry over; each (re)load starts from a clean, loading view.

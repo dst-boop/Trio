@@ -30,7 +30,8 @@ export function useAccountWorkspace(accountId: string | undefined, sessions: Ses
         const data = await response.json();
         if (!response.ok) { setConflict(response.status === 409); throw new Error(responseError(data, 'Could not save. Download a backup before closing this tab.')); }
         const revision = z.object({ revision: z.literal(attempt.revision + 1) }).parse(data).revision;
-        s.revision = revision; s.saved = attempt.snapshot; s.attempt = undefined; setRevision(revision);
+        s.revision = revision; s.saved = attempt.snapshot; s.attempt = undefined;
+        if (state.current === s) setRevision(revision); // a save from before an account switch or reload never overwrites the new revision
       }
       if (alive.current && !s.blocked) { setStatus('Saved to your account'); setError(''); }
     } catch (e) { s.blocked = true; if (alive.current) { setError(e instanceof DOMException && e.name === 'TimeoutError' ? 'Saving timed out. Retry to check whether the save completed, or download a backup.' : e instanceof Error ? e.message : 'Could not save your workspace.'); setStatus('Changes not saved'); } }
