@@ -16,13 +16,13 @@ import { readMemory } from '@/lib/memory-store';
 import { imageSchema } from '@/lib/images';
 import { pdfSchema, attachmentBytes, maxAttachmentBytes } from '@/lib/pdf';
 
-const connection = z.object({ key: z.string().max(1024), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
+// Keys are printable ASCII like every other key input; an empty key means not connected.
+const connection = z.object({ key: z.string().trim().max(1024).regex(/^[!-~]*$/), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
 const schema = z.object({ timeZone: timeZoneSchema.optional(), personalize: z.boolean().optional(), instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), reviewAnswer: z.string().trim().min(1).max(120000).optional(), mode: z.enum(['single', 'council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return reply({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, 401);
-  const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
+  if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
   // Reject bad uploads before resolving credentials or calling providers.
   let body;
   try { body = await readJsonBody(request, 8_000_000); }

@@ -62,5 +62,11 @@ try {
   const bob = await call('/api/ask', askBody(included), 'bob');
   assert.equal(bob.status, 200); await bob.text();
   assert.equal(await used('bob'), 1);
+  // Raw keys must be printable ASCII: a control character is a clear 400, not a misleading network error.
+  const badKey = await call('/api/ask', askBody('sk-line\nbreak'));
+  assert.equal(badKey.status, 400);
+  // An ask without an Origin header is refused before anything else runs.
+  const noOrigin = await mf.dispatchFetch('https://trio.test/api/ask', { method: 'POST', headers: { 'fixture-user': 'alice', 'X-Trio-Account': 'alice', 'Content-Type': 'application/json' }, body: JSON.stringify(askBody('own-private-key')) });
+  assert.equal(noOrigin.status, 403);
   console.log('worker workspace budget: ok');
 } finally { await mf.dispose(); }
