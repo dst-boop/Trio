@@ -10,6 +10,7 @@ import { env } from 'cloudflare:workers';
 import { CredentialError } from '@/lib/credential-store';
 import { savedKeyReference, workspaceKeyReference } from '@/lib/saved-connections';
 import { resolveRequestKey } from '@/lib/workspace-keys';
+import { enabledFeatures } from '@/lib/features';
 import { assertWorkspaceCallsLeft, chargeWorkspaceCalls } from '@/lib/workspace-budget';
 
 const runTimeLimitSeconds = (env: { TRIO_RUN_TIMEOUT_SECONDS?: string }) => { const value = Number(env.TRIO_RUN_TIMEOUT_SECONDS?.trim()); return Number.isInteger(value) && value >= 1 && value <= 3600 ? value : 600; };
@@ -20,7 +21,7 @@ import { pdfSchema, attachmentBytes, maxAttachmentBytes } from '@/lib/pdf';
 
 // Keys are printable ASCII like every other key input; an empty key means not connected.
 const connection = z.object({ key: z.string().trim().max(1024).regex(/^[!-~]*$/), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
-const schema = z.object({ timeZone: timeZoneSchema.optional(), personalize: z.boolean().optional(), instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), reviewAnswer: z.string().trim().min(1).max(120000).optional(), mode: z.enum(['single', 'council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
+const schema = z.object({ timeZone: timeZoneSchema.optional(), personalize: z.boolean().optional(), instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), reviewAnswer: z.string().trim().min(1).max(120000).optional(), mode: z.enum(['single', 'council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']), independentWriter: z.boolean().optional() }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return reply({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, 401);
@@ -58,10 +59,11 @@ export async function POST(request: Request) {
   } catch (error) { return reply({ error: error instanceof CredentialError ? error.message : 'Saved keys could not be loaded.' }, error instanceof CredentialError ? error.status : 503); }
   const available = Object.values(parsed.data.connections).filter(c => c.enabled && c.key.trim());
   if (!available.length || parsed.data.mode === 'single' && !parsed.data.connections[parsed.data.lead].key.trim()) return reply({ error: credentialErrors.join(' ') || 'Connect the selected answer model.' }, unavailableStatus);
+  if (parsed.data.independentWriter && ['fast', 'council', 'deep'].includes(parsed.data.mode) && (available.length < 3 || !parsed.data.connections[parsed.data.lead].key.trim())) return reply({ error: 'A final writer that does not draft needs three available models, including your preferred model. Connect another model or turn the option off.' }, 400);
   if (parsed.data.reviewAnswer && available.length < 2) return reply({ error: 'Team review needs at least two available models. Reload saved connections or replace the unavailable key.' }, 409);
   if (parsed.data.webResearch) { try { selectResearchProvider(parsed.data.connections, parsed.data.researchProvider); } catch { return reply({ error: 'Your research provider is unavailable. Reload saved connections, choose another provider, or turn off web research.' }, credentialErrors.length ? 409 : 400); } }
   let memory: string | undefined;
-  if (parsed.data.personalize) {
+  if (parsed.data.personalize && enabledFeatures(env).memory) {
     if (request.headers.get('x-trio-account') !== user.userId) return reply({ error: 'Your account changed. Reload before starting a personalized answer.' }, 401);
     try { if (!env.DB) throw new Error(); const profile = await readMemory(env.DB, user.userId); if (profile.enabled) memory = profile.notes; }
     catch { return reply({ error: 'Personal memory could not be checked. Retry before running your models.' }, 503); }

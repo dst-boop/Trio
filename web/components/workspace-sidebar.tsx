@@ -5,11 +5,13 @@ import { Sidebar, SidebarContent, SidebarHeader, SidebarFooter } from '@/compone
 import { SessionList } from '@/components/session-library';
 import { NewSessionButton } from '@/components/draft-navigation';
 import type { Session } from '@/lib/sessions';
+import type { Features } from '@/lib/features';
 import type { SessionAction } from '@/components/session-library';
 import type { DraftDestination } from '@/components/draft-navigation';
 
 export type WorkspacePanel = 'quality' | 'comparison' | 'work' | 'settings' | 'memory' | 'backups' | 'help' | 'clearHistory';
 type Props = {
+  features: Features;
   account?: { displayName: string; email: string }; busy: boolean; status: string;
   openActions: number; connected: number; memoryStatus: string;
   sessions: Session[]; current: string | null; query: string; onQuery: (query: string) => void;
@@ -17,19 +19,19 @@ type Props = {
   onOpen: (panel: WorkspacePanel) => void; onFocusComposer: () => void; onSignOut: (event: MouseEvent<HTMLAnchorElement>) => void;
 };
 
-export function WorkspaceSidebar({ account, busy, status, openActions, connected, memoryStatus, sessions, current, query, onQuery, onNavigate, onSessionAction, onExport, onOpen, onFocusComposer, onSignOut }: Props) {
+export function WorkspaceSidebar({ features, account, busy, status, openActions, connected, memoryStatus, sessions, current, query, onQuery, onNavigate, onSessionAction, onExport, onOpen, onFocusComposer, onSignOut }: Props) {
   const initial = (account?.displayName.trim()[0] ?? 'G').toUpperCase();
   return <Sidebar className="trio-sidebar">
       <SidebarHeader className="brand"><span className="brand-symbol">◈</span><span>trio<span className="brand-period">.</span></span><span className="brand-caption">WORKSPACE</span></SidebarHeader>
       <SidebarContent className="side-content">
         <NewSessionButton busy={busy} onRequest={() => onNavigate({ type: 'new' })} />
         <div className="side-label">YOUR WORKSPACE</div>
-        {account && <button className="side-nav" disabled={busy} onClick={() => onOpen('quality')}><GitCompareArrows size={17} />Quality check</button>}
-        {account && <button className="side-nav" disabled={busy} onClick={() => onOpen('comparison')}><GitCompareArrows size={17} />Compare on your work</button>}
-        <button className="side-nav" disabled={busy} onClick={() => onOpen('work')}><Check size={17} />Your work<span className="nav-count">{openActions}</span></button>
+        {account && features.quality && <button className="side-nav" disabled={busy} onClick={() => onOpen('quality')}><GitCompareArrows size={17} />Quality check</button>}
+        {account && features.comparison && <button className="side-nav" disabled={busy} onClick={() => onOpen('comparison')}><GitCompareArrows size={17} />Compare on your work</button>}
+        {features.work && <button className="side-nav" disabled={busy} onClick={() => onOpen('work')}><Check size={17} />Your work<span className="nav-count">{openActions}</span></button>}
         <button className="side-nav selected" onClick={() => onFocusComposer()}><Layers3 size={17} /> Conversations</button>
         <button className="side-nav" onClick={() => onOpen('settings')}><Settings2 size={17} /> Model connections <span className="nav-count">{connected}/3</span></button>
-        {account && <button className="side-nav" disabled={busy} onClick={() => onOpen('memory')}><Lightbulb size={17} />Personal memory<span className="nav-count" role="status">{memoryStatus}</span></button>}
+        {account && features.memory && <button className="side-nav" disabled={busy} onClick={() => onOpen('memory')}><Lightbulb size={17} />Personal memory<span className="nav-count" role="status">{memoryStatus}</span></button>}
         <button className="side-nav" disabled={busy} onClick={() => onOpen('backups')}><Archive size={17} />Back up & restore</button>
         <div className="history-heading"><span className="side-label">RECENT SESSIONS</span>{sessions.length > 0 && <button aria-label="Clear session history" disabled={busy} onClick={() => onOpen('clearHistory')}><Trash2 size={14} /></button>}</div>
         <SessionList sessions={sessions} current={current} busy={busy} query={query} onQuery={onQuery} onSelect={s => onNavigate({ type: 'session', id: s.id })} onAction={onSessionAction} onExport={onExport} />

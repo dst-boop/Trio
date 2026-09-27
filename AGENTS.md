@@ -72,6 +72,7 @@ recorded is a decision, an unrecorded one is drift.
 | Capability | Python root | Hosted `web/` |
 | --- | --- | --- |
 | Answer modes | Council, Quick (`thorough: false`), single model via `models` | Single, Quick synthesis, Council, Deep Council, Compare |
+| Final writer that did not draft | `independent_synthesizer` (API) / `--independent-synthesizer` (CLI) | per-tab switch in Connections for Quick synthesis, Council and Deep Council |
 | Response navigation and mode selection | no | docked question and mode controls; next-question choices stay available during runs; expandable previews with one conversation scroll |
 | Stream rendering and task setup | no | coalesced text previews with immediate first/final events; stable Markdown blocks; guided briefs on the empty workspace |
 | Remembered mode and preferred model | no | private account preferences; first-use Single answer, no automatic paid runs |
@@ -92,6 +93,7 @@ recorded is a decision, an unrecorded one is drift.
 | No-key demo | `TRIO_MOCK=1`, generated fake answers | Demo mode, prepared labeled examples |
 | Claude prompt caching | yes, on draft calls with history | no |
 | Per-address rate limit | yes (`ASK_RATE_LIMIT_PER_MINUTE`), plus wrong-password lockout on every endpoint (`PASSWORD_FAILURES_PER_MINUTE`) | no; invite-only, per-account keys |
+| Operator can turn optional tools off | n/a | `TRIO_DISABLED_FEATURES` hides quality, comparison, work, audio, image or memory and refuses their routes |
 | Spend cap on operator-paid keys | n/a (every call uses the server's keys; see rate limit) | per-account daily provider-call allowance on included keys (`TRIO_WORKSPACE_DAILY_CALLS`); own keys uncounted |
 
 The two wire formats are separate contracts. The event names overlap because

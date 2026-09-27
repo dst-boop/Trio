@@ -36,6 +36,7 @@ async def main() -> int:
     parser.add_argument('--quick', action='store_true', help='Skip peer review')
     parser.add_argument('--models', help='Comma-separated subset: claude,openai,gemini')
     parser.add_argument('--synthesizer', choices=NAMES, help='Preferred final-answer model (must be selected)')
+    parser.add_argument('--independent-synthesizer', action='store_true', help='The synthesizer writes only the final answer and does not draft or review (needs three models)')
     parser.add_argument('question', nargs='+')
     args = parser.parse_args()
     selected = [key.strip() for key in args.models.split(',')] if args.models is not None else None
@@ -49,7 +50,7 @@ async def main() -> int:
     printed = 0  # final-answer chunks already written to stdout
     timeout = httpx.Timeout(float(os.getenv("MODEL_TIMEOUT_SECONDS", "240")), connect=10)
     async with httpx.AsyncClient(timeout=timeout) as client:
-        async for ev in run(client, question, thorough=not args.quick, model_keys=selected, synthesizer=args.synthesizer):
+        async for ev in run(client, question, thorough=not args.quick, model_keys=selected, synthesizer=args.synthesizer, independent_synthesizer=args.independent_synthesizer):
             t = ev["type"]
             if t == "start":
                 note("Asking " + ", ".join(m["label"] for m in ev["models"]) + "...")

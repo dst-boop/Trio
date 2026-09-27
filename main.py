@@ -134,6 +134,7 @@ class AskRequest(BaseModel):
     expected_turns: int | None = Field(default=None, ge=1)
     models: list[Literal['claude', 'openai', 'gemini']] | None = Field(default=None, min_length=1, max_length=3)
     synthesizer: Literal['claude', 'openai', 'gemini'] | None = None
+    independent_synthesizer: bool = False  # the synthesizer sits out drafting and review
 
 
 async def check_password(request: Request, supplied: str | None) -> None:
@@ -229,7 +230,7 @@ async def ask(req: AskRequest, request: Request, x_app_password: str | None = He
 
     async def saved_run():
         out = {"drafts": {}, "reviews": {}, "errors": {}}
-        async for event in run(client, req.question, history, req.thorough, model_keys=req.models, synthesizer=req.synthesizer):
+        async for event in run(client, req.question, history, req.thorough, model_keys=req.models, synthesizer=req.synthesizer, independent_synthesizer=req.independent_synthesizer):
             collect_event(out, event)
             yield event
             if event["type"] == "final":

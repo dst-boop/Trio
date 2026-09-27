@@ -1,5 +1,6 @@
 import { env, waitUntil } from 'cloudflare:workers';
 import { z } from 'zod';
+import { featureDisabled } from '@/lib/features';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { accountReply as reply } from '@/lib/account-api';
 import { JsonBodyError, readJsonBody } from '@/lib/request-json';
@@ -16,6 +17,7 @@ const action=z.discriminatedUnion('action',[
   z.object({action:z.literal('delete'),id}).strict(),
 ]);
 async function handle(request:Request) {
+  const off=featureDisabled(env,'comparison'); if(off)return off;
   const user=await getChatGPTUser();
   if(!user||request.headers.get('x-trio-account')!==user.userId)return reply({error:'Sign in again to open your private comparisons.'},401);
   if(request.method!=='GET'&&request.headers.get('origin')!==new URL(request.url).origin)return reply({error:'Invalid request origin.'},403);

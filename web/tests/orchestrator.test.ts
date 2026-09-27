@@ -172,3 +172,28 @@ test('stopping at revision prevents revision and synthesis requests', async () =
   assert.ok(!events.some(e => e.type === 'final'));
   assert.ok(!s.calls.some(c => c.stage === 'revision' || c.stage === 'final'));
 });
+
+test('an independent writer sits out drafting, review and revision and writes only the final answer', async () => {
+  const s = setup();
+  const result = await orchestrate({ ...s.input, mode: 'deep', independentWriter: true }, () => {}, new AbortController().signal, s.fetcher);
+  assert.deepEqual(s.calls.filter(c => c.id === 'claude').map(c => c.stage), ['final'], 'the writer is only called for the final answer');
+  assert.deepEqual(Object.keys(result.drafts).sort(), ['gemini', 'openai']);
+  assert.deepEqual(Object.keys(result.reviews).sort(), ['gemini', 'openai']);
+  assert.deepEqual(Object.keys(result.revisions ?? {}).sort(), ['gemini', 'openai']);
+  assert.equal(result.by, 'claude'); assert.equal(result.independentWriter, true); assert.equal(result.answer, 'claude final response');
+});
+
+test('if the independent writer fails, a drafter writes the answer and the result says so', async () => {
+  const s = setup((id, stage) => id === 'claude' && stage === 'final');
+  const result = await orchestrate({ ...s.input, mode: 'fast', independentWriter: true }, () => {}, new AbortController().signal, s.fetcher);
+  assert.notEqual(result.by, 'claude'); assert.equal(result.independentWriter, undefined);
+  assert.ok(result.errors.some(e => /a model that drafted wrote it instead/.test(e)));
+});
+
+test('an independent writer needs three connected models and is ignored for Single and Compare', async () => {
+  const s = setup(); s.input.connections.gemini.enabled = false;
+  await assert.rejects(orchestrate({ ...s.input, independentWriter: true }, () => {}, new AbortController().signal, s.fetcher), /three connected models/);
+  const t = setup();
+  const compare = await orchestrate({ ...t.input, mode: 'compare', independentWriter: true }, () => {}, new AbortController().signal, t.fetcher);
+  assert.equal(Object.keys(compare.drafts).length, 3); assert.equal(compare.independentWriter, undefined);
+});

@@ -83,6 +83,11 @@ Optional `models` selects a nonempty subset of configured providers (for example
 writer for that run. The writer must be selected and configured; unknown,
 duplicate, empty, or unavailable selections return 422. Omit these fields to
 use every configured provider and the server's `SYNTHESIZER` preference.
+Set `independent_synthesizer: true` (CLI: `--independent-synthesizer`) to have the
+synthesizer sit out drafting and review and only write the final answer, so it
+judges drafts it did not write. It needs three configured models; the final event
+then carries `independent: true`. If that writer fails, a drafting model writes
+the answer instead and the flag is absent.
 The Python web roster has model checkboxes and a final-answer selector; these
 preferences are saved on the viewer's device. One selected model returns its
 draft directly without a review or synthesis round. Saved answers retain the
