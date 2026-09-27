@@ -146,3 +146,50 @@ test('permanent request errors do not offer repeated retries with the same inval
     client.retry(); assert.equal(writes, 1); client.dispose();
   }
 });
+
+test('read-side authentication errors do not require a JSON error body', async () => {
+  for (const body of [null, '<html>Sign in again</html>']) {
+    let calls = 0;
+    const client = new PreferencesClient('alice', async () => { calls++; return new Response(body, { status: 401 }); });
+    await client.load();
+    assert.equal(client.getSnapshot().recovery, 'account');
+    client.update({ mode: 'deep' }); client.retry();
+    assert.equal(calls, 1);
+    client.dispose();
+  }
+});
+
+test('save recovery follows HTTP status even when the error body is empty or non-JSON', async () => {
+  for (const body of [null, '<html>Upstream error</html>']) {
+    for (const status of [400, 401, 403, 409, 413, 415, 500, 503]) {
+      let writes = 0;
+      const client = new PreferencesClient('alice', async (_, init) => {
+        if (!init.method) return response();
+        writes++; return new Response(body, { status });
+      });
+      await client.load(); client.update({ demo: false }); await settled(client);
+      assert.equal(client.getSnapshot().recovery, status === 409 ? 'load' : status < 500 ? 'account' : 'retry', `HTTP ${status}`);
+      assert.equal(client.getSnapshot().value.demo, false, 'Keep the local choice');
+      assert.equal(client.getSnapshot().persisted, false, 'Never claim a failed write was saved');
+      client.retry(); await settled(client);
+      assert.equal(writes, status >= 500 ? 2 : 1);
+      client.dispose();
+    }
+  }
+});
+
+test('temporary request errors can retry the exact save without reloading the page', async () => {
+  for (const status of [408, 429]) {
+    const writes: WorkspacePreferences[] = [];
+    const client = new PreferencesClient('alice', async (_, init) => {
+      if (!init.method) return response();
+      const body = JSON.parse(init.body as string); writes.push(body);
+      return writes.length === 1 ? Response.json({ error: 'Try later' }, { status }) : response({ ...body, revision: body.revision + 1 });
+    });
+    await client.load(); client.update({ demo: false }); await settled(client);
+    assert.equal(client.getSnapshot().recovery, 'retry', `HTTP ${status}`);
+    client.retry(); await settled(client);
+    assert.deepEqual(writes[1], writes[0]);
+    assert.equal(client.getSnapshot().status, 'saved'); client.dispose();
+  }
+});

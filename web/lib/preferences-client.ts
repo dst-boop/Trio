@@ -44,12 +44,16 @@ export class PreferencesClient {
     this.emit({ status: 'loading', error: '', recovery: null });
     try {
       const response = await this.transport('/api/preferences', this.options());
-      const data = await response.json();
+      // Proxies and expired sessions may return HTML or no body at all.
+      // Recovery depends on the status, never on parsing an error envelope.
+      if (!response.ok) void response.body?.cancel().catch(() => {});
       if (version !== this.generation) return;
       if (response.status === 401) {
         this.blocked = true; this.emit({ status: 'error', error: 'Your account changed. Reload Trio before saving preferences.', recovery: 'account' }); return;
       }
       if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (version !== this.generation) return;
       const parsed = preferencesResponseSchema.parse(data);
       if (parsed.accountId !== this.accountId) {
         this.blocked = true; this.emit({ status: 'error', error: 'Your account changed. Reload Trio before saving preferences.', recovery: 'account' }); return;
@@ -82,14 +86,17 @@ export class PreferencesClient {
       while (this.attempt || !samePreferences(this.saved, this.desired)) {
         const attempt = this.attempt ??= { ...this.desired, revision: this.saved.revision };
         const response = await this.transport('/api/preferences', { ...this.options(), method: 'PUT', body: JSON.stringify(attempt) });
-        const data = await response.json();
+        if (!response.ok) void response.body?.cancel().catch(() => {});
         if (version !== this.generation) return;
         if (!response.ok) {
           this.blocked = true;
-          const recovery = response.status === 409 ? 'load' : response.status < 500 ? 'account' : 'retry';
+          const transient = response.status === 408 || response.status === 429 || response.status >= 500;
+          const recovery = response.status === 409 ? 'load' : transient ? 'retry' : 'account';
           const error = recovery === 'load' ? 'Preferences changed in another tab or device. Load saved preferences to continue saving.' : response.status === 401 ? 'Your account changed. Reload Trio before saving preferences.' : recovery === 'account' ? 'This version of Trio could not save preferences. Reload Trio before trying again.' : 'Preferences were not confirmed saved. Your choices work in this tab; retry saving.';
           this.emit({ status: 'error', error, recovery }); return;
         }
+        const data = await response.json();
+        if (version !== this.generation) return;
         const parsed = preferencesResponseSchema.parse(data);
         if (parsed.accountId !== this.accountId) {
           this.blocked = true; this.emit({ status: 'error', error: 'Your account changed. Reload Trio before saving preferences.', recovery: 'account' }); return;

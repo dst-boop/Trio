@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import { closeQuestionOptions } from './workspace-ui.mjs';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const base = process.env.TRIO_BASE_URL || 'http://localhost:5173';
+assert.ok(['localhost', '127.0.0.1'].includes(new URL(base).hostname), 'Use a local preview');
+const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const saved = { revision: 0, demo: true, mode: 'single', lead: 'openai' };
+  let failure = 409, writes = 0;
+  // All account data and writes are synthetic; no model provider is called.
+  await page.route('**/api/workspace', route => route.fulfill({ json: { revision: 0, sessions: [], accountId: 'local_seedy' } }));
+  await page.route('**/api/memory', route => route.fulfill({ json: { revision: 0, enabled: false, notes: '' } }));
+  await page.route('**/api/connections', route => route.fulfill({ json: { connections: ['openai', 'claude', 'gemini'].map(provider => ({ provider, revision: 0, saved: false, model: 'synthetic-model', enabled: true })) } }));
+  await page.route('**/api/preferences', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { ...saved, accountId: 'local_seedy' } });
+    writes++;
+    if (failure) return route.fulfill({ status: failure, contentType: 'text/html', body: '<html>Upstream error</html>' });
+    Object.assign(saved, route.request().postDataJSON()); saved.revision++;
+    return route.fulfill({ json: { ...saved, accountId: 'local_seedy' } });
+  });
+  await page.goto(base + '/signin-with-chatgpt?return_to=%2Fworkspace', { waitUntil: 'networkidle' });
+  const question = page.getByRole('textbox', { name: 'Your question', exact: true });
+  await question.fill('Keep this unsent question');
+  await page.getByRole('radio', { name: 'Council', exact: true }).check();
+  await page.getByRole('button', { name: 'Choices not saved · Review', exact: true }).click();
+  await page.getByRole('button', { name: 'Load saved preferences', exact: true }).waitFor();
+  assert.equal(writes, 1);
+  assert.equal(await page.getByRole('button', { name: 'Retry saving preferences', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Load saved preferences', exact: true }).click();
+  await page.getByRole('button', { name: 'Load saved preferences', exact: true }).waitFor({ state: 'hidden' });
+  await closeQuestionOptions(page);
+  await page.getByRole('radio', { name: 'Single answer', exact: true }).waitFor();
+  assert.equal(await page.getByRole('radio', { name: 'Single answer', exact: true }).isChecked(), true);
+  assert.equal(await question.inputValue(), 'Keep this unsent question');
+  failure = 429;
+  await page.getByRole('radio', { name: 'Council', exact: true }).check();
+  await page.getByRole('button', { name: 'Choices not saved · Review', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry saving preferences', exact: true }).waitFor();
+  failure = 0;
+  await page.getByRole('button', { name: 'Retry saving preferences', exact: true }).click();
+  await page.getByText('Mode and model choices saved to your account.', { exact: true }).waitFor();
+  assert.equal(writes, 3); assert.equal(saved.mode, 'council');
+  await closeQuestionOptions(page);
+  failure = 401;
+  await page.getByRole('radio', { name: 'Single answer', exact: true }).check();
+  await page.getByRole('button', { name: 'Choices not saved · Review', exact: true }).click();
+  await page.getByText('Your account changed. Reload Trio before saving preferences.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Retry saving preferences', exact: true }).count(), 0);
+  await closeQuestionOptions(page);
+  assert.equal(await question.inputValue(), 'Keep this unsent question');
+  assert.deepEqual(errors, []);
+  console.log('Preferences browser recovery passed: non-JSON conflicts, rate limits, expired sign-in, and draft preservation.');
+} finally { await browser.close(); }

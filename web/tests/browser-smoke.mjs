@@ -10,6 +10,8 @@ await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil:
 await page.getByRole('heading', { name: 'One question. Three perspectives.' }).waitFor();
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 await page.screenshot({ path: 'test-output/desktop.png', fullPage: true });
+// First use defaults to Single answer; this smoke check exercises the full council.
+await page.getByRole('radio', { name: 'Council', exact: true }).check();
 await page.getByRole('button', { name: 'Run demo', exact: true }).click();
 await page.getByText('Make the first 30 days a learning sprint.', { exact: false }).waitFor();
 await page.getByRole('tab', { name: 'Perspectives 3' }).click();

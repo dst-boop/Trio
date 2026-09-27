@@ -211,6 +211,7 @@ Run browser checks with Playwright installed separately and a local dev server r
 
 ```sh
 node tests/browser-smoke.mjs
+node tests/browser-preferences-recovery.mjs
 node tests/browser-quality.mjs
 node tests/browser-capacity.mjs
 node tests/browser-branches.mjs
