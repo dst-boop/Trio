@@ -9,71 +9,51 @@ import { ActionConfirmation } from '@/components/action-confirmation';
 import { setWorkPlan, workSummary } from '@/lib/work-actions';
 import type { WorkPlan } from '@/lib/work-plan';
 import type { Input as RunInput } from '@/lib/orchestrate';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { FileText, Archive, ArrowUp, Plus, MessageSquare, Settings2, Paperclip, X, Copy, Download, Check, Layers3, Zap, GitCompareArrows, ShieldCheck, ChevronRight, Square, Lightbulb, Code2, Compass, CircleHelp, Trash2, RefreshCw, AudioLines, ImagePlus } from 'lucide-react';
-import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarTrigger } from '@/components/ui/sidebar';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+import { MessageSquare, Settings2, ChevronRight, Square } from 'lucide-react';
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { AnswerReader as Prose } from '@/components/answer-reader';
-import { AnswerControls } from '@/components/answer-controls';
 import { UsageSummary } from '@/components/usage-summary';
-import { SessionInstructions, InstructionsUsed, MemoryUsed } from '@/components/session-instructions';
-import { SessionList, SessionActionDialogs, type SessionAction } from '@/components/session-library';
+import { InstructionsUsed, MemoryUsed } from '@/components/session-instructions';
+import { SessionActionDialogs, type SessionAction } from '@/components/session-library';
 import { renameSession } from '@/lib/session-library';
 import { SessionBackups } from '@/components/session-backups';
 import { mergeBackup } from '@/lib/backups';
 import { selectResearchProvider, type ResearchChoice } from '@/lib/research';
-import { RunCoverage, RunPipeline, answerLabel } from '@/components/run-coverage';
+import { RunCoverage, RunPipeline } from '@/components/run-coverage';
 import { ResearchPanel } from '@/components/research-panel';
 import { BranchConversation } from '@/components/branch-conversation';
-import { DraftNavigation, NewSessionButton, type DraftDestination } from '@/components/draft-navigation';
+import { DraftNavigation, type DraftDestination } from '@/components/draft-navigation';
 import { branchConversation } from '@/lib/branch-conversation';
 import { AnswerFeedback } from '@/components/answer-feedback';
 import { setAnswerFeedback, type AnswerFeedback as Feedback } from '@/lib/answer-feedback';
 import { ConversationHistory } from '@/components/conversation-history';
-import { FollowUpContext } from '@/components/follow-up-context';
 import { runLiveRequest } from '@/lib/run-live-request';
 import { createRunPreview } from '@/lib/run-preview';
 import { applyRunEvent } from '@/lib/run-events';
-import { readImageFile, type AttachedImage } from '@/lib/images';
-import { readPdfFile, attachmentBytes, maxAttachmentBytes, type AttachedPdf } from '@/lib/pdf';
 import { parseSessions, serializeSessions, conversationContext, sessionMarkdown, type Turn, type Session } from '@/lib/sessions';
 import { Toaster, toast } from 'sonner';
 import { PersonalMemory, usePersonalMemory } from '@/components/personal-memory';
 import { useAccountWorkspace } from '@/components/use-account-workspace';
-import { ProviderConnection } from '@/components/provider-connection';
 import { useSavedConnections } from '@/components/use-saved-connections';
 import { useWorkspacePreferences } from '@/components/use-workspace-preferences';
-import { PreferencesStatus } from '@/components/preferences-status';
 import { AudioTranscription } from '@/components/audio-transcription';
 import { ImageGeneration } from '@/components/image-generation';
-import { providers, freshConnections, type Connections, type Mode, type ProviderId, type Result, type RunEvent } from '@/lib/trio';
+import { providers, freshConnections, type Connections, type Mode, type Result } from '@/lib/trio';
 import { applyWorkspaceConnections } from '@/lib/workspace-keys';
+import { modes } from '@/components/answer-modes';
+import { Composer } from '@/components/composer';
+import { ConnectionsDialog } from '@/components/connections-dialog';
+import { HelpDialog } from '@/components/help-dialog';
+import { ResultTabs } from '@/components/result-tabs';
+import { ToolsDialog } from '@/components/tools-dialog';
+import { WorkspaceSidebar, type WorkspacePanel } from '@/components/workspace-sidebar';
+import { useDraftAttachments } from '@/components/use-draft-attachments';
+import { runDemo, demoQuestion } from '@/lib/demo-run';
 
-const modes = { single: { title: 'Single answer', icon: Zap, desc: 'One model answers directly. Ask the team to review it when useful.', calls: '1 call + any retry' }, council: { title: 'Council', icon: Layers3, desc: 'Independent answers, peer review, one stronger result.', calls: 'Up to 7 calls + retries' }, deep: { title: 'Deep Council', icon: RefreshCw, desc: 'Challenge, revise, then synthesize. More time and API usage; not a guarantee of accuracy.', calls: 'Up to 10 calls + retries' }, fast: { title: 'Quick synthesis', icon: Zap, desc: 'Three perspectives, combined without the review round.', calls: 'Up to 4 calls + retries' }, compare: { title: 'Compare', icon: GitCompareArrows, desc: 'Independent answers. You compare the perspectives.', calls: 'Up to 3 calls + retries' } };
 const emptyResult = (demo: boolean): Result => ({ drafts: {}, reviews: {}, errors: [], answer: '', seconds: 0, demo });
-const demoQuestion = 'Design a practical 30-day plan to turn an idea into a validated product.';
-const demoDrafts = [
-  'Start with the problem, not the product.\n\nWeek 1: Interview 8–10 people in one customer segment. Ask about the last time they encountered the problem and how they solve it today.\n\nWeek 2: Test a simple offer before building.\n\nWeek 3: Deliver the core result manually for three pilot users.\n\nWeek 4: Compare repeat use, willingness to pay, and the effort to deliver. Build only what the evidence supports.',
-  'Define what would disprove the idea before testing it.\n\nChoose one audience and one painful workflow. Record existing workarounds, their cost, and who owns the buying decision. Avoid asking whether people “like” the idea.\n\nUse a concierge pilot with a clear success measure. Separate polite enthusiasm from a concrete commitment. At day 30, decide whether to continue, change the customer segment, or stop.',
-  'Create a small learning loop: observe → prototype → test → measure.\n\nMap the workflow and find the slowest or most frustrating step. Make a clickable prototype around that single step, then test with five prospective users.\n\nTrack task completion and reasons for abandonment. Use a simple experiment log so each week starts with evidence from the previous one. A small sample is directional evidence, not proof of market demand.',
-];
-const demoReviews = [
-  'Strongest shared idea: test one painful problem with a narrow audience.\n\nImprovement: choose the decision criteria before the pilot. Interviews alone do not validate willingness to pay.\n\nOpen question: which audience can you reach in the first week?',
-  'The plans agree on a small experiment, but agreement is not external validation.\n\nAvoid treating 8–10 interviews as statistically representative. Capture contradictory evidence, not just positive feedback. Make the stop or pivot decision explicit.',
-  'Combine the practical weekly plan with a clear experiment log.\n\nMeasure an actual behavior, such as repeated use or a pilot commitment. Keep the prototype small enough to revise during the month. Pricing and sample size remain assumptions to test.',
-];
-const demoRevisions = [
-  '## Revised plan\n\nInterview one reachable customer segment, then run a small concierge pilot. Before the pilot, write down the behavior that would justify continuing: repeated use, a concrete commitment, or a measurable improvement over the current workaround.\n\n### Changes and remaining uncertainties\n\nAdded decision criteria before testing, in response to the reviews. Interviews can reveal problems but cannot establish willingness to pay. The appropriate threshold depends on the business; this small sample cannot prove demand.',
-  '## Revised plan\n\nKeep an experiment log with the hypothesis, evidence for and against it, and the next decision. Pair interviews with a task-based prototype test and a paid or otherwise concrete pilot commitment. Decide at day 30 whether to continue, change the audience, or stop.\n\n### Changes and remaining uncertainties\n\nAdded observable task completion and a weekly schedule from the other drafts. A commitment is stronger evidence than praise, but still does not establish retention. Pricing needs a separate test.',
-  '## Revised plan\n\nUse the prototype to test a single painful workflow, then deliver the outcome manually for a small pilot group. Record task completion, repeat use, and delivery effort. Define stop criteria before starting, and document contradictory feedback.\n\n### Changes and remaining uncertainties\n\nReplaced a prototype-only success measure with a real pilot commitment. Five prototype users provide directional usability feedback, not a reliable estimate of market demand. Repeat the experiment with a broader sample before scaling.',
-];
 type ReviewTarget = { result: Result; request: Pick<RunInput, 'question' | 'instructions' | 'context' | 'image' | 'pdf' | 'history' | 'webResearch' | 'researchProvider'>; imageName?: string; pdfName?: string };
-const demoFinal = 'Make the first 30 days a learning sprint. Your goal is evidence that a specific group will act on your offer.\n\n01 — Find the problem · Days 1–7\nPick one reachable customer segment. Interview 8–10 people about a recent experience, current workarounds, and the cost of the problem. Record evidence that challenges your idea.\n\n02 — Test the offer · Days 8–14\nWrite a one-sentence promise and build a simple prototype. Ask five prospective users to complete the core task. Define a measurable success threshold before you run the pilot.\n\n03 — Deliver the outcome · Days 15–23\nRun a small, hands-on pilot with three users. Deliver the result manually where possible. Track completion, repeated use, time saved, and willingness to commit.\n\n04 — Decide with evidence · Days 24–30\nCompare results with your original threshold. Continue if the behavior supports the idea; revise the audience or offer if it does not. Document what you still do not know.\n\nKeep in mind\nThese sample sizes are a starting point, not statistical validation. Positive feedback is weaker evidence than repeated use or a concrete commitment.\n\nYour first move: name the customer segment and the one problem you want to test.';
-function Mark({ id, small = false }: { id?: ProviderId; small?: boolean }) { const p = providers.find(p => p.id === id); return <span className={`model-mark ${small ? 'small' : ''}`} style={{ color: p?.color ?? '#c4bbff', background: (p?.color ?? '#aa99ff') + '14' }}>{p?.mark ?? '◈'}</span>; }
+const noTurns: Turn[] = [];
 
 function browserTimeZone(): string | undefined { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; } }
 
@@ -82,8 +62,12 @@ export default function Home({ account }: { account?: { userId: string; displayN
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
   const [workspaceRecovery, setWorkspaceRecovery] = useState<'reload' | 'signout' | null>(null);
+  const [temporaryDemoAccount, setTemporaryDemoAccount] = useState<string | null>(null);
   const focusAfterReload = useRef(false);
-  useEffect(() => { setWorkspaceRecovery(null); }, [account?.userId]);
+  // Choices tied to one account never carry over to the next. Adjusting state while
+  // rendering (not in an effect) avoids a render with the previous account's values.
+  const [stateAccount, setStateAccount] = useState(account?.userId);
+  if (stateAccount !== account?.userId) { setStateAccount(account?.userId); setWorkspaceRecovery(null); setTemporaryDemoAccount(null); }
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
   const [branchPoint, setBranchPoint] = useState<number | null>(null);
   const [draftDestination, setDraftDestination] = useState<DraftDestination | null>(null);
@@ -97,54 +81,50 @@ export default function Home({ account }: { account?: { userId: string; displayN
   const [toolsOpen, setToolsOpen] = useState(false);
   const [mediaTool, setMediaTool] = useState<'audio' | 'image' | null>(null);
   const [settings, setSettings] = useState(false), [help, setHelp] = useState(false);
-  const [forgetKeys, setForgetKeys] = useState(false);
   const preferences = useWorkspacePreferences(account?.userId);
-  const [temporaryDemoAccount, setTemporaryDemoAccount] = useState<string | null>(null);
   const temporaryDemo = temporaryDemoAccount === (account?.userId ?? 'guest');
   const { mode, lead } = preferences.value;
   const demo = temporaryDemo || preferences.value.demo;
   const { setMode, setLead } = preferences;
   const setDemo = (value: boolean) => { setTemporaryDemoAccount(null); preferences.setDemo(value); };
-  useEffect(() => { setTemporaryDemoAccount(null); }, [account?.userId]);
-  const [prompt, setPrompt] = useState(''), [context, setContext] = useState<{ name: string; text: string } | null>(null);
-  const [contextLoading, setContextLoading] = useState(false), contextVersion = useRef(0);
+  const [prompt, setPrompt] = useState('');
   const [instructions, setInstructions] = useState('');
   const [researchProvider, setResearchProvider] = useState<ResearchChoice>('auto');
   const [webResearch, setWebResearch] = useState(false);
-  const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null), [imageLoading, setImageLoading] = useState(false);
-  const [attachedPdf, setAttachedPdf] = useState<AttachedPdf | null>(null), [pdfLoading, setPdfLoading] = useState(false);
-  const pdfRef = useRef<HTMLInputElement>(null), pdfVersion = useRef(0);
-  const attachmentsTooLarge = attachmentBytes(attachedImage, attachedPdf) > maxAttachmentBytes;
-  const imageRef = useRef<HTMLInputElement>(null), imageVersion = useRef(0);
   const [sessions, setSessions] = useState<Session[]>([]), [current, setCurrent] = useState<string | null>(null);
-  const [turns, setTurns] = useState<Turn[]>([]), [busy, setBusy] = useState(false), [stage, setStage] = useState('');
+  const turns = useMemo(() => sessions.find(s => s.id === current)?.turns ?? noTurns, [sessions, current]);
+  const [busy, setBusy] = useState(false), [stage, setStage] = useState('');
+  const attachments = useDraftAttachments(busy, () => setReviewTarget(null));
   const followUpContext = useMemo(() => conversationContext(turns), [turns]);
   const openActions = useMemo(() => workSummary(sessions).open, [sessions]);
   const [working, setWorking] = useState<Result | null>(null), [runningQuestion, setRunningQuestion] = useState(''), [tab, setTab] = useState('answer');
   const [remember, setRemember] = useState(false), [loaded, setLoaded] = useState(false);
   const [storageError, setStorageError] = useState(false);
   const [clearHistory, setClearHistory] = useState(false), [runMode, setRunMode] = useState<Mode>('council');
-  const abortRef = useRef<AbortController | null>(null), fileRef = useRef<HTMLInputElement>(null), promptRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null), promptRef = useRef<HTMLTextAreaElement>(null);
   const newConversationBlocked = !current && sessions.length >= 30;
-  const hasDraft = Boolean(prompt || context || attachedImage || attachedPdf || contextLoading || imageLoading || pdfLoading || (!current && instructions));
+  const hasDraft = Boolean(prompt || attachments.present || (!current && instructions));
   const connected = providers.filter(p => connections[p.id].key.trim() && connections[p.id].enabled).length;
   const cloud = useAccountWorkspace(account?.userId, sessions, saved => {
-    setSessions(saved); setTurns([]); setCurrent(null); setInstructions(''); setWorking(null); setPrompt(''); clearContext(); clearImage(); clearPdf(); setLoaded(true);
+    setSessions(saved); setCurrent(null); setInstructions(''); resetDraft(); setLoaded(true);
   });
   useEffect(() => { if (cloud.ready && focusAfterReload.current) { focusAfterReload.current = false; promptRef.current?.focus(); } }, [cloud.ready]);
-  useEffect(() => { if (workspaceRecovery && !cloud.error) setWorkspaceRecovery(null); }, [cloud.error, workspaceRecovery]);
+  if (workspaceRecovery && !cloud.error) setWorkspaceRecovery(null); // the problem it offered to recover from is gone
   useEffect(() => {
     if (account) return;
+    // Browser storage exists only after hydration, so guest history is read here rather than in initial state.
+    /* eslint-disable react-hooks/set-state-in-effect */
     try {
       const enabled = localStorage.getItem('trio-remember') === 'true'; setRemember(enabled);
       if (enabled) {
         const saved = parseSessions(localStorage.getItem('trio-sessions')); setSessions(saved);
         const active = localStorage.getItem('trio-active-session');
         const restored = active === null ? saved[0] : saved.find(s => s.id === active);
-        if (restored) { setInstructions(restored.instructions ?? restored.turns.at(-1)?.instructions ?? ''); setCurrent(restored.id); setTurns(restored.turns); setStage('done'); setTab(restored.turns.at(-1)?.mode === 'compare' ? 'drafts' : 'answer'); }
+        if (restored) { setInstructions(restored.instructions ?? restored.turns.at(-1)?.instructions ?? ''); setCurrent(restored.id); setStage('done'); setTab(restored.turns.at(-1)?.mode === 'compare' ? 'drafts' : 'answer'); }
       }
     } catch {} setLoaded(true);
-  }, []);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [account]);
   useEffect(() => {
     if (!loaded || account) return;
     try {
@@ -152,20 +132,20 @@ export default function Home({ account }: { account?: { userId: string; displayN
       localStorage.setItem('trio-remember', String(remember));
       if (snapshot !== null) { localStorage.setItem('trio-sessions', snapshot); localStorage.setItem('trio-active-session', current ?? ''); }
       else { localStorage.removeItem('trio-sessions'); localStorage.removeItem('trio-active-session'); }
-      setStorageError(false);
+      setStorageError(false); // eslint-disable-line react-hooks/set-state-in-effect -- reports the outcome of writing to browser storage
     } catch { setStorageError(true); }
   }, [sessions, remember, loaded, current, account]);
-  useEffect(() => () => { abortRef.current?.abort(); contextVersion.current++; imageVersion.current++; pdfVersion.current++; }, []);
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
   useEffect(() => {
     if (!hasDraft && !busy) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [hasDraft, busy]);
-  function clearContext() { setReviewTarget(null); contextVersion.current++; setContext(null); setContextLoading(false); }
-  function clearPdf() { setReviewTarget(null); pdfVersion.current++; setAttachedPdf(null); setPdfLoading(false); }
-  function clearImage() { setReviewTarget(null); imageVersion.current++; setAttachedImage(null); setImageLoading(false); }
-  function newSession() { if (busy) return; setTurns([]); setInstructions(''); setCurrent(null); setWorking(null); setPrompt(''); clearContext(); clearImage(); clearPdf(); setRunningQuestion(''); promptRef.current?.focus(); }
+  /** Empty the composer: unsent text, attachments and any in-progress preview. */
+  function resetDraft() { setWorking(null); setRunningQuestion(''); setPrompt(''); attachments.clearAll(); }
+  const openPanel = (panel: WorkspacePanel) => ({ quality: setQualityOpen, comparison: setComparisonOpen, work: setWorkOpen, settings: setSettings, memory: setMemoryOpen, backups: setBackupsOpen, help: setHelp, clearHistory: setClearHistory })[panel](true);
+  function newSession() { if (busy) return; setInstructions(''); setCurrent(null); resetDraft(); promptRef.current?.focus(); }
   function navigate(destination: DraftDestination) {
     if (busy) return;
     if (destination.type === 'new') newSession();
@@ -173,8 +153,8 @@ export default function Home({ account }: { account?: { userId: string; displayN
       const session = sessions.find(s => s.id === destination.id);
       if (!session) { toast.error('That conversation is no longer available. Your draft is still here.'); setDraftDestination(null); return; }
       document.getElementById("conversation-scroll")?.scrollTo({ top: 0 });
-      setCurrent(session.id); setInstructions(session.instructions ?? session.turns.at(-1)?.instructions ?? ''); setTurns(session.turns);
-      setWorking(null); setRunningQuestion(''); setPrompt(''); clearContext(); clearImage(); clearPdf(); setStage('done'); setTab(session.turns.at(-1)?.mode === 'compare' ? 'drafts' : 'answer');
+      setCurrent(session.id); setInstructions(session.instructions ?? session.turns.at(-1)?.instructions ?? '');
+      resetDraft(); setStage('done'); setTab(session.turns.at(-1)?.mode === 'compare' ? 'drafts' : 'answer');
     }
     setDraftDestination(null);
   }
@@ -188,9 +168,8 @@ export default function Home({ account }: { account?: { userId: string; displayN
     if (busy || branchPoint === null || !current) return;
     try {
       const copy = branchConversation(sessions, current, branchPoint, name);
-      setSessions(copy.sessions); setCurrent(copy.session.id); setTurns(copy.session.turns); setInstructions(copy.session.instructions ?? '');
-      setWorking(null); setRunningQuestion(''); setPrompt(''); setSessionQuery('');
-      clearContext(); clearImage(); clearPdf(); setStage('done'); setTab(copy.session.turns.at(-1)!.mode === 'compare' ? 'drafts' : 'answer'); setBranchPoint(null);
+      setSessions(copy.sessions); setCurrent(copy.session.id); setInstructions(copy.session.instructions ?? '');
+      resetDraft(); setSessionQuery(''); setStage('done'); setTab(copy.session.turns.at(-1)!.mode === 'compare' ? 'drafts' : 'answer'); setBranchPoint(null);
       toast.success('New conversation created. Your original is unchanged.'); promptRef.current?.focus();
     } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not create the conversation.'); }
   }
@@ -198,7 +177,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
     if (busy) return false;
     try {
       const next = setWorkPlan(sessions, sessionId, index, plan);
-      setSessions(next); if (sessionId === current) setTurns(next.find(s => s.id === current)!.turns);
+      setSessions(next);
       return true;
     } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not save this plan.'); return false; }
   }
@@ -206,23 +185,22 @@ export default function Home({ account }: { account?: { userId: string; displayN
     if (busy || !current) return false;
     try {
       const updated = setAnswerFeedback(sessions, current, index, feedback);
-      setSessions(updated); setTurns(updated.find(s => s.id === current)!.turns);
+      setSessions(updated);
       toast.success(feedback ? 'Feedback recorded. Memory changes still need your review.' : 'Feedback removed from this answer.');
       return true;
     } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not record feedback.'); return false; }
   }
-  function saveTurn(question: string, result: Result, chosenMode: Mode, usedInstructions: string, imageName?: string, pdfName?: string) { const next = [...turns, { question, result, mode: chosenMode, ...(!result.demo && usedInstructions ? { instructions: usedInstructions } : {}), ...(!result.demo && imageName ? { imageName } : {}), ...(!result.demo && pdfName ? { pdfName } : {}) }]; setTurns(next); const id = current ?? crypto.randomUUID(); setCurrent(id); setSessions(prev => [{ id, instructions, title: prev.find(s => s.id === id)?.title ?? next[0].question, turns: next, time: new Date().toISOString() }, ...prev.filter(s => s.id !== id)]); }
-  async function delay(ms: number, signal: AbortSignal) { await new Promise<void>((resolve, reject) => { if (signal.aborted) return reject(new DOMException('Cancelled', 'AbortError')); const cancel = () => { clearTimeout(timer); reject(new DOMException('Cancelled', 'AbortError')); }; const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve(); }, ms); signal.addEventListener('abort', cancel, { once: true }); }); }
+  function saveTurn(question: string, result: Result, chosenMode: Mode, usedInstructions: string, imageName?: string, pdfName?: string) { const next = [...turns, { question, result, mode: chosenMode, ...(!result.demo && usedInstructions ? { instructions: usedInstructions } : {}), ...(!result.demo && imageName ? { imageName } : {}), ...(!result.demo && pdfName ? { pdfName } : {}) }]; const id = current ?? crypto.randomUUID(); setCurrent(id); setSessions(prev => [{ id, instructions, title: prev.find(s => s.id === id)?.title ?? next[0].question, turns: next, time: new Date().toISOString() }, ...prev.filter(s => s.id !== id)]); }
   async function run(teamReview = false) {
-    if (busy || preferences.loading || savedConnections.loading || imageLoading || contextLoading || pdfLoading) return;
+    if (busy || preferences.loading || savedConnections.loading || attachments.loading) return;
     if (newConversationBlocked) { toast('Your workspace has 30 conversations. Back up and delete one before starting another.'); return; }
-    if (attachmentsTooLarge) { toast.error('Images and PDFs together must be under 4 MB. Remove or replace a file.'); return; }
+    if (attachments.tooLarge) { toast.error('Images and PDFs together must be under 4 MB. Remove or replace a file.'); return; }
     const target = teamReview && reviewTarget?.result === turns.at(-1)?.result ? reviewTarget : null;
     if (teamReview && (!target || connected < 2 || demo)) { toast('Team review needs the original answer from this tab and at least two connected models.'); return; }
     const chosenMode: Mode = teamReview ? 'council' : mode;
-    const request = target?.request ?? { question: demo ? demoQuestion : prompt.trim(), instructions: instructions.trim(), webResearch, researchProvider, context: context?.text, pdf: attachedPdf ? { mimeType: attachedPdf.mimeType, data: attachedPdf.data } : undefined, image: attachedImage ? { mimeType: attachedImage.mimeType, data: attachedImage.data } : undefined, history: followUpContext.messages };
+    const request = target?.request ?? { question: demo ? demoQuestion : prompt.trim(), instructions: instructions.trim(), webResearch, researchProvider, context: attachments.context?.text, pdf: attachments.pdf ? { mimeType: attachments.pdf.mimeType, data: attachments.pdf.data } : undefined, image: attachments.image ? { mimeType: attachments.image.mimeType, data: attachments.image.data } : undefined, history: followUpContext.messages };
     const question = request.question;
-    const imageName = target ? target.imageName : attachedImage?.name, pdfName = target ? target.pdfName : attachedPdf?.name;
+    const imageName = target ? target.imageName : attachments.image?.name, pdfName = target ? target.pdfName : attachments.pdf?.name;
     if (!question) return;
     if (!demo && !connected) { setSettings(true); toast('Add an API key to start a live session.'); return; }
     if (!demo && chosenMode === 'single' && !(connections[lead].enabled && connections[lead].key.trim())) { setSettings(true); toast('Connect the selected answer model or choose another model.'); return; }
@@ -236,13 +214,8 @@ export default function Home({ account }: { account?: { userId: string; displayN
     let result = { ...emptyResult(demo), ...(target ? { reviewedAnswer: target.result.answer } : {}) };
     try {
       if (demo) {
-        const participants = chosenMode === 'single' ? providers.filter(p => p.id === lead) : providers;
-        for (const participant of participants) { await delay(500, controller.signal); result = { ...result, drafts: { ...result.drafts, [participant.id]: demoDrafts[providers.indexOf(participant)] } }; setWorking(result); }
-        if (chosenMode === 'council' || chosenMode === 'deep') { setStage('review'); for (let i = 0; i < providers.length; i++) { await delay(400, controller.signal); result = { ...result, reviews: { ...result.reviews, [providers[i].id]: demoReviews[i] } }; setWorking(result); } }
-        if (chosenMode === 'deep') { setStage('revision'); for (let i = 0; i < providers.length; i++) { await delay(400, controller.signal); result = { ...result, revisions: { ...result.revisions, [providers[i].id]: demoRevisions[i] } }; setWorking(result); } }
-        if (chosenMode === 'single') result = { ...result, answer: result.drafts[lead]!, by: lead };
-        else if (chosenMode !== 'compare') { setStage('synthesis'); setTab('answer'); await delay(700, controller.signal); result = { ...result, answer: demoFinal, by: lead }; }
-        result.seconds = chosenMode === 'single' ? 0.5 : chosenMode === 'deep' ? 4.6 : chosenMode === 'council' ? 3.4 : chosenMode === 'fast' ? 2.2 : 1.5;
+        // Keep each partial result, so a stopped demo still shows what arrived.
+        result = await runDemo(chosenMode, lead, result, controller.signal, { result: partial => { result = partial; setWorking(partial); }, stage: setStage, answerReady: () => setTab('answer') });
       } else {
         result = await runLiveRequest(JSON.stringify({ ...request, timeZone: browserTimeZone(), personalize: Boolean(account), connections, mode: chosenMode, lead, ...(target ? { reviewAnswer: target.result.answer } : {}) }), { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, controller.signal, event => {
           if (event.type === 'stage') { setStage(event.stage!); if (event.stage === 'synthesis') setTab('answer'); }
@@ -257,30 +230,6 @@ export default function Home({ account }: { account?: { userId: string; displayN
     } catch (error) { if (controller.signal.aborted) { toast('Session stopped. No result was saved.'); setWorking({ ...result, errors: [...result.errors, 'Session stopped. Partial contributions are shown below.'] }); } else { const text = error instanceof Error ? error.message : 'Something went wrong.'; toast.error(text); setWorking({ ...result, errors: [...result.errors, text] }); } setStage('failed'); }
     finally { preview.dispose(); controller.signal.removeEventListener('abort', preview.dispose); setBusy(false); abortRef.current = null; }
   }
-  async function attach(file?: File) {
-    if (!file || busy) return;
-    const version = ++contextVersion.current; setContextLoading(false);
-    if (!/\.(txt|md|csv|json|js|ts|tsx|py|html|css)$/i.test(file.name)) return toast.error('Choose a text, Markdown, CSV, JSON, or code file.');
-    if (file.size > 60000) return toast.error('Use a text file smaller than 60 KB.');
-    setContextLoading(true);
-    try { const text = await file.text(); if (version === contextVersion.current) setContext({ name: file.name, text }); }
-    catch { if (version === contextVersion.current) toast.error('Could not read this text file. Choose the file again.'); }
-    finally { if (version === contextVersion.current) setContextLoading(false); }
-  }
-  async function attachImage(file?: File) {
-    if (!file || busy) return;
-    const version = ++imageVersion.current; setImageLoading(true);
-    try { const image = await readImageFile(file); if (version === imageVersion.current) setAttachedImage(image); }
-    catch (error) { if (version === imageVersion.current) toast.error(error instanceof Error ? error.message : 'Could not load this image.'); }
-    finally { if (version === imageVersion.current) setImageLoading(false); }
-  }
-  async function attachPdf(file?: File) {
-    if (!file || busy) return;
-    const version = ++pdfVersion.current; setPdfLoading(true);
-    try { const pdf = await readPdfFile(file); if (version === pdfVersion.current) setAttachedPdf(pdf); }
-    catch (error) { if (version === pdfVersion.current) toast.error(error instanceof Error ? error.message : 'Could not read this PDF.'); }
-    finally { if (version === pdfVersion.current) setPdfLoading(false); }
-  }
   async function copy(text: string) { try { await navigator.clipboard.writeText(text); toast.success('Copied to clipboard'); } catch { toast.error('Clipboard unavailable. Select and copy the answer manually.'); } }
   function downloadSession(savedTurns: Turn[]) { const url = URL.createObjectURL(new Blob([sessionMarkdown(savedTurns)], { type: 'text/markdown' })); const a = document.createElement('a'); a.href = url; a.download = 'trio-session.md'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
   function exportSession() { downloadSession(turns); }
@@ -292,24 +241,9 @@ export default function Home({ account }: { account?: { userId: string; displayN
   // saved sessions are ready: hydration can otherwise erase an early question.
   if (!loaded || (account && !cloud.ready)) return <main className="account-loading"><h1>Your Trio workspace</h1><p role="status">{account ? cloud.status : 'Getting your workspace ready…'}</p>{account && cloud.error ? <><p role="alert">{cloud.error}</p><button className="run-button" onClick={cloud.reload}>Retry loading</button></> : <p>If loading does not finish, <a href={account ? '/workspace' : '/demo'}>reload your workspace</a>.</p>}<noscript><p>Trio needs JavaScript to run. Enable it in your browser, then reload this page.</p></noscript>{account && <a href="/signout-with-chatgpt?return_to=%2F">Sign out</a>}</main>;
   return <SidebarProvider style={{ '--sidebar-width': '248px' } as React.CSSProperties}>
-    <Sidebar className="trio-sidebar">
-      <SidebarHeader className="brand"><span className="brand-symbol">◈</span><span>trio<span className="brand-period">.</span></span><span className="brand-caption">WORKSPACE</span></SidebarHeader>
-      <SidebarContent className="side-content">
-        <NewSessionButton busy={busy} onRequest={() => requestNavigation({ type: 'new' })} />
-        <div className="side-label">YOUR WORKSPACE</div>
-        {account && <button className="side-nav" disabled={busy} onClick={() => setQualityOpen(true)}><GitCompareArrows size={17} />Quality check</button>}
-        {account && <button className="side-nav" disabled={busy} onClick={() => setComparisonOpen(true)}><GitCompareArrows size={17} />Compare on your work</button>}
-        <button className="side-nav" disabled={busy} onClick={() => setWorkOpen(true)}><Check size={17} />Your work<span className="nav-count">{openActions}</span></button>
-        <button className="side-nav selected" onClick={() => promptRef.current?.focus()}><Layers3 size={17} /> Conversations</button>
-        <button className="side-nav" onClick={() => setSettings(true)}><Settings2 size={17} /> Model connections <span className="nav-count">{connected}/3</span></button>
-        {account && <button className="side-nav" disabled={busy} onClick={() => setMemoryOpen(true)}><Lightbulb size={17} />Personal memory<span className="nav-count" role="status">{memoryStatus}</span></button>}
-        <button className="side-nav" disabled={busy} onClick={() => setBackupsOpen(true)}><Archive size={17} />Back up & restore</button>
-        <div className="history-heading"><span className="side-label">RECENT SESSIONS</span>{sessions.length > 0 && <button aria-label="Clear session history" disabled={busy} onClick={() => setClearHistory(true)}><Trash2 size={14} /></button>}</div>
-        <SessionList sessions={sessions} current={current} busy={busy} query={sessionQuery} onQuery={setSessionQuery} onSelect={s => requestNavigation({ type: 'session', id: s.id })} onAction={setSessionAction} onExport={s => downloadSession(s.turns)} />
-        <button className="workspace-help" onClick={() => setHelp(true)}><CircleHelp size={16} />How Trio works<ChevronRight size={14} /></button>
-      </SidebarContent>
-      <SidebarFooter className="sidebar-foot"><span className="avatar">Y</span><div title={account?.email}>{account?.displayName ?? "Guest workspace"}<small><ShieldCheck size={12} /> {account ? cloud.status : "Stored on this device"}</small>{account ? <a href="/signout-with-chatgpt?return_to=%2F" onClick={e => { if (busy || cloud.status === "Saving…") { e.preventDefault(); toast("Wait for the current run and save to finish before signing out."); } else if (cloud.error) { e.preventDefault(); setWorkspaceRecovery('signout'); } }}>Sign out</a> : <a href="/signin-with-chatgpt?return_to=%2Fworkspace">Sign in to save online</a>}</div><button aria-label="About Trio" onClick={() => setHelp(true)}><CircleHelp size={17} /></button></SidebarFooter>
-    </Sidebar>
+    <WorkspaceSidebar account={account} busy={busy} status={account ? cloud.status : 'Stored on this device'} openActions={openActions} connected={connected} memoryStatus={memoryStatus} sessions={sessions} current={current} query={sessionQuery} onQuery={setSessionQuery}
+      onNavigate={requestNavigation} onSessionAction={setSessionAction} onExport={s => downloadSession(s.turns)} onOpen={openPanel} onFocusComposer={() => promptRef.current?.focus()}
+      onSignOut={e => { if (busy || cloud.status === 'Saving…') { e.preventDefault(); toast('Wait for the current run and save to finish before signing out.'); } else if (cloud.error) { e.preventDefault(); setWorkspaceRecovery('signout'); } }} />
     <main className="workspace conversation-workspace">
       <header className="topbar"><div className="breadcrumb"><SidebarTrigger className="mobile-menu" /><span>Workspace</span><ChevronRight size={14} /><strong>{current ? "Conversation" : "New conversation"}</strong></div><div className="top-actions">{displayed && <button className="subtle-button question-jump" onClick={() => document.getElementById("conversation-scroll")?.scrollTo({ top: 0 })}>Latest answer ↑</button>}{busy && <button className="subtle-button stop-current" onClick={() => abortRef.current?.abort()}><Square size={14} />Stop current run</button>}<span className={`mode-badge ${demo ? '' : 'live'}`}>{demo ? 'Demo workspace' : 'Live workspace'}</span><button className="subtle-button" aria-label="Connections" onClick={() => setSettings(true)}><Settings2 size={15} /><span>Connections</span></button></div></header>
       <div className="conversation-scroll" id="conversation-scroll" tabIndex={0} aria-label="Conversation"><div className="work-body">
@@ -321,12 +255,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
         {!displayed && <div className="workspace-starters"><WorkflowBriefs busy={busy || preferences.loading} prompt={prompt} onApply={text => { setPrompt(text); setDemo(false); promptRef.current?.focus(); toast('Brief prepared. Review it, then choose Ask Trio.'); }} /></div>}
         {displayed && <section className="results-section" key={`${current ?? "new"}:${turns.length}:${working ? "working" : "saved"}`}><div className="question-title"><MessageSquare size={17} /><h2>{question}</h2></div>{displayed.demo && <div className="demo-notice">ILLUSTRATIVE DEMO · Prepared sample responses. No model APIs were called.</div>}{busy && <RunPipeline result={displayed} mode={displayMode} busy={busy} stage={stage} />}
           {displayed.researchRequested && <ResearchPanel research={displayed.research} provider={displayed.researchBy} loading={busy && stage === "research"} />}
-          <Tabs value={tab} onValueChange={setTab}>{busy && !demo && <p className="revision-note">Responses are arriving live. Partial text may change; only completed runs are saved.</p>}<div className="result-toolbar"><TabsList className="result-tabs"><TabsTrigger value="answer">Answer</TabsTrigger><TabsTrigger value="drafts">Perspectives <span>{Object.keys(displayed.drafts).length}</span></TabsTrigger><TabsTrigger value="reviews">Peer reviews <span>{Object.keys(displayed.reviews).length}</span></TabsTrigger>{displayMode === 'deep' && <TabsTrigger value="revisions">Revisions <span>{Object.keys(displayed.revisions ?? {}).length}</span></TabsTrigger>}</TabsList><div className="result-actions">{!working && !displayed.demo && turns.length > 0 && <button className="branch-latest" disabled={busy} onClick={() => setBranchPoint(turns.length - 1)}>Continue from here ↗</button>}<button aria-label="Copy answer" disabled={!displayed.answer} onClick={() => void copy(displayed.answer)}><Copy size={16} /></button><button aria-label="Export session as Markdown" disabled={!turns.length || busy} onClick={exportSession}><Download size={16} /></button></div></div>
-          <TabsContent value="answer"><div className="answer-card"><div className="answer-heading"><Mark small /><div><strong>{busy && displayMode === 'single' ? 'Single-model answer' : answerLabel(displayed)}</strong><small>{busy ? displayMode === 'single' ? 'Your model is answering…' : 'Your team is working on it…' : displayed.by ? `Written by ${providers.find(p => p.id === displayed.by)?.name} · ${displayed.seconds}s${displayed.demo ? ' · sample' : ''}` : 'Independent perspectives'}</small></div><span className="answer-tag">{displayed.demo ? 'DEMO' : 'TRIO'}</span></div>{(displayed.answer || (displayMode === 'single' && Object.values(displayed.drafts)[0])) ? <Prose text={displayed.answer || Object.values(displayed.drafts)[0]!} /> : <div className="answer-empty">{busy ? <><span className="loading-bar" />{stage === 'research' ? 'Gathering a cited web-research brief…' : stage === 'draft' ? 'Gathering independent perspectives…' : stage === 'review' ? 'Checking the answers for gaps and disagreements…' : stage === 'revision' ? 'Revising answers in response to the critiques…' : 'Combining the strongest ideas…'}</> : displayMode === 'compare' ? <>Compare mode keeps each perspective independent. <button onClick={() => setTab('drafts')}>Read the perspectives →</button></> : 'No combined answer yet. Check the messages below, then retry.'}</div>}</div></TabsContent>
-          <TabsContent value="drafts"><div className="perspective-grid">{providers.map(p => <article key={p.id} className="perspective-card"><div><Mark small id={p.id} /><strong>{p.name}</strong></div>{displayed.drafts[p.id] ? <Prose label={`${p.name} perspective`} text={displayed.drafts[p.id]!} /> : <p className="muted">{busy ? 'Waiting for this perspective…' : 'No contribution from this model.'}</p>}</article>)}</div></TabsContent>
-          <TabsContent value="reviews"><div className="perspective-grid">{Object.keys(displayed.reviews).length ? providers.filter(p => displayed.reviews[p.id]).map(p => <article key={p.id} className="perspective-card"><div><Mark small id={p.id} /><strong>{p.name}’s review</strong></div><Prose label={`${p.name} review`} text={displayed.reviews[p.id]!} /></article>) : <p className="muted">{['council', 'deep'].includes(displayMode) ? 'Reviews appear after at least two models finish their drafts.' : 'Choose Council or Deep Council to include peer review in your next run.'}</p>}</div></TabsContent>
-          {displayMode === 'deep' && <TabsContent value="revisions"><p className="revision-note">Revised answers respond to the peer critiques. Original answers remain in Perspectives; agreement still needs verification.</p><div className="perspective-grid">{providers.filter(p => displayed.drafts[p.id]).map(p => <article key={p.id} className="perspective-card"><div><Mark small id={p.id} /><strong>{p.name}'s revision</strong></div>{displayed.revisions?.[p.id] ? <Prose label={`${p.name} revision`} text={displayed.revisions[p.id]!} /> : <p className="muted">{busy ? 'Revisions follow the peer reviews…' : 'No revised answer returned. The original perspective remains available.'}</p>}</article>)}</div></TabsContent>}
-          </Tabs>
+          <ResultTabs displayed={displayed} displayMode={displayMode} busy={busy} demo={demo} stage={stage} tab={tab} onTab={setTab} canBranch={!working && !displayed.demo && turns.length > 0} onBranch={() => setBranchPoint(turns.length - 1)} onCopy={text => void copy(text)} canExport={turns.length > 0} onExport={exportSession} />
           {!busy && <details className="run-details"><summary>{modes[displayMode].title} · Run details &amp; evidence</summary><RunPipeline result={displayed} mode={displayMode} busy={false} stage={stage} />{!working && <RunCoverage result={displayed} mode={displayMode} />}</details>}
           {displayed.reviewedAnswer && <details className="original-answer"><summary>Original answer before team review</summary><Prose text={displayed.reviewedAnswer} /></details>}
           {!busy && !demo && reviewTarget && reviewTarget.result === turns.at(-1)?.result && <div className="team-review-action"><button className="run-button" disabled={connected < 2} onClick={() => void run(true)}>Have the team check this</button><p>{connected < 2 ? 'Connect at least two models for team review.' : 'Uses the original question, attachments and instructions, with current connections and personal memory. Adds a Council run; your original answer and unsent question stay available.'}</p></div>}
@@ -340,25 +269,23 @@ export default function Home({ account }: { account?: { userId: string; displayN
 
 
       </div></div>
-      <div className="composer-dock">        <section className="prompt-section" id="question-composer" tabIndex={-1}><AnswerControls mode={mode} lead={lead} modes={modes} loading={preferences.loading} busy={busy} runMode={runMode} demo={demo} research={webResearch} onMode={setMode} onLead={setLead} /><div className="composer"><textarea ref={promptRef} value={prompt} maxLength={20000} disabled={busy} onChange={e => setPrompt(e.target.value)} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); void run(); } }} placeholder={turns.length ? "Ask a follow-up or give the team a new task…" : "What would you like to work on?"} aria-label="Your question" />{attachedImage && <div className="image-context"><img src={'data:' + attachedImage.mimeType + ';base64,' + attachedImage.data} alt="Attached image preview" /><div><strong>{attachedImage.name}</strong><p>{demo ? 'Demo ignores this image. Switch to Live in Connections to analyze it.' : 'Included in each step and follow-up until removed. Images add API usage.'}</p><small>Image data stays out of saved history. Reattach after refreshing.</small></div><button aria-label="Remove image" disabled={busy} onClick={clearImage}><X size={16} /></button></div>}{(attachedPdf || pdfLoading) && <div className="image-context pdf-context"><FileText size={36} aria-hidden="true" /><div><strong role="status">{pdfLoading ? 'Loading PDF…' : attachedPdf?.name}</strong><p>{demo ? 'Demo ignores this PDF. Switch to Live in Connections to analyze it.' : 'Included in each step and follow-up until removed. PDF pages add API usage.'}</p><small>Use an unencrypted PDF within your model’s page limit. Only the filename is saved.</small></div><button aria-label="Remove PDF" disabled={busy} onClick={clearPdf}><X size={16} /></button></div>}{attachmentsTooLarge && <p className="attachment-limit" role="alert">Images and PDFs together must be under 4 MB. Remove or replace a file.</p>}<div className="composer-bottom"><input ref={fileRef} type="file" disabled={busy} aria-label="Choose text context" accept=".txt,.md,.csv,.json,.js,.ts,.tsx,.py,.html,.css" hidden onChange={e => { void attach(e.target.files?.[0]); e.target.value = ''; }} /><input ref={imageRef} type="file" disabled={busy} accept="image/png,image/jpeg,image/webp" aria-label="Choose image" hidden onChange={e => { void attachImage(e.target.files?.[0]); e.target.value = ''; }} /><input ref={pdfRef} type="file" disabled={busy} accept="application/pdf,.pdf" aria-label="Choose PDF" hidden onChange={e => { void attachPdf(e.target.files?.[0]); e.target.value = ''; }} /><DropdownMenu><DropdownMenuTrigger asChild><button className="attach-button" disabled={busy}><Paperclip size={17} />Attach</button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onSelect={() => fileRef.current?.click()}>Text or code</DropdownMenuItem><DropdownMenuItem disabled={imageLoading} onSelect={() => imageRef.current?.click()}>Image</DropdownMenuItem><DropdownMenuItem onSelect={() => pdfRef.current?.click()}>PDF</DropdownMenuItem></DropdownMenuContent></DropdownMenu>{(context || contextLoading) && <span className="attachment"><span role="status">{contextLoading ? 'Loading context…' : context?.name}</span><button aria-label="Remove attachment" disabled={busy} onClick={clearContext}><X size={13} /></button></span>}<button className="subtle-button tools-toggle" onClick={() => setToolsOpen(true)}>Tools &amp; context{webResearch || instructions.trim() ? " · On" : ""}</button><span className="key-hint">Ctrl / ⌘ Enter</span>{busy ? <button className="run-button" onClick={() => abortRef.current?.abort()}><Square size={14} /> Stop</button> : <button className="run-button" disabled={preferences.loading || savedConnections.loading || newConversationBlocked || imageLoading || contextLoading || pdfLoading || attachmentsTooLarge || (!demo && !prompt.trim())} onClick={() => void run()}>{demo ? 'Run demo' : 'Ask Trio'}<ArrowUp size={17} /></button>}</div></div><div className="composer-note">{busy ? <span role="status">{modes[runMode].title} is running · Mode changes apply to your next question.</span> : <><span>{demo ? 'Prepared demo · no API usage' : modes[mode].calls + (webResearch ? ' · research fees apply' : ' · provider billing')}</span>{preferences.error ? <button className="preferences-warning" onClick={() => setToolsOpen(true)}>Choices not saved · Review</button> : <span className="verify-note">Verify important answers.</span>}</>}</div></section>
-      </div>
+      <div className="composer-dock"><Composer mode={mode} lead={lead} runMode={runMode} onMode={setMode} onLead={setLead} preferencesLoading={preferences.loading} preferencesError={Boolean(preferences.error)} busy={busy} demo={demo} webResearch={webResearch} instructionsSet={Boolean(instructions.trim())}
+        prompt={prompt} onPrompt={setPrompt} promptRef={promptRef} hasTurns={turns.length > 0} attachments={attachments} runBlocked={preferences.loading || savedConnections.loading || newConversationBlocked}
+        onRun={() => void run()} onStop={() => abortRef.current?.abort()} onOpenTools={() => setToolsOpen(true)} /></div>
     </main>
     {/* Keep media drafts mounted independently of the optional tools panel. */}
     <AudioTranscription open={mediaTool === 'audio'} onOpenChange={open => setMediaTool(open ? 'audio' : null)} accountId={account?.userId} apiKey={connections.openai.enabled ? connections.openai.key : ''} live={!demo} question={prompt} onAppend={value => { setPrompt(value); promptRef.current?.focus(); }} onConnections={() => setSettings(true)} />
-    <ImageGeneration open={mediaTool === 'image'} onOpenChange={open => setMediaTool(open ? 'image' : null)} accountId={account?.userId} apiKey={connections.openai.enabled ? connections.openai.key : ''} live={!demo} question={prompt} replacingImage={Boolean(attachedImage)} onAttach={image => { if (attachmentBytes(image, attachedPdf) > maxAttachmentBytes) throw new Error('This image and your PDF together exceed 4 MB. Download the image, then remove or replace the PDF before attaching it.'); imageVersion.current++; setAttachedImage(image); setImageLoading(false); }} onConnections={() => setSettings(true)} />
-    <Dialog open={toolsOpen} onOpenChange={setToolsOpen}><DialogContent className="tools-dialog" onCloseAutoFocus={event => { event.preventDefault(); if (!mediaTool) promptRef.current?.focus(); }}><DialogTitle>Tools &amp; context</DialogTitle><DialogDescription>Add source material, instructions, research, or a guided work brief.</DialogDescription>        <div className="question-options">
-        <div className="creation-tools"><button className="attach-button" disabled={busy} onClick={() => { setToolsOpen(false); setMediaTool('audio'); }} title="Review a recording as text before asking Trio"><AudioLines size={17} /><span>Audio to text</span></button><button className="attach-button" disabled={busy || imageLoading || pdfLoading} onClick={() => { setToolsOpen(false); setMediaTool('image'); }}><ImagePlus size={17} /><span>Create image</span></button></div>
-        {!demo && turns.length > 0 && <FollowUpContext context={followUpContext} />}
-        <SessionInstructions key={current ?? 'new'} value={instructions} busy={busy} demo={demo} onChange={changeInstructions} />
-        <section className="research-setting"><div><label htmlFor="web-research">Web research</label><p>{mode === 'single' ? 'OpenAI or Claude searches first. Your answer uses the cited brief.' : 'OpenAI or Claude searches first. Every model receives the same cited brief.'}</p><small>{demo ? 'Available in Live mode. Demo never searches.' : 'Adds up to two API calls; search fees apply.'}</small></div><div className="research-controls">{webResearch && !demo && <label>Research provider<select aria-label="Research provider" value={researchProvider} disabled={busy} onChange={e => setResearchProvider(e.target.value as ResearchChoice)}><option value="auto">Automatic · OpenAI, then Claude</option><option value="openai">OpenAI</option><option value="claude">Claude</option></select></label>}<Switch id="web-research" aria-label="Web research" checked={webResearch} onCheckedChange={setWebResearch} disabled={busy || demo} /></div></section>
-        </div>
-        <details className="question-options"><summary>Guided workflows</summary><WorkflowBriefs busy={busy || preferences.loading} prompt={prompt} onApply={text => { setPrompt(text); setDemo(false); setToolsOpen(false); promptRef.current?.focus(); toast('Brief prepared and Live mode selected. Review your model choices, then choose Ask Trio.'); }} /></details><PreferencesStatus preferences={preferences} busy={busy} temporaryDemo={temporaryDemo} /><button className="run-button" onClick={() => setToolsOpen(false)}>Done</button></DialogContent></Dialog>
+    <ImageGeneration open={mediaTool === 'image'} onOpenChange={open => setMediaTool(open ? 'image' : null)} accountId={account?.userId} apiKey={connections.openai.enabled ? connections.openai.key : ''} live={!demo} question={prompt} replacingImage={Boolean(attachments.image)} onAttach={attachments.attachGeneratedImage} onConnections={() => setSettings(true)} />
+    <ToolsDialog open={toolsOpen} onOpenChange={setToolsOpen} onRestoreFocus={() => { if (!mediaTool) promptRef.current?.focus(); }} busy={busy} demo={demo} temporaryDemo={temporaryDemo} mode={mode} attachmentsLoading={attachments.imageLoading || attachments.pdfLoading} onMedia={setMediaTool}
+      followUp={turns.length > 0 ? followUpContext : null} sessionKey={current ?? 'new'} instructions={instructions} onInstructions={changeInstructions} webResearch={webResearch} onWebResearch={setWebResearch} researchProvider={researchProvider} onResearchProvider={setResearchProvider}
+      preferences={preferences} prompt={prompt} onApplyBrief={text => { setPrompt(text); setDemo(false); promptRef.current?.focus(); }} />
     <DraftNavigation destination={draftDestination} onCancel={() => setDraftDestination(null)} onDiscard={() => { if (draftDestination) navigate(draftDestination); }} onFocus={() => promptRef.current?.focus()} />
     {account && <QualityCheck key={account.userId} accountId={account.userId} open={qualityOpen} onOpenChange={setQualityOpen} live={!demo} onConnections={() => { setQualityOpen(false); setSettings(true); }} />}
     {account && <WorkComparison key={'comparison-'+account.userId} accountId={account.userId} open={comparisonOpen} onOpenChange={setComparisonOpen} live={!demo} onConnections={() => { setComparisonOpen(false); setSettings(true); }} />}
     <ActionConfirmation open={workspaceRecovery !== null} onOpenChange={next => { if (!next) setWorkspaceRecovery(null); }} title={workspaceRecovery === 'reload' ? 'Load the latest account history?' : 'Sign out with unsaved changes?'} description={workspaceRecovery === 'reload' ? 'This replaces this tab’s sessions with the latest saved account history. Download a backup first to keep unsaved changes. Your unsent question, attachments and new-conversation instructions will also be cleared; copy them first if needed.' : 'Some workspace changes have not saved. Signing out may lose those changes and your unsent question or attachments. Cancel and download a backup first to keep the workspace changes.'} confirmLabel={workspaceRecovery === 'reload' ? 'Replace this tab with saved history' : 'Sign out anyway'} cancelLabel="Keep this tab" destructive disabled={busy || cloud.status === 'Saving…' || !cloud.error || (workspaceRecovery === 'reload' && !cloud.conflict)} onConfirm={() => {
       if (busy || cloud.status === 'Saving…' || !cloud.error || (workspaceRecovery === 'reload' && !cloud.conflict)) return false;
       if (workspaceRecovery === 'reload') { focusAfterReload.current = true; cloud.reload(); }
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- sign-out is a Worker route, not a Next page; it needs a full navigation.
       else if (workspaceRecovery === 'signout') window.location.assign('/signout-with-chatgpt?return_to=%2F');
       else return false;
     }} />
@@ -371,10 +298,11 @@ export default function Home({ account }: { account?: { userId: string; displayN
     <SessionActionDialogs action={sessionAction} sessions={sessions} busy={busy} clearsDraft={hasDraft && sessionAction?.id === current} onClose={() => setSessionAction(null)} onRename={(id, title) => { if (busy) return; try { setSessions(renameSession(sessions, id, title)); setSessionAction(null); toast.success('Session renamed'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not rename this session.'); } }} onDelete={id => { if (busy) return; setSessions(prev => prev.filter(s => s.id !== id)); if (current === id) newSession(); setSessionAction(null); toast.success('Session deleted'); }} />
     {account && <PersonalMemory accountId={account.userId} open={memoryOpen} onOpenChange={setMemoryOpen} memory={personalMemory} connections={connections} sessionId={current} workspaceRevision={cloud.revision} sessionSaved={cloud.ready && !cloud.error && cloud.status === 'Saved to your account'} busy={busy} />}
     <SessionBackups sessions={sessions} busy={busy} remember={account ? true : remember} account={Boolean(account)} open={backupsOpen} onOpenChange={setBackupsOpen} onImport={incoming => { if (busy) return; setSessions(mergeBackup(sessions, incoming).sessions); }} />
-    <BranchConversation source={sessions.find(s => s.id === current)} turnIndex={branchPoint} count={sessions.length} busy={busy} hasUnsent={Boolean(prompt || context || attachedImage || attachedPdf || contextLoading || imageLoading || pdfLoading)} onClose={() => setBranchPoint(null)} onCreate={createBranch} />
-    <Dialog open={settings} onOpenChange={setSettings}><DialogContent className="connections-dialog"><DialogTitle>Connect your AI team</DialogTitle><DialogDescription>Use API keys from each provider. Consumer subscriptions and API billing are separate. Save keys to your account to use them on future visits. Saved keys are encrypted; unsaved keys stay in this tab until you reload.</DialogDescription><div className="connection-mode"><div><strong>Demo mode</strong><p>Explore the workflow with prepared examples.</p></div><Switch checked={demo} disabled={busy || preferences.loading} onCheckedChange={setDemo} aria-label="Demo mode" /></div><p className="connection-guidance">{Object.values(savedConnections.workspace).some(Boolean) ? 'Connections marked Included with Trio are ready to use — no API key needed. Turn off Demo mode to ask your own questions, and paste your own keys anytime to use your provider accounts instead.' : '1. Get an API key. 2. Paste it below, check access, and save to your account. 3. Turn off Demo mode to ask your own questions. One provider is enough to start.'}</p><p className="connection-guidance">{account ? "Demo/Live, answer mode and preferred model are remembered for your account. Returning never starts a run." : "Your mode and model choices last for this tab. Sign in to remember them across visits."}</p><PreferencesStatus preferences={preferences} busy={busy} temporaryDemo={temporaryDemo} /><p className="connection-guidance">Access checks look up model details. They do not verify billing, answer quality, or support for every Trio feature.</p>{account && <div className="connection-feedback" role="status">{savedConnections.loading ? "Loading saved connections…" : savedConnections.error || "Saved keys are private to this account."}<button className="subtle-button" disabled={busy || savedConnections.loading || Boolean(savedConnections.saving)} onClick={savedConnections.reload}>Reload saved connections</button></div>}{providers.map(p => <ProviderConnection key={p.id} id={p.id} connection={connections[p.id]} accountId={account?.userId} saved={savedConnections.metadata[p.id]} workspace={Boolean(savedConnections.workspace[p.id])} saving={savedConnections.saving === p.id} canSave={!savedConnections.loading && !savedConnections.error && !savedConnections.saving} onSave={() => void savedConnections.save(p.id, connections[p.id])} onRemove={() => void savedConnections.remove(p.id, connections[p.id])} disabled={busy || savedConnections.loading || Boolean(savedConnections.saving)} open={settings} onChange={value => setConnections(c => ({ ...c, [p.id]: value }))} />)}<div className="lead-setting"><label>Preferred answer and synthesis model</label><Select value={lead} onValueChange={v => setLead(v as ProviderId)} disabled={busy || preferences.loading}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{providers.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></div>{account ? <div className="connection-mode"><div><strong>Saved to your account</strong><p>Conversations sync online. Keys you choose to save are encrypted separately; original attachment files are never saved.</p></div></div> : <div className="connection-mode"><div><strong>Remember sessions on this device</strong><p>Stores prompts and answers locally. API keys are never saved.</p></div><Switch checked={remember} onCheckedChange={setRemember} aria-label="Remember sessions on this device" /></div>}<div className="dialog-actions"><button className="subtle-button" disabled={busy || preferences.loading || savedConnections.loading || Boolean(savedConnections.saving)} onClick={() => { setConnections(applyWorkspaceConnections(freshConnections(), savedConnections.workspace)); setTemporaryDemoAccount(account?.userId ?? 'guest'); toast(account ? 'Keys cleared from this tab. Saved keys remain in your account.' : 'Keys cleared from this tab.'); }}>Clear keys from this tab</button>{account && <button className="subtle-button" disabled={busy || preferences.loading || savedConnections.loading || Boolean(savedConnections.saving) || Boolean(savedConnections.error) || !Object.values(savedConnections.metadata).some(item => item?.saved)} onClick={() => setForgetKeys(true)}>Forget all saved keys</button>}<button className="run-button" onClick={() => { setSettings(false); if (!demo && !connected) toast('Add at least one API key to run live.'); }}>Done<Check size={15} /></button></div></DialogContent></Dialog>
-    <AlertDialog open={forgetKeys} onOpenChange={setForgetKeys}><AlertDialogContent><AlertDialogTitle>Forget all saved keys?</AlertDialogTitle><AlertDialogDescription>This deletes saved provider keys from your Trio account and clears keys in this tab. Requests already running may finish. Your conversations are kept, and vendor keys are not revoked.</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep keys</AlertDialogCancel><AlertDialogAction disabled={busy || preferences.loading || savedConnections.loading || Boolean(savedConnections.saving)} onClick={() => { setTemporaryDemoAccount(account?.userId ?? 'guest'); void savedConnections.forgetAll(); }}>Forget all saved keys</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-    <Dialog open={help} onOpenChange={setHelp}><DialogContent><DialogTitle>Three minds. One workspace.</DialogTitle><DialogDescription>Trio coordinates OpenAI, Anthropic, and Google model APIs.</DialogDescription><div className="help-steps"><p><strong>01 · Think independently</strong>Each enabled model answers your question with the same context.</p><p><strong>02 · Challenge the answers</strong>Council and Deep Council ask each model to review anonymized drafts and flag gaps or disagreements.</p><p><strong>03 · Revise with Deep Council</strong>Each model responds to the peer critiques with a revised answer and a short account of changes and unresolved questions. This adds up to three calls. Revisions appear in their own tab, with originals preserved.</p><p><strong>04 · Bring it together</strong>Your preferred model writes the final answer. If it fails, another participating model takes over.</p><p>Use Session instructions to set an audience, constraints, and preferred format for every live question in the current conversation. Changes apply to future questions; earlier answers retain the instructions they used. New sessions start blank.</p><p>Trio supports text, code, text-file context, image understanding, and native PDF understanding. Use Add PDF for an unencrypted document; the combined image and PDF limit is 4 MB. PDFs are sent at every stage and stay attached for follow-ups until removed; only filenames are saved. Models enforce their own page and context limits. Use Add image for a PNG, JPEG, or WebP under 4 MB. Images are sent at every stage and stay attached for follow-ups until removed; only their filenames are saved. Enable Web research in Live mode to have OpenAI or Claude search first and share a cited brief with every participant. It adds API and search charges. Sources are saved with your session; search access depends on your selected model and account. Use Create image to generate a JPEG with OpenAI, then download it or attach it for the team to review. Audio to text transcribes a recording with OpenAI for you to review before adding it to your question. Both require Live mode and an enabled OpenAI key, incur separate charges, and do not save the original media. Trio does not execute code. A shared answer can still be wrong.</p><p>API usage is billed by each provider. Connect only the models you want to use. {account ? "Completed conversations save to your private account history. You can save encrypted API keys in Connections and delete them there. Keys are excluded from history and exports; original attachments are never saved." : "Guest sessions stay in memory unless you enable local history. Sign in for live models and account history."}</p></div></DialogContent></Dialog>
+    <BranchConversation source={sessions.find(s => s.id === current)} turnIndex={branchPoint} count={sessions.length} busy={busy} hasUnsent={Boolean(prompt) || attachments.present} onClose={() => setBranchPoint(null)} onCreate={createBranch} />
+    <ConnectionsDialog open={settings} onOpenChange={setSettings} account={account} busy={busy} connected={connected} demo={demo} temporaryDemo={temporaryDemo} onDemo={setDemo} preferences={preferences} savedConnections={savedConnections} connections={connections} onConnections={setConnections} lead={lead} onLead={setLead} remember={remember} onRemember={setRemember}
+      onClearTabKeys={() => { setConnections(applyWorkspaceConnections(freshConnections(), savedConnections.workspace)); setTemporaryDemoAccount(account?.userId ?? 'guest'); }}
+      onForgetAll={() => { setTemporaryDemoAccount(account?.userId ?? 'guest'); void savedConnections.forgetAll(); }} />
+    <HelpDialog open={help} onOpenChange={setHelp} account={Boolean(account)} />
     <AlertDialog open={clearHistory} onOpenChange={setClearHistory}><AlertDialogContent><AlertDialogTitle>Clear session history?</AlertDialogTitle><AlertDialogDescription>{account ? "This deletes all sessions from your online account and clears the current conversation." : "This removes all saved sessions from this device and clears the current conversation."} Export any answers you want to keep first.{hasDraft && ' Your unsent question, attached files, and new-conversation instructions will also be cleared.'}</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep sessions</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { setSessions([]); newSession(); toast('Session history cleared'); }}>Clear all sessions</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     <Toaster theme="dark" position="bottom-right" richColors />
   </SidebarProvider>;

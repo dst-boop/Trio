@@ -1,0 +1,6 @@
+'use client';
+import { Layers3, Zap, GitCompareArrows, RefreshCw } from 'lucide-react';
+import { providers, type ProviderId } from '@/lib/trio';
+
+export const modes = { single: { title: 'Single answer', icon: Zap, desc: 'One model answers directly. Ask the team to review it when useful.', calls: '1 call + any retry' }, council: { title: 'Council', icon: Layers3, desc: 'Independent answers, peer review, one stronger result.', calls: 'Up to 7 calls + retries' }, deep: { title: 'Deep Council', icon: RefreshCw, desc: 'Challenge, revise, then synthesize. More time and API usage; not a guarantee of accuracy.', calls: 'Up to 10 calls + retries' }, fast: { title: 'Quick synthesis', icon: Zap, desc: 'Three perspectives, combined without the review round.', calls: 'Up to 4 calls + retries' }, compare: { title: 'Compare', icon: GitCompareArrows, desc: 'Independent answers. You compare the perspectives.', calls: 'Up to 3 calls + retries' } };
+export function Mark({ id, small = false }: { id?: ProviderId; small?: boolean }) { const p = providers.find(p => p.id === id); return <span className={`model-mark ${small ? 'small' : ''}`} style={{ color: p?.color ?? '#c4bbff', background: (p?.color ?? '#aa99ff') + '14' }}>{p?.mark ?? '◈'}</span>; }
