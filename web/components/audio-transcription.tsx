@@ -29,7 +29,8 @@ export function AudioTranscription({ accountId, apiKey, live, open, onOpenChange
     window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn);
   }, [open, dirty]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
-  useEffect(() => { if (!open) setPreview(''); }, [open]);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) { setWasOpen(open); if (!open) setPreview(''); }
   function close(next: boolean) {
     if (next) { setOpen(true); return; }
     if (dirty) { stop(running ? undefined : ''); setDiscard(true); } else reset();

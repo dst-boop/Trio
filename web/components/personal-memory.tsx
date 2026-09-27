@@ -18,6 +18,9 @@ export function usePersonalMemory(accountId?: string) {
   const [profile, setProfile] = useState<MemoryProfile | null>(null), [error, setError] = useState('');
   const [loading, setLoading] = useState(Boolean(accountId));
   const generation = useRef(0);
+  // Another account's notes must never render while its own load is pending.
+  const [loadedFor, setLoadedFor] = useState(accountId);
+  if (loadedFor !== accountId) { setLoadedFor(accountId); setProfile(null); }
   const reload = useCallback(async () => {
     if (!accountId) return;
     const version = ++generation.current; setLoading(true); setError('');
@@ -25,7 +28,8 @@ export function usePersonalMemory(accountId?: string) {
     catch { if (version === generation.current) { setProfile(null); setError('Personal memory could not be loaded. Retry before starting a live answer.'); } }
     finally { if (version === generation.current) setLoading(false); }
   }, [accountId]);
-  useEffect(() => { setProfile(null); void reload(); return () => { generation.current++; }; }, [reload]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the account's memory from the server; reload() marks loading before its request.
+  useEffect(() => { void reload(); return () => { generation.current += 1; }; }, [reload]);
   const save = async (input: MemoryProfile) => {
     if (!accountId) throw new Error('Sign in to save memory.');
     const version = generation.current;
@@ -36,7 +40,7 @@ export function usePersonalMemory(accountId?: string) {
 }
 type MemoryState = ReturnType<typeof usePersonalMemory>;
 export function PersonalMemory({ accountId, open, onOpenChange, memory, connections, sessionId, workspaceRevision, sessionSaved, busy }: { accountId: string; open: boolean; onOpenChange: (open: boolean) => void; memory: MemoryState; connections: Connections; sessionId: string | null; workspaceRevision: number; sessionSaved: boolean; busy: boolean }) {
-  const [notes, setNotes] = useState(''), [enabled, setEnabled] = useState(false), [error, setError] = useState('');
+  const [notes, setNotes] = useState(memory.profile?.notes ?? ''), [enabled, setEnabled] = useState(memory.profile?.enabled ?? false), [error, setError] = useState('');
   const [errorKind, setErrorKind] = useState<'memory' | 'suggestion'>('memory');
   const [saving, setSaving] = useState(false), [suggesting, setSuggesting] = useState(false), [suggested, setSuggested] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -50,8 +54,13 @@ export function PersonalMemory({ accountId, open, onOpenChange, memory, connecti
   const provider = available.find(p => p.id === chosen)?.id ?? available[0]?.id;
   const edited = Boolean(memory.profile && (notes !== memory.profile.notes || enabled !== memory.profile.enabled));
   const dirty = edited || importPending || suggesting;
-  useEffect(() => { setConfirmation(null); }, [open, accountId, memory.profile]);
-  useEffect(() => { version.current++; abort.current?.abort(); setSuggesting(false); setNotes(memory.profile?.notes ?? ''); setEnabled(memory.profile?.enabled ?? false); setError(''); setErrorKind('memory'); setSuggested(false); setImported(false); setImportPending(false); setDiscardOpen(false); }, [open, memory.profile]);
+  // Opening, closing, or a newly loaded profile restarts the editor from the saved notes.
+  const [synced, setSynced] = useState({ open, accountId, profile: memory.profile });
+  if (synced.open !== open || synced.accountId !== accountId || synced.profile !== memory.profile) {
+    setSynced({ open, accountId, profile: memory.profile }); setConfirmation(null);
+    if (synced.open !== open || synced.profile !== memory.profile) { setSuggesting(false); setNotes(memory.profile?.notes ?? ''); setEnabled(memory.profile?.enabled ?? false); setError(''); setErrorKind('memory'); setSuggested(false); setImported(false); setImportPending(false); setDiscardOpen(false); }
+  }
+  useEffect(() => { version.current++; abort.current?.abort(); }, [open, memory.profile]);
   useEffect(() => () => { version.current++; abort.current?.abort(); }, [accountId, sessionId, workspaceRevision]);
   useEffect(() => () => { version.current++; abort.current?.abort(); }, []);
   useEffect(() => {

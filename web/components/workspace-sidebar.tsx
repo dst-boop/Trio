@@ -29,7 +29,7 @@ export function WorkspaceSidebar({ account, busy, status, openActions, connected
         <button className="side-nav" disabled={busy} onClick={() => onOpen('work')}><Check size={17} />Your work<span className="nav-count">{openActions}</span></button>
         <button className="side-nav selected" onClick={() => onFocusComposer()}><Layers3 size={17} /> Conversations</button>
         <button className="side-nav" onClick={() => onOpen('settings')}><Settings2 size={17} /> Model connections <span className="nav-count">{connected}/3</span></button>
-        {account && <button className="side-nav" disabled={busy} onClick={() => onOpen('memory')}><Lightbulb size={17} />Personal memory<span className="nav-count">{memoryStatus}</span></button>}
+        {account && <button className="side-nav" disabled={busy} onClick={() => onOpen('memory')}><Lightbulb size={17} />Personal memory<span className="nav-count" role="status">{memoryStatus}</span></button>}
         <button className="side-nav" disabled={busy} onClick={() => onOpen('backups')}><Archive size={17} />Back up & restore</button>
         <div className="history-heading"><span className="side-label">RECENT SESSIONS</span>{sessions.length > 0 && <button aria-label="Clear session history" disabled={busy} onClick={() => onOpen('clearHistory')}><Trash2 size={14} /></button>}</div>
         <SessionList sessions={sessions} current={current} busy={busy} query={query} onQuery={onQuery} onSelect={s => onNavigate({ type: 'session', id: s.id })} onAction={onSessionAction} onExport={onExport} />

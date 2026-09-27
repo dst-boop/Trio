@@ -22,12 +22,15 @@ export function ActionPlanSuggestion({ context, busy, onUse, onPending, onPrevie
   const [pending, setPending] = useState(false), [error, setError] = useState('');
   const [proposal, setProposal] = useState<PlanSuggestionResponse | null>(null), [applied, setApplied] = useState(false);
   const version = useRef(0), active = useRef(false), controller = useRef<AbortController | null>(null);
-  const callbacks = useRef({ onPending, onPreview }); callbacks.current = { onPending, onPreview };
+  const callbacks = useRef({ onPending, onPreview });
+  useEffect(() => { callbacks.current = { onPending, onPreview }; });
+  // A different answer discards the previous draft before it can render.
+  const target = `${context.accountId}\n${context.sessionId}\n${context.turnIndex}`, [shownTarget, setShownTarget] = useState(target);
+  if (shownTarget !== target) { setShownTarget(target); setPending(false); setProposal(null); setError(''); setApplied(false); }
   useEffect(() => {
     version.current++; controller.current?.abort(); active.current = false;
-    setPending(false); setProposal(null); setError(''); setApplied(false);
     callbacks.current.onPending(false); callbacks.current.onPreview(false);
-    return () => { version.current++; controller.current?.abort(); active.current = false; callbacks.current.onPending(false); callbacks.current.onPreview(false); };
+    return () => { version.current += 1; controller.current?.abort(); active.current = false; callbacks.current.onPending(false); callbacks.current.onPreview(false); };
   }, [context.accountId, context.sessionId, context.turnIndex]);
   function stop() {
     version.current++; controller.current?.abort(); active.current = false; setPending(false); onPending(false);

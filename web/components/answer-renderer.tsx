@@ -20,11 +20,13 @@ function CodeBlock({ children, ...props }: ComponentProps<'pre'>) {
 
 // Stable component identities preserve code selection and copy state as text streams.
 const plugins = [remarkGfm];
+/** react-markdown passes its hast `node`; it must not reach the DOM. */
+function withoutNode<P extends { node?: unknown }>(props: P): Omit<P, 'node'> { const rest = { ...props }; delete rest.node; return rest; }
 const components: Components = {
-    pre: ({ node: _node, ...props }) => <CodeBlock {...props} />,
-    a: ({ node: _node, href, children, ...props }) => href ? <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span>,
+    pre: props => <CodeBlock {...withoutNode(props)} />,
+    a: ({ href, children, ...props }) => href ? <a {...withoutNode(props)} href={href} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span>,
     img: ({ alt }) => <span className="unloaded-image">[Image: {alt || 'model-provided image'}]</span>,
-    table: ({ node: _node, ...props }) => <div className="answer-table" role="region" aria-label="Answer table" tabIndex={0}><table {...props} /></div>,
+    table: props => <div className="answer-table" role="region" aria-label="Answer table" tabIndex={0}><table {...withoutNode(props)} /></div>,
 };
 
 /** No raw HTML, embedded media, or executable links from model-generated text. */
