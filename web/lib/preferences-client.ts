@@ -8,6 +8,8 @@ export type PreferencesState = {
   persisted: boolean;
 };
 type Transport = (url: string, init: RequestInit) => Promise<Response>;
+/** Keep only stored preference fields; the confirming account id is checked, not kept. */
+const storedPreferences = ({ revision, demo, mode, lead }: WorkspacePreferences): WorkspacePreferences => ({ revision, demo, mode, lead });
 
 /** Only explicit choices write. Reads, reloads and hydration never do. */
 export class PreferencesClient {
@@ -58,7 +60,7 @@ export class PreferencesClient {
       if (parsed.accountId !== this.accountId) {
         this.blocked = true; this.emit({ status: 'error', error: 'Your account changed. Reload Trio before saving preferences.', recovery: 'account' }); return;
       }
-      const { accountId: _, ...saved } = parsed;
+      const saved = storedPreferences(parsed);
       this.saved = saved; this.desired = { demo: saved.demo, mode: saved.mode, lead: saved.lead }; this.loaded = true;
       this.emit({ status: 'saved', error: '', recovery: null });
     } catch {
@@ -102,7 +104,7 @@ export class PreferencesClient {
           this.blocked = true; this.emit({ status: 'error', error: 'Your account changed. Reload Trio before saving preferences.', recovery: 'account' }); return;
         }
         if (parsed.revision !== attempt.revision + 1 || !samePreferences(parsed, attempt)) throw new Error();
-        const { accountId: _, ...saved } = parsed;
+        const saved = storedPreferences(parsed);
         this.saved = saved; this.attempt = undefined;
       }
       this.emit({ status: 'saved', error: '', recovery: null });

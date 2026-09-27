@@ -51,14 +51,14 @@ for (const id of ['openai', 'claude', 'gemini'] as const) {
 
 test('Claude initial usage alone does not masquerade as final token totals', async () => {
   let usage: unknown = 'unset';
-  const fetcher = (async () => sse(fixture('claude').filter((e: any) => e.type !== 'message_delta'))) as typeof fetch;
+  const fetcher = (async () => sse(fixture('claude').filter(e => !('type' in e) || e.type !== 'message_delta'))) as typeof fetch;
   await callProvider('claude', 'k', 'm', 's', 'q', signal(), fetcher, u => usage = u, () => {});
   assert.equal(usage, null);
 });
 
 test('Claude context-window truncations are rejected in streaming and regular responses', async () => {
   const stop_reason = 'model_context_window_exceeded';
-  const streamed = fixture('claude').map((e: any) => e.delta?.stop_reason ? { ...e, delta: { stop_reason } } : e);
+  const streamed = fixture('claude').map(e => 'delta' in e && typeof e.delta === 'object' && 'stop_reason' in e.delta && e.delta.stop_reason ? { ...e, delta: { stop_reason } } : e);
   await assert.rejects(callProvider('claude', 'k', 'm', 's', 'q', signal(), (async () => sse(streamed)) as typeof fetch, undefined, () => {}), /interrupted/);
   await assert.rejects(callProvider('claude', 'k', 'm', 's', 'q', signal(), (async () => Response.json({ stop_reason, content: [{ type: 'text', text: 'Cut off' }] })) as typeof fetch), /did not complete/);
 });
@@ -82,7 +82,7 @@ function setup() {
   return { question: 'Plan?', connections, mode: 'deep' as const, lead: 'claude' as const };
 }
 test('Deep Council streams every phase while only completed answers enter later prompts', async () => {
-  const events: RunEvent[] = [], calls: any[] = [];
+  const events: RunEvent[] = [], calls: unknown[] = [];
   const fetcher = (async (url, init) => {
     const id: ProviderId = String(url).includes('openai') ? 'openai' : String(url).includes('anthropic') ? 'claude' : 'gemini';
     const body = JSON.parse(init!.body as string); calls.push(body);
@@ -98,7 +98,7 @@ test('Deep Council streams every phase while only completed answers enter later 
 
 test('broken stream retries once, clears partial output, and counts unknown billed usage', async () => {
   const input = setup(); input.connections.claude.enabled = false; input.connections.gemini.enabled = false;
-  const events: RunEvent[] = [], bodies: any[] = [];
+  const events: RunEvent[] = [], bodies: unknown[] = [];
   const fetcher = (async (_url, init) => {
     const body = JSON.parse(init!.body as string); bodies.push(body);
     if (bodies.length === 1) return sse([{ type: 'response.output_text.delta', delta: 'Broken draft' }]);

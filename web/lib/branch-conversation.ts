@@ -11,7 +11,7 @@ export function branchConversation(sessions: Session[], sourceId: string, turnIn
   if (sessions.some(s => s.id === id)) throw new Error('Could not create a separate conversation. Try again.');
   // A new line of discussion must not duplicate real-world tasks or count an
   // already recorded outcome twice. The original retains its action plans.
-  const turns = source.turns.slice(0, turnIndex + 1).map(({ work, ...turn }) => turn);
+  const turns = source.turns.slice(0, turnIndex + 1).map(turn => { const copy = { ...turn }; delete copy.work; return copy; });
   const session = sessionSchema.parse({ id, title: title.trim(), time, instructions: source.turns[turnIndex].instructions ?? '', turns });
   const next = [session, ...sessions];
   try { serializeSessions(next); } catch { throw new Error('This copy would exceed your workspace storage limit. Export and remove older conversations first.'); }

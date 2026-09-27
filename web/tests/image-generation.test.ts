@@ -12,8 +12,8 @@ test('one image request goes only to the fixed OpenAI endpoint with explicit out
     calls++; assert.equal(url, 'https://api.openai.com/v1/images/generations');
     assert.equal(init?.method, 'POST'); assert.equal(init?.redirect, 'manual'); assert.equal(init?.cache, 'no-store');
     assert.deepEqual(init?.headers, { Authorization: 'Bearer private-image-key', 'Content-Type': 'application/json' });
-    const { key, ...options } = input;
-    assert.deepEqual(JSON.parse(init!.body as string), { ...options, model: imageGenerationModel, n: 1, output_format: 'jpeg', output_compression: 90, background: 'opaque', moderation: 'auto' });
+    const { prompt, size, quality } = input;
+    assert.deepEqual(JSON.parse(init!.body as string), { prompt, size, quality, model: imageGenerationModel, n: 1, output_format: 'jpeg', output_compression: 90, background: 'opaque', moderation: 'auto' });
     return Response.json({ data: [{ b64_json: image.data }] });
   });
   assert.deepEqual(result, image); assert.equal(calls, 1);

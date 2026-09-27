@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { orchestrate, callProvider } from '../lib/orchestrate.ts';
 import { freshConnections, type RunEvent } from '../lib/trio.ts';
 
+/** The request fields these tests read; each provider names its system and message fields differently. */
+type RequestBody = { instructions?: string; system?: string; system_instruction?: string; input?: string; messages: { content: string }[]; store?: boolean };
+type Draft = { label: string; answer: string };
 function setup(fail?: (id: string, stage: string) => boolean) {
-  const calls: { id: string; stage: string; body: any }[] = [];
+  const calls: { id: string; stage: string; body: RequestBody }[] = [];
   const connections = freshConnections();
   Object.values(connections).forEach(c => c.key = 'test-key-not-real');
   const fetcher = (async (url: string, init: RequestInit) => {
@@ -31,9 +34,9 @@ test('council makes 3 drafts, 3 reviews and 1 synthesis with shared context', as
   assert.equal(new Set(systems).size, 3, 'Reviewers receive distinct priorities rather than identical instructions');
   const contexts = reviews.map(call => JSON.parse(call.body.input ?? call.body.messages[0].content));
   for (const context of contexts) {
-    assert.equal(context.drafts.length, 3); assert.ok(context.drafts.every((d: any) => /^[ABC]$/.test(d.label)));
+    assert.equal(context.drafts.length, 3); assert.ok(context.drafts.every((d: Draft) => /^[ABC]$/.test(d.label)));
     assert.deepEqual(context, contexts[0], 'Different review priorities must not change the shared evidence or reveal provider mappings');
-    assert.ok(context.drafts.every((d: any) => Object.keys(d).sort().join(',') === 'answer,label'));
+    assert.ok(context.drafts.every((d: Draft) => Object.keys(d).sort().join(',') === 'answer,label'));
   }
   assert.equal(s.calls[0].body.store, false);
 });
@@ -69,7 +72,7 @@ test('provider errors cannot reflect secret-bearing response text', async () => 
   await assert.rejects(callProvider('openai', 'secret-should-not-appear', 'gpt-6-astra', 'system', 'hello', new AbortController().signal, fetcher), e => e instanceof Error && !e.message.includes('secret-should-not-appear') && e.message.includes('401'));
 });
 
-const promptOf = (call: { body: any }) => JSON.parse(call.body.input ?? call.body.messages[0].content);
+const promptOf = (call: { body: RequestBody }) => JSON.parse(call.body.input ?? call.body.messages[0].content);
 test('all council stages share the same server time even when the clock crosses midnight', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-01-01T04:59:59Z') });
   const s = setup(), originalFetch = s.fetcher;
@@ -82,8 +85,8 @@ test('all council stages share the same server time even when the clock crosses 
   for (const call of s.calls) {
     const prompt = promptOf(call), task = prompt.task ?? prompt;
     assert.deepEqual(task.current_time, { utc: '2026-01-01T04:59:59.000Z', time_zone: 'America/New_York', local_date: '2025-12-31' });
-    assert.match(call.body.instructions ?? call.body.system ?? call.body.system_instruction, /Knowing today’s date does not verify/);
-    assert.match(call.body.instructions ?? call.body.system ?? call.body.system_instruction, /older conversation excerpts/);
+    assert.match(call.body.instructions ?? call.body.system ?? call.body.system_instruction ?? '', /Knowing today’s date does not verify/);
+    assert.match(call.body.instructions ?? call.body.system ?? call.body.system_instruction ?? '', /older conversation excerpts/);
   }
 });
 
@@ -105,7 +108,7 @@ test('deep council revises from the shared critique and synthesizes labeled revi
   for (const call of s.calls.filter(c => c.stage === 'revision')) {
     const prompt = promptOf(call);
     assert.deepEqual(prompt.drafts, promptOf(reviews[0]).drafts);
-    assert.equal(prompt.drafts.find((d: any) => d.label === prompt.your_draft_label).answer, `${call.id} draft response`);
+    assert.equal(prompt.drafts.find((d: Draft) => d.label === prompt.your_draft_label).answer, `${call.id} draft response`);
     assert.deepEqual([...prompt.reviews].sort(), Object.values(result.reviews).sort());
     assert.equal(prompt.task.reference_text, 'Reference context');
     assert.equal(prompt.revisions, undefined, 'Parallel revisions must not influence one another');
@@ -114,7 +117,7 @@ test('deep council revises from the shared critique and synthesizes labeled revi
   const synthesis = promptOf(s.calls.find(c => c.stage === 'final')!);
   assert.equal(synthesis.revisions.length, 3);
   for (const revision of synthesis.revisions) {
-    assert.equal(revision.answer.replace('revision', 'draft'), synthesis.drafts.find((d: any) => d.label === revision.label).answer);
+    assert.equal(revision.answer.replace('revision', 'draft'), synthesis.drafts.find((d: Draft) => d.label === revision.label).answer);
   }
   assert.equal(result.by, 'claude');
 });

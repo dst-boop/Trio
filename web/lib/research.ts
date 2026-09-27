@@ -26,16 +26,24 @@ export const sourceSchema = z.object({ url: z.string().max(2048).refine(v => saf
 export const researchSchema = z.object({ text: z.string().max(120000), sources: z.array(sourceSchema).max(60), at: z.string().max(40), provider: z.enum(['openai', 'claude']).optional() });
 export type Research = z.infer<typeof researchSchema>;
 
-export function readResearch(data: any, provider: ResearchProvider = 'openai'): Research {
-  const output = Array.isArray(data?.output) ? data.output : [];
-  const content = Array.isArray(data?.content) ? data.content : [];
-  const searched = provider === 'openai' ? output.some((item: any) => item?.type === 'web_search_call' && item.status === 'completed') : content.some((item: any) => item?.type === 'web_search_tool_result' && Array.isArray(item.content) && item.content.some((result: any) => result?.type === 'web_search_result'));
+/** Provider JSON is untrusted: blocks may be missing, malformed or non-objects. */
+type Block = { type?: unknown; status?: unknown; text?: unknown; content?: unknown; citations?: unknown } | null | undefined;
+type Citation = { type?: unknown; url?: unknown; title?: unknown; end_index?: unknown } | null | undefined;
+type CitedText = { text: string; annotations?: unknown };
+const blocks = <T = Block>(value: unknown): T[] => Array.isArray(value) ? value : [];
+
+export function readResearch(data: unknown, provider: ResearchProvider = 'openai'): Research {
+  const response = data as { output?: unknown; content?: unknown } | null | undefined;
+  const output = blocks(response?.output);
+  const content = blocks(response?.content);
+  const searched = provider === 'openai' ? output.some(item => item?.type === 'web_search_call' && item.status === 'completed') : content.some(item => item?.type === 'web_search_tool_result' && blocks(item.content).some(result => result?.type === 'web_search_result'));
   if (!searched) throw new Error('Web research did not return a completed search.');
   const sources: Research['sources'] = [];
-  const parts = provider === 'openai' ? output.flatMap((item: any) => Array.isArray(item?.content) ? item.content : []).filter((part: any) => part?.type === 'output_text' && typeof part.text === 'string') : content.filter((part: any) => part?.type === 'text' && typeof part.text === 'string').map((part: any) => ({ text: part.text, annotations: (Array.isArray(part.citations) ? part.citations : []).filter((citation: any) => citation?.type === 'web_search_result_location').map((citation: any) => ({ ...citation, type: 'url_citation', end_index: part.text.length })) }));
-  const text = parts.map((part: any) => {
+  const isText = (type: string) => (part: Block): part is Block & { text: string } => part?.type === type && typeof part.text === 'string';
+  const parts: CitedText[] = provider === 'openai' ? output.flatMap(item => blocks(item?.content)).filter(isText('output_text')) : content.filter(isText('text')).map(part => ({ text: part.text, annotations: blocks<Citation>(part.citations).filter(citation => citation?.type === 'web_search_result_location').map(citation => ({ ...citation, type: 'url_citation', end_index: part.text.length })) }));
+  const text = parts.map(part => {
     const inserts = new Map<number, number[]>();
-    for (const citation of Array.isArray(part.annotations) ? part.annotations : []) {
+    for (const citation of blocks<Citation>(part.annotations)) {
       if (citation?.type !== 'url_citation') continue;
       const url = safeSourceUrl(citation.url);
       if (!url) continue;
@@ -46,7 +54,7 @@ export function readResearch(data: any, provider: ResearchProvider = 'openai'): 
         sources.push({ url, title: typeof citation.title === 'string' ? citation.title.replace(/[\r\n\u0000-\u001f]/g, ' ').slice(0, 300) : new URL(url).hostname });
       }
       // Append links without deleting underlying claims. Unusable offsets go at the end.
-      let end = Number.isInteger(citation.end_index) && citation.end_index >= 0 && citation.end_index <= part.text.length ? citation.end_index : part.text.length;
+      let end = typeof citation.end_index === 'number' && Number.isInteger(citation.end_index) && citation.end_index >= 0 && citation.end_index <= part.text.length ? citation.end_index : part.text.length;
       for (const marker of part.text.matchAll(/\uE200[^\uE201]*\uE201/g)) if (end > marker.index && end < marker.index + marker[0].length) end = marker.index + marker[0].length;
       inserts.set(end, [...new Set([...(inserts.get(end) ?? []), index])]);
     }

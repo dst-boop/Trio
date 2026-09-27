@@ -64,7 +64,7 @@ test('bounded JSON preserves split UTF-8 and accepts the exact byte boundary', a
   assert.deepEqual(await readProviderJson(response, signal()), { text: 'Hello 🌍, 日本語' });
   const atLimit = JSON.stringify({ text: 'x'.repeat(maxProviderResponseBytes - 11) });
   assert.equal(encoder.encode(atLimit).length, maxProviderResponseBytes);
-  assert.equal((await readProviderJson(new Response(atLimit), signal())).text.length, maxProviderResponseBytes - 11);
+  assert.deepEqual(await readProviderJson(new Response(atLimit), signal()), { text: 'x'.repeat(maxProviderResponseBytes - 11) });
 });
 
 test('actual response bytes are bounded even without a trustworthy length header and the body is cancelled', async () => {

@@ -2,9 +2,12 @@ import type { ProviderId } from './trio.ts';
 
 export const maxProviderResponseBytes = 2_000_000;
 export const maxAnswerCharacters = 120_000;
+/** A parsed provider JSON object; every field must be narrowed before use. */
+export type ProviderJson = Record<string, unknown>;
+type TextPart = { type?: unknown; text?: unknown } | null | undefined;
 
 /** Bound decoded network bytes before parsing; never surface a vendor/parser diagnostic. */
-export async function readProviderJson(response: Response, signal: AbortSignal, maxBytes = maxProviderResponseBytes): Promise<Record<string, any>> {
+export async function readProviderJson(response: Response, signal: AbortSignal, maxBytes = maxProviderResponseBytes): Promise<ProviderJson> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 10_000_000) throw new Error('Invalid provider response limit.');
   if (!response.body) throw new Error('The provider returned an unreadable response.');
   const reader = response.body.getReader(), decoder = new TextDecoder('utf-8', { fatal: true });
@@ -26,7 +29,7 @@ export async function readProviderJson(response: Response, signal: AbortSignal, 
     }
     const data: unknown = JSON.parse(text);
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error();
-    return data as Record<string, any>;
+    return data as ProviderJson;
   } catch {
     signal.throwIfAborted();
     throw new Error('The provider returned an unreadable or oversized response. Try a shorter question or another model.');
@@ -38,8 +41,8 @@ export async function readProviderJson(response: Response, signal: AbortSignal, 
 }
 
 /** Extract visible text only; malformed blocks cannot become strings or vendor diagnostics. */
-export function readProviderText(id: ProviderId, data: Record<string, any>): string {
-  let parts: any[];
+export function readProviderText(id: ProviderId, data: ProviderJson): string {
+  let parts: TextPart[];
   if (id === 'claude') parts = Array.isArray(data.content) ? data.content : [];
   else {
     const items = id === 'openai' ? data.output : data.steps;

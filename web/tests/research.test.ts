@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readResearch, safeSourceUrl } from '../lib/research.ts';
+import { readResearch, safeSourceUrl, type Research } from '../lib/research.ts';
 import { callProvider, orchestrate } from '../lib/orchestrate.ts';
 import { freshConnections, type Result, type RunEvent } from '../lib/trio.ts';
 import { applyRunEvent } from '../lib/run-events.ts';
@@ -26,7 +26,7 @@ test('research uses provider metadata, preserves claims, deduplicates sources, a
 
 test('streamed and nonstreamed research use native bounded search requests and authoritative citations', async () => {
   for (const streaming of [true, false]) {
-    let result: any; const usage: unknown[] = [];
+    let result: Research | undefined; const usage: unknown[] = [];
     const fetcher = (async (url, init) => {
       assert.equal(url, 'https://api.openai.com/v1/responses');
       const body = JSON.parse(init!.body as string);
@@ -34,7 +34,7 @@ test('streamed and nonstreamed research use native bounded search requests and a
       return streaming ? stream([{ type: 'response.output_text.delta', delta: 'Unfinished' }, { type: 'response.completed', response: researchResponse() }]) : Response.json(researchResponse());
     }) as typeof fetch;
     const text = await callProvider('openai', 'fake', 'model', 'system', 'q', signal(), fetcher, u => usage.push(u), streaming ? () => {} : undefined, undefined, r => result = r);
-    assert.equal(text, result.text); assert.ok(!text.includes('Unfinished')); assert.equal(result.sources.length, 1); assert.equal(usage.length, 1);
+    assert.equal(text, result?.text); assert.ok(!text.includes('Unfinished')); assert.equal(result?.sources.length, 1); assert.equal(usage.length, 1);
   }
 });
 
@@ -47,7 +47,7 @@ test('research is opt-in and requires enabled OpenAI before any provider is char
 
 test('a single shared brief reaches every Deep Council stage with sources and accounts for search charges', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-12-31T23:59:59Z') });
-  const requests: any[] = [], events: RunEvent[] = [];
+  const requests: { tools?: unknown; instructions?: string; input?: string; messages: { content: string }[] }[] = [], events: RunEvent[] = [];
   const fetcher = (async (_url, init) => { const body = JSON.parse(init!.body as string); requests.push(body); t.mock.timers.tick(60_000); if (body.tools) return Response.json(researchResponse()); return response(); }) as typeof fetch;
   const result = await orchestrate({ question: 'Current facts?', webResearch: true, connections: connections(), mode: 'deep', lead: 'claude' }, event => events.push(event), signal(), fetcher);
   assert.equal(requests.length, 11); assert.equal(requests.filter(r => r.tools).length, 1);
@@ -55,7 +55,7 @@ test('a single shared brief reaches every Deep Council stage with sources and ac
     const prompt = JSON.parse(body.input ?? body.messages[0].content);
     assert.deepEqual((prompt.task ?? prompt).current_time, { utc: '2026-12-31T23:59:59.000Z', time_zone: 'UTC', local_date: '2026-12-31' });
   }
-  assert.match(requests[0].instructions, /current UTC date is 2026-12-31/);
+  assert.match(requests[0].instructions ?? '', /current UTC date is 2026-12-31/);
   for (const body of requests.slice(1)) { const s = JSON.stringify(body); assert.ok(s.includes('Evidence: 42')); assert.ok(s.includes(citation.url)); assert.ok(s.includes('untrusted evidence')); assert.ok(!s.includes('fake-openai')); }
   assert.equal(result.usage!.calls, 11); assert.equal(result.usage!.reportedCalls, 11); assert.equal(result.usage!.costUSD, null); assert.equal(result.usage!.byProvider.openai!.costUSD, null);
   assert.equal(events[0].stage, 'research'); assert.ok(events.some(e => e.type === 'research'));
@@ -103,7 +103,8 @@ test('completed responses without citation metadata never become a research brie
 });
 
 test('sources and research survive history and export while unknown credentials are stripped', () => {
-  const result: Result = { drafts: {}, reviews: {}, errors: [], answer: 'answer', seconds: 1, demo: false, researchRequested: true, research: { ...readResearch(researchResponse()), apiKey: 'secret' } as any };
+  const research = { ...readResearch(researchResponse()), apiKey: 'secret' };
+  const result: Result = { drafts: {}, reviews: {}, errors: [], answer: 'answer', seconds: 1, demo: false, researchRequested: true, research };
   const turns = [{ question: 'q', mode: 'fast' as const, result }];
   const stored = serializeSessions([{ id: 'x', title: 'q', time: '', turns }]);
   assert.ok(!stored.includes('secret')); assert.equal(parseSessions(stored)[0].turns[0].result.research!.sources[0].url, citation.url);

@@ -1,7 +1,7 @@
 import { providers, type Connections, type Mode, type ProviderId, type ProviderUsage, type Result, type RunEvent, type Phase } from './trio.ts';
 import { readUsage, estimateStandardCost, summarizeUsage, type Tokens } from './usage.ts';
 import { readProviderStream, StreamInterrupted } from './provider-stream.ts';
-import { readProviderJson, readProviderText } from './provider-response.ts';
+import { readProviderJson, readProviderText, type ProviderJson } from './provider-response.ts';
 import type { ImageInput } from './images.ts';
 import type { PdfInput } from './pdf.ts';
 import { answerFormatRules, answerUsefulnessRules, evidenceRules, reviewPriorities, reviewInstructions, shuffleCopy } from './quality-policy.ts';
@@ -52,17 +52,17 @@ export async function callProvider(id: ProviderId, key: string, model: string, i
     if (!response.body) throw new StreamInterrupted();
     return readProviderStream(id, response.body, requestSignal, onDelta, onUsage, onResearch);
   }
-  let data: any;
+  let data: ProviderJson;
   try { data = await readProviderJson(response, requestSignal); } catch (error) { requestSignal.throwIfAborted(); throw new Error(`${id}: ${(error as Error).message}`); }
   onUsage?.(readUsage(id, data));
-  if ((id === 'openai' || id === 'gemini') && data.status && data.status !== 'completed' || id === 'claude' && ['max_tokens', 'model_context_window_exceeded'].includes(data.stop_reason)) throw new Error(`${id}: The provider did not complete the answer. Try a shorter question or another model.`);
+  if ((id === 'openai' || id === 'gemini') && data.status && data.status !== 'completed' || id === 'claude' && (['max_tokens', 'model_context_window_exceeded'] as unknown[]).includes(data.stop_reason)) throw new Error(`${id}: The provider did not complete the answer. Try a shorter question or another model.`);
   if (onResearch) {
     if (id === 'claude' && data.stop_reason === 'pause_turn') {
       if (!Array.isArray(data.content) || JSON.stringify(data.content).length > 1_000_000) throw new Error('Claude returned an unusable research continuation.');
       throw new ResearchPaused(data.content);
     }
     if (id === 'claude' && (data.stop_reason !== 'end_turn' || !Array.isArray(data.content))) throw new Error('Claude did not finish the research brief.');
-    const research = readResearch(id === 'claude' && continuation ? { ...data, content: [...continuation, ...data.content] } : data, id as 'openai' | 'claude');
+    const research = readResearch(id === 'claude' && continuation && Array.isArray(data.content) ? { ...data, content: [...continuation, ...data.content] } : data, id as 'openai' | 'claude');
     onResearch(research); return research.text;
   }
   try { return readProviderText(id, data); } catch (error) { throw new Error(`${id}: ${(error as Error).message}`); }

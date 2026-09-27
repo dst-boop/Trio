@@ -10,8 +10,8 @@ function session(id = 'one', question = 'A question'): Session {
 }
 
 test('portable backups round-trip complete conversations and strip unknown fields at every level', () => {
-  const data: any = session();
-  data.connections = { openai: { key: 'secret-not-for-export' } }; data.turns[0].image = { data: 'private-bytes' }; data.turns[0].result.research.key = 'secret-not-for-export'; data.turns[0].result.usage.byProvider.openai.key = 'secret-not-for-export';
+  const data = session(), [turn] = data.turns;
+  Object.assign(data, { connections: { openai: { key: 'secret-not-for-export' } } }); Object.assign(turn, { image: { data: 'private-bytes' } }); Object.assign(turn.result.research!, { key: 'secret-not-for-export' }); Object.assign(turn.result.usage!.byProvider.openai!, { key: 'secret-not-for-export' });
   const text = exportBackup([data]);
   assert.ok(!text.includes('secret-not-for-export')); assert.ok(!text.includes('private-bytes'));
   assert.deepEqual(parseBackup(text), [session()]);
