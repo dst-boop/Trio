@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import { openQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -36,7 +37,7 @@ try {
   await open(); assert.equal(await dialog.getByRole('button', { name: 'Transcribe with OpenAI', exact: true }).isDisabled(), true);
   await dialog.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').first().fill('fake-audio-key');
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await setDemoMode(page, false);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await open(); assert.equal(await warns(), false);
   await page.getByLabel('Choose recording', { exact: true }).setInputFiles({ name: 'bad.wav', mimeType: 'audio/wav', buffer: Buffer.from('not audio') });

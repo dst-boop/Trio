@@ -53,6 +53,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.getByRole('button', { name: 'Run demo', exact: true }).click();
   await page.getByText('3 earlier questions in this session', { exact: true }).waitFor();
+  await page.locator('.previous-turns > summary').click();
   await page.getByRole('button', { name: 'Question 3 Latest question', exact: true }).click();
   await page.locator('[data-history-turn="2"]').getByText('Latest answer stays in view', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Run demo', exact: true }).waitFor();

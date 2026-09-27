@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { samplePdf } from './fixtures/pdf.ts';
@@ -17,7 +18,7 @@ try {
  const keys=page.getByPlaceholder('Paste your API key');
  for(let i=0;i<3;i++)await keys.nth(i).fill('fake-browser-key');
  await page.getByRole('switch',{name:'Remember sessions on this device'}).click();
- await page.getByRole('switch',{name:'Demo mode',exact:true}).click();
+ await setDemoMode(page, false);
  await page.getByRole('button',{name:'Done',exact:true}).click();
  const requests=[];let hold=false,release;
  await page.route('**/api/ask',async route=>{

@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -8,16 +9,16 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
-  const png = await page.getByRole('heading', { name: 'One question. Three perspectives.' }).screenshot();
+  const png = await page.getByRole('textbox', { name: 'Your question', exact: true }).screenshot();
   const file = { name: 'team-screenshot.png', mimeType: 'image/png', buffer: png };
   await page.getByLabel('Choose image').setInputFiles(file);
   await page.getByAltText('Attached image preview').waitFor();
-  await page.getByText('Demo ignores this image. Switch to Live in Connections to analyze it.').waitFor();
+  assert.match(await page.locator('.image-context').textContent(), /Demo ignores this image/);
   await page.getByRole('button', { name: 'Run demo', exact: true }).click();
   await page.getByRole('button', { name: 'Run demo', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').first().fill('fake-image-key');
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await setDemoMode(page, false);
   await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByLabel('Choose text context').setInputFiles({ name: 'instructions.txt', mimeType: 'text/plain', buffer: Buffer.from('Describe the visible layout') });
@@ -41,7 +42,7 @@ try {
   await page.getByRole('button', { name: 'Remove image', exact: true }).click();
   await ask('Summarize without the image');
   await page.getByRole('radio', { name: 'Compare', exact: true }).check();
-  await page.getByText('Up to 3 calls + retries', { exact: true }).waitFor();
+  await page.getByText('Up to 3 calls + retries · provider billing', { exact: true }).waitFor();
   await page.getByLabel('Choose image').setInputFiles(file);
   await page.getByAltText('Attached image preview').waitFor();
   await page.setViewportSize({ width: 390, height: 844 });

@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ try {
   await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').first().fill('fake-context-key');
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await setDemoMode(page, false);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   const prompt = page.getByRole('textbox', { name: 'Your question' });
   const ask = page.getByRole('button', { name: 'Ask Trio', exact: true });

@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.TRIO_BASE_URL || 'http://127.0.0.1:8787';
@@ -11,7 +12,7 @@ try {
     await page.goto(base + '/demo', { waitUntil: 'networkidle' });
     await page.getByRole('button', { name: 'Connections', exact: true }).click();
     await page.getByPlaceholder('Paste your API key').first().fill('fake-local-time-test');
-    await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+    await setDemoMode(page, false);
     await page.getByRole('button', { name: 'Done', exact: true }).click();
     const question = page.getByRole('textbox', { name: 'Your question', exact: true });
     await question.fill('What date is tomorrow?');
@@ -34,7 +35,7 @@ try {
     assert.equal(response.status(), 400); assert.match(response.headers()['cache-control'], /no-store/);
     const result = await response.json();
     if (timeZone === undefined || ['UTC', 'America/New_York'].includes(timeZone)) assert.equal(result.error, 'Connect at least one model.');
-    else assert.match(result.error, /Check your time zone/);
+    else assert.match(result.error, /Check your .*time zone/);
     assert.ok(!JSON.stringify(result).includes('private-fragment'));
   }
   await client.close();

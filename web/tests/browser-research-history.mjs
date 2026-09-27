@@ -1,3 +1,5 @@
+import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { conversationContext } from '../lib/sessions.ts';
@@ -19,7 +21,8 @@ try {
   await panel.locator('summary').click(); const links = panel.locator('ol a'); assert.equal(await links.count(), 60);
   assert.equal(await links.first().getAttribute('href'), research.sources[0].url); assert.equal(await links.last().getAttribute('href'), research.sources.at(-1).url);
   assert.equal(await links.first().getAttribute('rel'), 'noopener noreferrer'); await panel.locator('summary').click();
-  await page.getByRole('button', { name: 'Connections', exact: true }).click(); await page.getByPlaceholder('Paste your API key').first().fill('fake-research-history-key'); await page.getByRole('switch', { name: 'Demo mode', exact: true }).click(); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Connections', exact: true }).click(); await page.getByPlaceholder('Paste your API key').first().fill('fake-research-history-key'); await setDemoMode(page, false); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await openQuestionOptions(page);
   const disclosure = page.locator('.followup-context'); await disclosure.locator('summary').click();
   await disclosure.getByText(/Recorded source lists accompany 1 earlier answer/).waitFor();
   assert.ok(context.omittedSources > 0); assert.match(await disclosure.textContent(), new RegExp(`${context.omittedSources} source links are omitted to fit`));
@@ -34,6 +37,7 @@ try {
     assert.ok(payload.history[1].content.length <= 30000); assert.ok(!payload.history[1].content.includes(research.text));
     await route.fulfill({ contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'final', result: { answer: 'Here is the recorded source, which needs fresh verification.', drafts: {}, reviews: {}, errors: [], seconds: 1, demo: false } }) + '\n' });
   });
+  await closeQuestionOptions(page);
   await page.getByRole('textbox', { name: 'Your question', exact: true }).fill('Where did that come from?'); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
   await page.getByText('Here is the recorded source, which needs fresh verification.', { exact: true }).waitFor();
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('trio-sessions'))); assert.deepEqual(stored[0].turns[0], turn);

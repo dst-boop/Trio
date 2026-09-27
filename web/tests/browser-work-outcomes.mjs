@@ -45,13 +45,14 @@ try {
   await page.getByRole('button',{name:/^Your work/}).click();
   const board=page.getByRole('dialog');await board.getByRole('heading',{name:'Your work',exact:true}).waitFor();
   assert.equal(await board.getByRole('tab',{name:'Next actions',exact:true}).getAttribute('data-state'),'active');
-  assert.equal(await board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).count(),1);
-  await save(()=>board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).check());
+  await board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).waitFor();
+  // Completing removes the row; persistence and the completed view assert its new state.
+  await save(()=>board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).click());
   assert.equal(await board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>document.activeElement?.tagName),'SELECT');
   await board.getByLabel('Show actions',{exact:true}).selectOption('completed');
   assert.ok(await board.getByRole('checkbox',{name:'Reopen: Review and send the follow-up',exact:true}).isChecked());
-  await save(()=>board.getByRole('checkbox',{name:'Reopen: Review and send the follow-up',exact:true}).uncheck());
+  await save(()=>board.getByRole('checkbox',{name:'Reopen: Review and send the follow-up',exact:true}).click());
   await board.getByLabel('Show actions',{exact:true}).selectOption('open');
   await board.getByLabel('Find an action',{exact:true}).fill('Review and send');
   await board.getByRole('button',{name:'Open plan',exact:true}).click();
@@ -81,7 +82,7 @@ try {
   assert.match(await board.innerText(),/12 minutes saved/);assert.match(await board.innerText(),/1 corrections confirmed/);
   await board.getByRole('tab',{name:'Plans',exact:true}).click();
   await board.getByLabel('Show plans',{exact:true}).selectOption('all');
-  await save(()=>board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).check());
+  await save(()=>board.getByRole('checkbox',{name:'Complete: Review and send the follow-up',exact:true}).click());
   assert.ok((await read()).sessions[0].turns[0].work.actions[0].completedAt);
   await page.setViewportSize({width:390,height:844});
   await page.waitForFunction(()=>{const r=document.querySelector('.work-board')?.getBoundingClientRect();return r&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;},null,{timeout:4000});

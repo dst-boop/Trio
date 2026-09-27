@@ -11,3 +11,12 @@ export async function closeQuestionOptions(page) {
     await dialog.waitFor({ state: 'hidden' });
   }
 }
+
+/** Set the requested state even when account preferences survived a reload. */
+export async function setDemoMode(page, enabled) {
+  const dialog = page.getByRole('dialog', { name: 'Connect your AI team', exact: true });
+  const alreadyOpen = await dialog.isVisible();
+  if (!alreadyOpen) await page.getByRole('button', { name: 'Connections', exact: true }).click();
+  await page.getByRole('switch', { name: 'Demo mode', exact: true }).setChecked(enabled);
+  if (!alreadyOpen) await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+}

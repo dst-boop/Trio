@@ -60,14 +60,15 @@ try {
   await enabled.click(); assert.equal(await warnsOnUnload(), false); await close(); await page.locator('.memory-dialog').waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Connections', exact: true }).click(); await page.getByPlaceholder('Paste your API key').first().fill('fake-draft-key'); await page.getByRole('button', { name: 'Done', exact: true }).click();
   await open(); await page.getByRole('button', { name: 'Suggest from conversation', exact: true }).click();
-  await page.waitForFunction(() => Boolean(window.finishSuggestion)); await page.evaluate(() => window.finishSuggestion('Review this suggested draft.'));
+  await page.waitForFunction(() => Boolean(window.finishSuggestion)); await page.evaluate(() => { window.finishSuggestion('Review this suggested draft.'); delete window.finishSuggestion; });
   await page.getByText('Suggested draft — not saved.', { exact: false }).waitFor(); await close(); await confirm.waitFor(); await keep(); assert.equal(await notes.inputValue(), 'Review this suggested draft.'); assert.equal(writes, 0);
   // Keeping the editor preserves the requested suggestion; confirmed discard aborts it.
   await page.getByRole('button', { name: 'Suggest from conversation', exact: true }).click();
   await page.getByRole('alertdialog', { name: 'Replace this memory draft?', exact: true }).getByRole('button', { name: 'Replace with a suggestion', exact: true }).click();
   await page.getByRole('button', { name: 'Stop suggestion', exact: true }).waitFor(); await close(); await confirm.waitFor();
-  await keep(); assert.equal(await page.getByRole('button', { name: 'Stop suggestion', exact: true }).count(), 1);
-  await page.evaluate(() => window.finishSuggestion('Updated suggested draft.'));
+  await keep(); await page.getByRole('button', { name: 'Stop suggestion', exact: true }).waitFor();
+  await page.waitForFunction(() => Boolean(window.finishSuggestion));
+  await page.evaluate(() => { window.finishSuggestion('Updated suggested draft.'); delete window.finishSuggestion; });
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="Personal memory notes"]')?.value === 'Updated suggested draft.');
   await page.getByRole('button', { name: 'Suggest from conversation', exact: true }).click();
   await page.getByRole('alertdialog', { name: 'Replace this memory draft?', exact: true }).getByRole('button', { name: 'Replace with a suggestion', exact: true }).click();

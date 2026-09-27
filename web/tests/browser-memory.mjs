@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const baseUrl=process.env.TRIO_BASE_URL||'http://localhost:5173';
@@ -24,19 +25,21 @@ try {
   assert.equal((await put('/api/memory',{...saved,revision:saved.revision-1,notes:'Stale edit'})).status(),409);
   assert.equal((await put('/api/memory',{...saved,notes:'wrong account'},{'X-Trio-Account':'someone-else'})).status(),401);
   assert.equal((await put('/api/memory',{...saved,notes:'x'.repeat(4001)})).status(),400);
-  await page.getByRole('button',{name:'Connections',exact:true}).click();await page.getByPlaceholder('Paste your API key').first().fill('fake-memory-key');await page.getByRole('switch',{name:'Demo mode',exact:true}).click();await page.getByRole('button',{name:'Done',exact:true}).click();
+  await page.getByRole('button',{name:'Connections',exact:true}).click();await page.getByPlaceholder('Paste your API key').first().fill('fake-memory-key');await setDemoMode(page, false);await page.getByRole('button',{name:'Done',exact:true}).click();
   let suggestions=0;
   await page.route('**/api/memory/suggest',async route=>{suggestions++;const body=route.request().postDataJSON();assert.equal(body.sessionId,'memory-session');assert.equal(body.connection.provider,'openai');assert.equal(body.connection.key,'fake-memory-key');assert.equal(body.connections,undefined);await route.fulfill({contentType:'application/json',body:JSON.stringify({suggestion:'- User-approved draft from the conversation.'})});});
-  await open();await page.getByRole('button',{name:'Suggest from conversation',exact:true}).click();await page.getByText(/Suggested draft — not saved/).waitFor();assert.match(await notes.inputValue(),/User-approved draft/);assert.equal((await(await page.request.get(baseUrl+'/api/memory')).json()).notes,saved.notes);
+  await open();await page.getByLabel('Model for memory suggestions',{exact:true}).selectOption('openai');await page.getByRole('button',{name:'Suggest from conversation',exact:true}).click();await page.getByText(/Suggested draft — not saved/).waitFor();assert.match(await notes.inputValue(),/User-approved draft/);assert.equal((await(await page.request.get(baseUrl+'/api/memory')).json()).notes,saved.notes);
   await page.getByRole('button',{name:'Close',exact:true}).click();await page.getByRole('button',{name:'Discard changes',exact:true}).click();await open();assert.equal(await notes.inputValue(),saved.notes);
   await page.setViewportSize({width:390,height:844}); await mkdir('test-output',{recursive:true}); await page.locator('.memory-dialog').screenshot({path:'test-output/personal-memory-mobile.png'});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.setViewportSize({width:1440,height:1050});await page.getByRole('button',{name:'Close',exact:true}).click();
   await page.route('**/api/ask',async route=>{const body=route.request().postDataJSON();assert.equal(body.personalize,true);assert.equal(body.memory,undefined);const profile=await(await page.request.get(baseUrl+'/api/memory')).json();const answer={...result,answer:'A personalized answer',...(profile.enabled?{memory:profile.notes}:{})};await route.fulfill({contentType:'application/x-ndjson',body:JSON.stringify({type:'final',result:answer})+'\n'});});
   await page.getByRole('textbox',{name:'Your question',exact:true}).fill('Help with my plan');const savedRun=page.waitForResponse(r=>r.url().endsWith('/api/workspace')&&r.request().method()==='PUT'&&r.status()===200);await page.getByRole('button',{name:'Ask Trio',exact:true}).click();await savedRun;await page.getByText('Saved to your account',{exact:true}).waitFor();await page.getByText('Personal memory used for this answer',{exact:true}).click();await page.locator('.instructions-used pre').filter({hasText:saved.notes}).waitFor();
   const stored=await(await page.request.get(baseUrl+'/api/workspace')).json();assert.equal(stored.sessions[0].turns.at(-1).result.memory,saved.notes);assert.ok(!JSON.stringify(stored).includes('fake-memory-key'));assert.equal(await page.evaluate(()=>localStorage.getItem('trio-sessions')),null);
-  await open();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Forget memory',exact:true}).click();await page.getByRole('heading',{name:'Personal memory',exact:true}).waitFor({state:'hidden'});
+  await open();await page.getByRole('button',{name:'Forget memory',exact:true}).click();
+  await page.getByRole('alertdialog', { name: 'Forget personal memory?', exact: true }).getByRole('button', { name: 'Forget memory', exact: true }).click();
+  await page.locator('.memory-dialog').waitFor({state:'hidden'});
   saved=await(await page.request.get(baseUrl+'/api/memory')).json();assert.equal(saved.enabled,false);assert.equal(saved.notes,'');
   assert.ok((await(await page.request.get(baseUrl+'/api/workspace')).json()).sessions[0].turns.at(-1).result.memory);
-  const missing=await page.request.post(baseUrl+'/api/memory/suggest',{headers:{origin:baseUrl},data:{sessionId:'another-account-session',connection:{provider:'openai',key:'fake-memory-key',model:'gpt-6-astra'}}});assert.equal(missing.status(),404);
+  const missing=await page.request.post(baseUrl+'/api/memory/suggest',{headers:{origin:baseUrl},data:{sessionId:'another-account-session',revision:stored.revision,connection:{provider:'openai',key:'fake-memory-key',model:'gpt-6-astra'}}});assert.equal(missing.status(),404);
   assert.equal(suggestions,1);assert.deepEqual(errors,[]);
 }finally{await browser.close();}
 console.log('Personal memory browser: private CRUD, explicit activation, review-before-save, mobile, authoritative request flag, snapshots, forgetting, legacy-save guard, and session isolation passed');

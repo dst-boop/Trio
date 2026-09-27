@@ -1,3 +1,5 @@
+import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { conversationContext } from '../lib/sessions.ts';
@@ -18,7 +20,8 @@ try {
   await page.reload({ waitUntil: 'networkidle' }); assert.equal(await page.locator('.followup-context').count(), 0, 'Demo mode does not send live context');
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').first().fill('fake-context-key');
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click(); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await setDemoMode(page, false); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await openQuestionOptions(page);
   const details = page.locator('.followup-context');
   await details.getByText('Next question uses 6 of 8 earlier live answers · shortened excerpts', { exact: true }).waitFor();
   await details.locator('summary').focus(); await page.keyboard.press('Enter');
@@ -39,13 +42,16 @@ try {
     assert.ok(!JSON.stringify(payload.history).includes('Earlier question 0'));
     await route.fulfill({ contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'final', result: { ...result, answer: 'Follow-up uses all three excerpts.' } }) + '\n' });
   });
+  await closeQuestionOptions(page);
   await page.getByRole('textbox', { name: 'Your question', exact: true }).fill('Compare their main disagreements');
   await page.getByRole('button', { name: 'Ask Trio', exact: true }).click();
   await page.getByText('Follow-up uses all three excerpts.', { exact: true }).waitFor();
+  await openQuestionOptions(page);
   await details.getByText('Next question uses 6 of 9 earlier live answers · shortened excerpts', { exact: true }).waitFor();
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('trio-sessions')));
   assert.deepEqual(stored[0].turns.slice(0, turns.length), turns); assert.equal(calls, 1);
   assert.ok(!JSON.stringify(stored).includes('fake-context-key'));
+  await closeQuestionOptions(page);
   await page.getByRole('button', { name: /^New session/ }).click(); assert.equal(await details.count(), 0);
   assert.deepEqual(errors, []);
   console.log('Follow-up context passed: exact visible counts and sent history, all long Compare perspectives, omission markers, demo exclusion, mobile/keyboard, updated counts, full stored originals, new-session reset, one mocked model request.');

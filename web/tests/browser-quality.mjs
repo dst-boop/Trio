@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -21,7 +22,7 @@ assert.equal(await page.locator('.session-list .session-open').count(), 1);
 assert.equal(await page.getByRole('tab', { name: 'Perspectives 2' }).getAttribute('data-state'), 'active');
 await page.getByRole('button', { name: 'Connections', exact: true }).click();
 await page.getByPlaceholder('Paste your API key').nth(0).fill('only-a-test-key');
-await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+await setDemoMode(page, false);
 await page.getByRole('button', { name: 'Done', exact: true }).click();
 const markdown = '# A formatted answer\n\n**Important finding**\n\n- First item\n- Second item\n\n```javascript\nconsole.log("hello");\n' + 'x'.repeat(200) + '\n```\n\n| Model | Result |\n| --- | --- |\n| OpenAI | Ready |\n\n[Documentation](https://example.com/docs)\n\n[Unsafe](javascript:alert(1))\n\n![Tracking](https://example.com/pixel.png)\n\n<script>window.trioUnsafe = true</script>';
 let requested = 0;

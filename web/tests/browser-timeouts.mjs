@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -28,7 +29,7 @@ try {
   await page.goto(base + '/signin-with-chatgpt?return_to=%2Fdemo', { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').first().fill('fake-timeout-key');
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await setDemoMode(page, false);
   await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.clock.install({ time: new Date('2026-09-22T10:00:00Z') }); await page.clock.pauseAt(new Date('2026-09-22T10:00:01Z'));
@@ -50,6 +51,9 @@ try {
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await mkdir('test-output', { recursive: true }); await page.screenshot({ path: 'test-output/timeout-mobile.png', fullPage: true, animations: 'disabled' });
   await page.setViewportSize({ width: 1440, height: 1050 });
+  // The test clock is paused, so allow the error toast to expire before clicking beneath it.
+  await page.mouse.move(0, 0);
+  await page.clock.runFor(10_000);
   await page.evaluate(() => { window.timeoutMode = 'complete'; }); await run.click();
   await page.getByText('Recovered completed answer', { exact: true }).waitFor();
   await page.clock.fastForward(150_001); assert.equal(await page.locator('.session-open').count(), 1); assert.equal(await page.locator('.error-box').count(), 0);

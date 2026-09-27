@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import { openQuestionOptions } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -29,7 +30,7 @@ try {
   const name = page.getByRole('textbox', { name: 'Session name', exact: true }); await name.fill(' '); assert.equal(await page.getByRole('button', { name: 'Save name', exact: true }).isDisabled(), true);
   await name.fill('Launch project'); await name.press('Enter'); await row('Launch project').waitFor();
   assert.equal(await page.getByRole('textbox', { name: 'Your question' }).inputValue(), 'Keep this unsent prompt');
-  await page.getByRole('button', { name: 'Connections', exact: true }).click(); await page.getByPlaceholder('Paste your API key').first().fill('fake-library-key'); await page.getByRole('switch', { name: 'Demo mode', exact: true }).click(); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Connections', exact: true }).click(); await page.getByPlaceholder('Paste your API key').first().fill('fake-library-key'); await setDemoMode(page, false); await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: 'Ask Trio', exact: true }).click(); await page.getByRole('button', { name: 'Ask Trio', exact: true }).waitFor(); await row('Launch project').waitFor();
   let saved = JSON.parse(await page.evaluate(() => localStorage.getItem('trio-sessions'))); assert.equal(saved[0].title, 'Launch project'); assert.equal(saved[0].turns.length, 2); assert.equal(saved[0].turns[0].question, 'How should we launch?'); assert.equal(saved[0].instructions, 'For founders');
   // Export any saved conversation without changing the active one.
