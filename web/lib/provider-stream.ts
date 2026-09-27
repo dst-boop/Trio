@@ -1,14 +1,23 @@
 import type { ProviderId } from './trio.ts';
 import { readUsage, type Tokens } from './usage.ts';
 import { readResearch, type Research } from './research.ts';
-import { maxAnswerCharacters, readProviderText } from './provider-response.ts';
+import { maxAnswerCharacters, readProviderText, type ProviderJson } from './provider-response.ts';
 
 /** Safe to surface: vendor payloads and parser errors can contain credentials. */
 export class StreamInterrupted extends Error {
   constructor() { super('The response stream was interrupted.'); this.name = 'StreamInterrupted'; }
 }
 
-async function* events(body: ReadableStream<Uint8Array>, signal: AbortSignal): AsyncGenerator<any> {
+/** Parsed SSE payloads are untrusted; only the fields read below are described, as unknown leaves. */
+type StreamEvent = {
+  type?: unknown; event_type?: unknown; index?: unknown; usage?: ProviderJson;
+  delta?: { type?: unknown; text?: unknown; stop_reason?: unknown };
+  response?: { status?: unknown; output?: { length?: unknown } };
+  message?: { usage?: ProviderJson }; content_block?: { type?: unknown; text?: unknown };
+  step?: { type?: unknown }; interaction?: { status?: unknown };
+};
+
+async function* events(body: ReadableStream<Uint8Array>, signal: AbortSignal): AsyncGenerator<StreamEvent> {
   const reader = body.getReader(), decoder = new TextDecoder();
   let buffer = '', data = '';
   const cancel = () => { void reader.cancel().catch(() => {}); };
@@ -42,8 +51,8 @@ async function* events(body: ReadableStream<Uint8Array>, signal: AbortSignal): A
 
 /** Only visible answer text is forwarded; thought/tool events stay server-side. */
 export async function readProviderStream(id: ProviderId, body: ReadableStream<Uint8Array>, signal: AbortSignal, onDelta: (text: string) => void, onUsage?: (tokens: Tokens | null) => void, onResearch?: (research: Research) => void): Promise<string> {
-  let text = '', complete = false, usage: any = null, finalClaudeUsage = false;
-  const steps = new Map<number, string>();
+  let text = '', complete = false, usage: ProviderJson | null = null, finalClaudeUsage = false;
+  const steps = new Map<unknown, unknown>();
   const add = (piece: unknown) => {
     if (typeof piece !== 'string' || !piece) return;
     if (text.length + piece.length > maxAnswerCharacters) throw new StreamInterrupted();
@@ -73,7 +82,7 @@ export async function readProviderStream(id: ProviderId, body: ReadableStream<Ui
         if (type === 'message_delta') {
           usage = { ...usage, ...event.usage };
           if (event.usage?.output_tokens !== undefined) finalClaudeUsage = true;
-          if (['max_tokens', 'model_context_window_exceeded'].includes(event.delta?.stop_reason)) {
+          if ((['max_tokens', 'model_context_window_exceeded'] as unknown[]).includes(event.delta?.stop_reason)) {
             onUsage?.(readUsage(id, { usage })); throw new StreamInterrupted();
           }
         }

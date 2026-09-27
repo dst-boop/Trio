@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { selectResearchProvider, readResearch } from '../lib/research.ts';
+import { selectResearchProvider, readResearch, type Research } from '../lib/research.ts';
 import { callProvider, orchestrate } from '../lib/orchestrate.ts';
 import { freshConnections, type RunEvent } from '../lib/trio.ts';
 import { parseSessions, serializeSessions, sessionMarkdown } from '../lib/sessions.ts';
@@ -23,21 +23,21 @@ test('Claude citations produce links without exposing encrypted content or count
   const result = readResearch(research(), 'claude');
   assert.equal(result.provider, 'claude'); assert.equal(result.sources.length, 1); assert.match(result.text, /A supported finding\. \[1\]\(<https:\/\/example.org\/evidence>\)/);
   assert.ok(!JSON.stringify(result).includes('opaque-')); assert.ok(!JSON.stringify(result).includes('Source excerpt'));
-  const data = research(); data.content = [structuredClone(cited)] as any;
+  const data = research(); data.content = [structuredClone(cited)];
   assert.throws(() => readResearch(data, 'claude'), /completed search/);
-  const unsafe = research(); (unsafe.content.at(-1) as any).citations[0].url = 'javascript:alert(1)';
+  const unsafe = { ...research(), content: [...structuredClone(searchBlocks), { ...cited, citations: [{ ...cited.citations[0], url: 'javascript:alert(1)' }] }] };
   assert.throws(() => readResearch(unsafe, 'claude'), /cited brief/);
 });
 
 test('Claude research uses the native bounded basic-search tool and a complete JSON response', async () => {
-  let result: any; let deltas = 0;
+  let result: Research | undefined; let deltas = 0;
   const fetcher = (async (url, init) => {
-    assert.equal(url, 'https://api.anthropic.com/v1/messages'); assert.equal((init!.headers as any)['x-api-key'], 'fake-claude');
+    assert.equal(url, 'https://api.anthropic.com/v1/messages'); assert.equal((init!.headers as Record<string, string>)['x-api-key'], 'fake-claude');
     const body = JSON.parse(init!.body as string); assert.deepEqual(body.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]); assert.equal(body.stream, undefined); assert.equal(body.messages.length, 1);
     return Response.json(research());
   }) as typeof fetch;
   const text = await callProvider('claude', 'fake-claude', 'model', 'system', 'question', signal(), fetcher, undefined, () => deltas++, undefined, r => result = r);
-  assert.equal(deltas, 0); assert.equal(text, result.text); assert.equal(result.provider, 'claude');
+  assert.equal(deltas, 0); assert.equal(text, result?.text); assert.equal(result?.provider, 'claude');
 });
 
 test('one paused search continues unchanged only with Claude and counts both calls across Deep Council', async () => {
@@ -52,7 +52,9 @@ test('one paused search continues unchanged only with Claude and counts both cal
     }
     otherPrompts.push(JSON.stringify(body)); return answer();
   }) as typeof fetch;
-  const result = await orchestrate({ question: 'Current evidence?', webResearch: true, researchProvider: 'claude', connections: connections(), mode: 'deep', lead: 'gemini' }, e => events.push(e), signal(), fetcher);
+  let charged = 0;
+  const result = await orchestrate({ question: 'Current evidence?', webResearch: true, researchProvider: 'claude', connections: connections(), mode: 'deep', lead: 'gemini', beforeCall: async () => { charged++; } }, e => events.push(e), signal(), fetcher);
+  assert.equal(charged, 12, 'the research continuation is charged too');
   assert.equal(searches, 2); assert.equal(otherPrompts.length, 10); assert.equal(result.usage!.calls, 12); assert.equal(result.usage!.reportedCalls, 12); assert.equal(result.usage!.costUSD, null);
   assert.equal(result.researchBy, 'claude'); assert.equal(result.research!.provider, 'claude'); assert.equal(events[0].provider, 'claude');
   for (const prompt of otherPrompts) { assert.ok(prompt.includes('A supported finding.')); assert.ok(!prompt.includes('opaque-provider-only')); assert.ok(!prompt.includes('opaque-citation-index')); }

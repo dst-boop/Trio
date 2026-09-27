@@ -41,7 +41,7 @@ test('paired changes distinguish correctness from formatting and transport, with
 test('the real evaluator records separate baseline-provider timing and exports anonymous answers with a private key',async()=>{
  const c=freshConnections();Object.values(c).forEach(x=>x.key='synthetic-private-key');
  const item=representativeCases[0];
- const fetcher=(async(url:any)=>{
+ const fetcher=(async(url:unknown)=>{
   const id:ProviderId=String(url).includes('anthropic')?'claude':String(url).includes('openai')?'openai':'gemini';
   const text=JSON.stringify({answer:item.expected});
   return Response.json(id==='openai'?{output:[{content:[{type:'output_text',text}]}]}:id==='claude'?{content:[{type:'text',text}]}:{steps:[{type:'model_output',content:[{type:'text',text}]}]});

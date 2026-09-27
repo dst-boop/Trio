@@ -27,14 +27,17 @@ test('browser file loading verifies decoding and dimensions before accepting a p
   } finally { globalThis.createImageBitmap = original; }
 });
 
-function assertBody(id: ProviderId, body: any) {
-  const content = id === 'claude' ? body.messages[0].content : id === 'openai' ? body.input[0].content : body.input;
+/** The parts of a provider request body these assertions read; OpenAI nests parts under input[0].content. */
+type Part = { type: string; text: string; image_url?: string; content?: Part[] };
+type ProviderRequest = { messages: { content: Part[] }[]; input: Part[]; store?: boolean };
+function assertBody(id: ProviderId, body: ProviderRequest) {
+  const content = id === 'claude' ? body.messages[0].content : id === 'openai' ? body.input[0].content! : body.input;
   const picture = content[0], text = content[1];
   if (id === 'openai') { assert.equal(picture.type, 'input_image'); assert.equal(picture.image_url, `data:image/png;base64,${image.data}`); assert.equal(text.type, 'input_text'); }
   else if (id === 'claude') assert.deepEqual(picture, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: image.data } });
   else assert.deepEqual(picture, { type: 'image', mime_type: 'image/png', data: image.data });
   assert.ok(!text.text.includes(image.data), 'Image bytes never become text tokens in the prompt');
-  return text.text as string;
+  return text.text;
 }
 function response(id: ProviderId) {
   const text = 'Visible finding with uncertainty';

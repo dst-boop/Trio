@@ -10,7 +10,7 @@ export function setWorkPlan(sessions: Session[], sessionId: string, turnIndex: n
   if (parsed?.outcome && parsed.outcome.correction !== 'not-assessed' && !turn.result.reviewedAnswer) throw new Error('Correction assessments require an answer checked by the team.');
   const next = sessions.map(s => s.id !== sessionId ? s : { ...s, turns: s.turns.map((t, i) => {
     if (i !== turnIndex) return t;
-    const { work: previous, ...rest } = t;
+    const rest = { ...t }; delete rest.work;
     return parsed ? { ...rest, work: parsed } : rest;
   }) });
   serializeSessions(next);

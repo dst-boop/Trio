@@ -9,9 +9,9 @@ import { exportBackup, parseBackup } from '../lib/backups.ts';
 function fixture() {
  const connections=freshConnections();Object.values(connections).forEach(c=>c.key='fixture-key');
  const input: Input={question:'What is supported?',context:'Original reference',history:[],mode:'single',lead:'claude',connections};
- const calls: {id:string;system:string;prompt:any}[]=[];
- const fetcher=(async(url:any,init:any)=>{
-  const body=JSON.parse(init.body);const id=String(url).includes('anthropic')?'claude':String(url).includes('openai')?'openai':'gemini';
+ const calls: {id:string;system:string;prompt:Record<string,unknown>}[]=[];
+ const fetcher=(async(url:unknown,init:RequestInit)=>{
+  const body=JSON.parse(init.body as string);const id=String(url).includes('anthropic')?'claude':String(url).includes('openai')?'openai':'gemini';
   const system=body.system??body.instructions??body.system_instruction;const prompt=JSON.parse(body.input??body.messages[0].content);calls.push({id,system,prompt});
   const text=system.startsWith('Review')?'Critique':system.startsWith('Write the final')?'Checked answer':`${id} independent answer`;
   return Response.json(id==='claude'?{content:[{type:'text',text}],usage:{input_tokens:10,output_tokens:4}}:id==='openai'?{output:[{content:[{type:'output_text',text}]}],usage:{input_tokens:10,output_tokens:4}}:{steps:[{type:'model_output',content:[{type:'text',text}]}],usage:{total_input_tokens:10,total_output_tokens:4}});

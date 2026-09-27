@@ -2,17 +2,22 @@ import type { ProviderId, ProviderUsage, Usage } from './trio.ts';
 
 export type Tokens = { input: number; output: number; cached: number };
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0;
+/** Vendor usage metadata is untrusted; every counter stays unknown until checked. */
+type UsageEnvelope = { usage?: { [field: string]: unknown; input_tokens_details?: { cached_tokens?: unknown } } } | null | undefined;
 
 /** Missing metadata remains unknown, never a zero-token bill. */
-export function readUsage(id: ProviderId, data: any): Tokens | null {
-  const u = data?.usage;
+export function readUsage(id: ProviderId, data: unknown): Tokens | null {
+  const u = (data as UsageEnvelope)?.usage;
   if (!u) return null;
-  const input = id === 'gemini' ? u.total_input_tokens : u.input_tokens;
-  const output = id === 'gemini' ? u.total_output_tokens : u.output_tokens;
-  const thought = id === 'gemini' ? (u.total_thought_tokens ?? 0) : 0;
-  const cacheRead = id === 'openai' ? (u.input_tokens_details?.cached_tokens ?? 0) : id === 'claude' ? (u.cache_read_input_tokens ?? 0) : (u.total_cached_tokens ?? 0);
-  const cacheWrite = id === 'claude' ? (u.cache_creation_input_tokens ?? 0) : 0;
-  if (![input, output, thought, cacheRead, cacheWrite].every(count)) return null;
+  const counts = [
+    id === 'gemini' ? u.total_input_tokens : u.input_tokens,
+    id === 'gemini' ? u.total_output_tokens : u.output_tokens,
+    id === 'gemini' ? (u.total_thought_tokens ?? 0) : 0,
+    id === 'openai' ? (u.input_tokens_details?.cached_tokens ?? 0) : id === 'claude' ? (u.cache_read_input_tokens ?? 0) : (u.total_cached_tokens ?? 0),
+    id === 'claude' ? (u.cache_creation_input_tokens ?? 0) : 0,
+  ];
+  if (!counts.every(count)) return null;
+  const [input, output, thought, cacheRead, cacheWrite] = counts;
   const tokens = { input: input + (id === 'claude' ? cacheRead + cacheWrite : 0), output: output + thought, cached: cacheRead + cacheWrite };
   return Object.values(tokens).every(count) ? tokens : null;
 }

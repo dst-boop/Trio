@@ -14,7 +14,7 @@ test('search covers saved content and metadata without changing order or consult
   for (const query of ['PRODUCT PLAN', 'starfruit', 'unusual perspective', 'budget critique', 'revised milestone', 'older audience', 'small business', 'report.pdf', 'diagram.png', 'primary report', 'example.org/evidence', 'missing web evidence', 'cited research', 'product starfruit']) assert.deepEqual(searchSessions(sessions, query).map(s => s.id), ['one']);
   assert.equal(searchSessions(sessions, '   '), sessions); assert.deepEqual(searchSessions(sessions, 'question').map(s => s.id), ['two']);
   assert.deepEqual(searchSessions(sessions, '.*'), []); assert.deepEqual(searchSessions(sessions, 'not found'), []);
-  const extra: any = { ...first, connections: { openai: { key: 'private-key' } }, attachmentBytes: 'private-original-bytes' };
+  const extra = { ...first, connections: { openai: { key: 'private-key' } }, attachmentBytes: 'private-original-bytes' };
   assert.deepEqual(searchSessions([extra], 'private-key'), []); assert.deepEqual(searchSessions([extra], 'private-original-bytes'), []);
 });
 

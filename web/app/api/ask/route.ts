@@ -10,6 +10,7 @@ import { env } from 'cloudflare:workers';
 import { CredentialError } from '@/lib/credential-store';
 import { savedKeyReference, workspaceKeyReference } from '@/lib/saved-connections';
 import { resolveRequestKey } from '@/lib/workspace-keys';
+import { assertWorkspaceCallsLeft, chargeWorkspaceCalls } from '@/lib/workspace-budget';
 import { providers, type RunEvent } from '@/lib/trio';
 import { readMemory } from '@/lib/memory-store';
 import { imageSchema } from '@/lib/images';
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
   if (parsed.data.mode === 'single' && !(parsed.data.connections[parsed.data.lead].enabled && parsed.data.connections[parsed.data.lead].key.trim())) return reply({ error: 'Connect the selected answer model or choose another model.' }, 400);
   if (parsed.data.reviewAnswer && (parsed.data.mode !== 'council' || Object.values(parsed.data.connections).filter(c => c.enabled && c.key.trim()).length < 2)) return reply({ error: 'Team review requires Council and at least two connected models.' }, 400);
   const credentialErrors: string[] = [];
+  const funded = new Set<string>(); // providers answering on the operator's workspace key
   let unavailableStatus = 503;
   try {
     for (const provider of providers) {
@@ -40,7 +42,11 @@ export async function POST(request: Request) {
       const needed = connection.enabled && (parsed.data.mode !== 'single' || provider.id === parsed.data.lead || researchNeeded);
       if (connection.key !== savedKeyReference && connection.key !== workspaceKeyReference) continue;
       if (!needed) { connection.key = ''; continue; }
-      try { connection.key = await resolveRequestKey(env, request, user.userId, provider.id, connection.key); }
+      try {
+        const reference = connection.key;
+        connection.key = await resolveRequestKey(env, request, user.userId, provider.id, reference);
+        if (reference === workspaceKeyReference) funded.add(provider.id);
+      }
       catch (error) {
         if (!(error instanceof CredentialError) || error.status === 401 || error.status === 403) throw error;
         unavailableStatus = error.status; connection.key = ''; connection.enabled = false;
@@ -58,6 +64,8 @@ export async function POST(request: Request) {
     try { if (!env.DB) throw new Error(); const profile = await readMemory(env.DB, user.userId); if (profile.enabled) memory = profile.notes; }
     catch { return reply({ error: 'Personal memory could not be checked. Retry before running your models.' }, 503); }
   }
+  try { if (funded.size) await assertWorkspaceCallsLeft(env, user.userId); }
+  catch (error) { return reply({ error: error instanceof CredentialError ? error.message : 'Included usage could not be checked. Try again.' }, error instanceof CredentialError ? error.status : 503); }
   const abort = new AbortController();
   const cancel = () => abort.abort();
   if (request.signal.aborted) cancel();
@@ -67,7 +75,7 @@ export async function POST(request: Request) {
     start(controller) {
       const emit = (event: RunEvent) => { if (!abort.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event.type === 'final' && event.result ? { ...event, result: { ...event.result, errors: [...credentialErrors, ...event.result.errors] } } : event) + '\n')); };
       for (const text of credentialErrors) emit({ type: 'error', text });
-      orchestrate({ ...parsed.data, memory }, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted) controller.close(); });
+      orchestrate({ ...parsed.data, memory, beforeCall: async id => { if (funded.has(id)) await chargeWorkspaceCalls(env, user.userId, 1); } }, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted) controller.close(); });
     },
     cancel() { abort.abort(); },
   });

@@ -3,7 +3,7 @@ import { evaluateQuality, evaluationReport, redactReport, type CaseReport, type 
 import type { QualityCase } from '../evaluation/cases.ts';
 import { blindReview } from '../evaluation/blind.ts';
 import { qualitySettings, suiteCases, qualityEstimate, type QualitySettings } from '../evaluation/hosted-config.ts';
-import { freshConnections, providers, type Connections, type ProviderId } from './trio.ts';
+import { freshConnections, providers, type ProviderId } from './trio.ts';
 import { readSavedConnections, resolveCredential } from './credential-store.ts';
 import { savedKeyReference } from './saved-connections.ts';
 

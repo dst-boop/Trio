@@ -66,6 +66,8 @@ The deployment can include provider access so invitees never handle API keys. Se
 
 Workspace keys never leave the server. The browser sends only the public reference `__TRIO_WORKSPACE_KEY__`; the authenticated worker substitutes the secret for requests pinned to the signed-in account, same-origin, and each provider's fixed endpoint, with redirects rejected as usual. The reference is refused as a saveable key and never appears in history, exports, or save receipts. Pasting a personal key (kept in the tab or saved to the account) overrides the included connection for that provider; deleting a saved key or clearing tab keys returns to the included connection. Access checks work on included connections without exposing the key.
 
+Included connections are capped per account at `TRIO_WORKSPACE_DAILY_CALLS` provider calls per UTC day (default 200; `0` removes the cap). Each provider request on an included key is counted just before it is sent, including a non-streaming retry after an interrupted stream and a Claude research continuation, so the cap bounds what is actually dispatched. Image generation, transcription, memory suggestions and action-plan drafts are one request each. Once the allowance is used up, new requests return 429 until 00:00 UTC, and a run already in progress treats further included-key requests as failed steps, keeping whatever completed; the user's own keys are never counted.
+
 Usage on included connections bills the workspace owner's provider accounts, so keep the audience invite-only and watch provider spending. In-app quality checks still require the account's own saved keys because their calls are pinned to saved-key revisions.
 
 ## Provider access checks

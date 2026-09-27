@@ -1,0 +1,36 @@
+'use client';
+import { useState, type Dispatch, type SetStateAction } from 'react';
+import { Check } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
+import { ProviderConnection } from '@/components/provider-connection';
+import { PreferencesStatus } from '@/components/preferences-status';
+import { toast } from 'sonner';
+import { providers, type Connections, type ProviderId } from '@/lib/trio';
+import type { useSavedConnections } from '@/components/use-saved-connections';
+import type { useWorkspacePreferences } from '@/components/use-workspace-preferences';
+
+type Props = {
+  open: boolean; onOpenChange: (open: boolean) => void;
+  account?: { userId: string }; busy: boolean; connected: number;
+  demo: boolean; temporaryDemo: boolean; onDemo: (value: boolean) => void;
+  preferences: ReturnType<typeof useWorkspacePreferences>;
+  savedConnections: ReturnType<typeof useSavedConnections>;
+  connections: Connections; onConnections: Dispatch<SetStateAction<Connections>>;
+  lead: ProviderId; onLead: (lead: ProviderId) => void;
+  remember: boolean; onRemember: (value: boolean) => void;
+  /** Clear keys typed into this tab; saved and included connections remain. */
+  onClearTabKeys: () => void;
+  onForgetAll: () => void;
+};
+
+/** Provider keys, Demo/Live, the preferred model and where history is kept. */
+export function ConnectionsDialog({ open, onOpenChange, account, busy, connected, demo, temporaryDemo, onDemo, preferences, savedConnections, connections, onConnections, lead, onLead, remember, onRemember, onClearTabKeys, onForgetAll }: Props) {
+  const [forgetKeys, setForgetKeys] = useState(false);
+  return <>
+    <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="connections-dialog"><DialogTitle>Connect your AI team</DialogTitle><DialogDescription>Use API keys from each provider. Consumer subscriptions and API billing are separate. Save keys to your account to use them on future visits. Saved keys are encrypted; unsaved keys stay in this tab until you reload.</DialogDescription><div className="connection-mode"><div><strong>Demo mode</strong><p>Explore the workflow with prepared examples.</p></div><Switch checked={demo} disabled={busy || preferences.loading} onCheckedChange={onDemo} aria-label="Demo mode" /></div><p className="connection-guidance">{Object.values(savedConnections.workspace).some(Boolean) ? 'Connections marked Included with Trio are ready to use — no API key needed. Turn off Demo mode to ask your own questions, and paste your own keys anytime to use your provider accounts instead.' : '1. Get an API key. 2. Paste it below, check access, and save to your account. 3. Turn off Demo mode to ask your own questions. One provider is enough to start.'}</p><p className="connection-guidance">{account ? "Demo/Live, answer mode and preferred model are remembered for your account. Returning never starts a run." : "Your mode and model choices last for this tab. Sign in to remember them across visits."}</p><PreferencesStatus preferences={preferences} busy={busy} temporaryDemo={temporaryDemo} /><p className="connection-guidance">Access checks look up model details. They do not verify billing, answer quality, or support for every Trio feature.</p>{account && <div className="connection-feedback" role="status">{savedConnections.loading ? "Loading saved connections…" : savedConnections.error || "Saved keys are private to this account."}<button className="subtle-button" disabled={busy || savedConnections.loading || Boolean(savedConnections.saving)} onClick={savedConnections.reload}>Reload saved connections</button></div>}{providers.map(p => <ProviderConnection key={p.id} id={p.id} connection={connections[p.id]} accountId={account?.userId} saved={savedConnections.metadata[p.id]} workspace={Boolean(savedConnections.workspace[p.id])} saving={savedConnections.saving === p.id} canSave={!savedConnections.loading && !savedConnections.error && !savedConnections.saving} onSave={() => void savedConnections.save(p.id, connections[p.id])} onRemove={() => void savedConnections.remove(p.id, connections[p.id])} disabled={busy || savedConnections.loading || Boolean(savedConnections.saving)} open={open} onChange={value => onConnections(c => ({ ...c, [p.id]: value }))} />)}<div className="lead-setting"><label>Preferred answer and synthesis model</label><Select value={lead} onValueChange={v => onLead(v as ProviderId)} disabled={busy || preferences.loading}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{providers.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></div>{account ? <div className="connection-mode"><div><strong>Saved to your account</strong><p>Conversations sync online. Keys you choose to save are encrypted separately; original attachment files are never saved.</p></div></div> : <div className="connection-mode"><div><strong>Remember sessions on this device</strong><p>Stores prompts and answers locally. API keys are never saved.</p></div><Switch checked={remember} onCheckedChange={onRemember} aria-label="Remember sessions on this device" /></div>}<div className="dialog-actions"><button className="subtle-button" disabled={busy || preferences.loading || savedConnections.loading || Boolean(savedConnections.saving)} onClick={() => { onClearTabKeys(); toast(account ? 'Keys cleared from this tab. Saved keys remain in your account.' : 'Keys cleared from this tab.'); }}>Clear keys from this tab</button>{account && <button className="subtle-button" disabled={busy || preferences.loading || savedConnections.loading || Boolean(savedConnections.saving) || Boolean(savedConnections.error) || !Object.values(savedConnections.metadata).some(item => item?.saved)} onClick={() => setForgetKeys(true)}>Forget all saved keys</button>}<button className="run-button" onClick={() => { onOpenChange(false); if (!demo && !connected) toast('Add at least one API key to run live.'); }}>Done<Check size={15} /></button></div></DialogContent></Dialog>
+    <AlertDialog open={forgetKeys} onOpenChange={setForgetKeys}><AlertDialogContent><AlertDialogTitle>Forget all saved keys?</AlertDialogTitle><AlertDialogDescription>This deletes saved provider keys from your Trio account and clears keys in this tab. Requests already running may finish. Your conversations are kept, and vendor keys are not revoked.</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep keys</AlertDialogCancel><AlertDialogAction disabled={busy || preferences.loading || savedConnections.loading || Boolean(savedConnections.saving)} onClick={() => { onForgetAll(); }}>Forget all saved keys</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+  </>;
+}

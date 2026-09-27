@@ -37,8 +37,9 @@ separate commands below; the ordinary build still produces the Sites app.
    Do not commit it or reuse the Sites encryption master.
 7. Optionally set `TRIO_WORKSPACE_OPENAI_KEY`, `TRIO_WORKSPACE_CLAUDE_KEY`,
    and `TRIO_WORKSPACE_GEMINI_KEY` with the same secret command. Included
-   connections bill the operator's provider account. Otherwise each user
-   adds their own keys in Connections.
+   connections bill the operator's provider account, capped per account at
+   `TRIO_WORKSPACE_DAILY_CALLS` provider calls per UTC day (default 200,
+   `0` for no cap). Otherwise each user adds their own keys in Connections.
 
 For updates: run checks, migrate, build, then deploy with the standalone
 commands. Deployment refuses a Sites build or configuration that has changed

@@ -54,8 +54,12 @@ class RateLimiter:
         self._hits: dict[str, deque[float]] = {}
         self._lock = asyncio.Lock()
 
-    async def retry_after(self, caller: str) -> int:
-        """Seconds this caller must wait, or 0 when the request may proceed."""
+    async def retry_after(self, caller: str, count: bool = True) -> int:
+        """Seconds this caller must wait, or 0 when the request may proceed.
+
+        count=False only looks: the caller is refused once over the limit,
+        but this request is not counted against them (see `note`).
+        """
         if self.per_minute <= 0:  # disabled
             return 0
         async with self._lock:
@@ -65,11 +69,19 @@ class RateLimiter:
                     seen.popleft()
                 if not seen:
                     del self._hits[who]
-            seen = self._hits.setdefault(caller, deque())
+            seen = self._hits.get(caller) or deque()
             if len(seen) >= self.per_minute:
                 return max(1, int(self.window - (now - seen[0])) + 1)
-            seen.append(now)
+            if count:
+                self._hits[caller] = seen
+                seen.append(now)
             return 0
+
+    async def note(self, caller: str) -> None:
+        """Count one event against a caller without checking the limit."""
+        if self.per_minute > 0:
+            async with self._lock:
+                self._hits.setdefault(caller, deque()).append(time.monotonic())
 
 
 def caller_address(request: Request) -> str:
@@ -90,6 +102,7 @@ def caller_address(request: Request) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.limiter = RateLimiter(int(os.getenv("ASK_RATE_LIMIT_PER_MINUTE", "20")))
+    app.state.password_failures = RateLimiter(int(os.getenv("PASSWORD_FAILURES_PER_MINUTE", "10")))
     app.state.conversations = ConversationStore(os.getenv("TRIO_DB", "./trio.db"))
     await asyncio.to_thread(app.state.conversations.initialize)
     # One shared connection pool for all outbound calls.
@@ -120,11 +133,25 @@ class AskRequest(BaseModel):
     synthesizer: Literal['claude', 'openai', 'gemini'] | None = None
 
 
-def check_password(supplied: str | None) -> None:
+async def check_password(request: Request, supplied: str | None) -> None:
     """If APP_PASSWORD is set, every API call must send it. Set it before deploying:
-    anyone who can reach /api/ask is spending your API credits."""
+    anyone who can reach /api/ask is spending your API credits.
+
+    Wrong guesses are counted per address across every endpoint that checks
+    the password, so a guesser cannot switch to a read-only route to escape
+    the /api/ask throttle. Only failures count: a correct password is never
+    slowed down by how often it is used.
+    """
     expected = os.getenv("APP_PASSWORD", "")
-    if expected and not hmac.compare_digest((supplied or "").encode(), expected.encode()):
+    if not expected:
+        return
+    failures, caller = app.state.password_failures, caller_address(request)
+    wait = await failures.retry_after(caller, count=False)
+    if wait:
+        raise HTTPException(429, "Too many wrong passwords from this address. Try again shortly.",
+                            headers={"Retry-After": str(wait)})
+    if not hmac.compare_digest((supplied or "").encode(), expected.encode()):
+        await failures.note(caller)
         raise HTTPException(401, "Wrong or missing password.")
 
 
@@ -145,8 +172,8 @@ async def conversation_page(conversation_id: str):
 
 
 @app.get("/api/conversations/{conversation_id}")
-async def get_conversation(conversation_id: str, x_app_password: str | None = Header(default=None)):
-    check_password(x_app_password)
+async def get_conversation(conversation_id: str, request: Request, x_app_password: str | None = Header(default=None)):
+    await check_password(request, x_app_password)
     saved = await asyncio.to_thread(app.state.conversations.get, conversation_id)
     if saved is None:
         raise HTTPException(404, "Conversation not found.")
@@ -154,8 +181,8 @@ async def get_conversation(conversation_id: str, x_app_password: str | None = He
 
 
 @app.delete("/api/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str, x_app_password: str | None = Header(default=None)):
-    check_password(x_app_password)  # holding the link is the authorization, same as reading
+async def delete_conversation(conversation_id: str, request: Request, x_app_password: str | None = Header(default=None)):
+    await check_password(request, x_app_password)  # holding the link is the authorization, same as reading
     deleted = await asyncio.to_thread(app.state.conversations.delete, conversation_id)
     if not deleted:
         raise HTTPException(404, "Conversation not found.")
@@ -163,8 +190,8 @@ async def delete_conversation(conversation_id: str, x_app_password: str | None =
 
 
 @app.get("/api/status")
-async def status(x_app_password: str | None = Header(default=None)):
-    check_password(x_app_password)
+async def status(request: Request, x_app_password: str | None = Header(default=None)):
+    await check_password(request, x_app_password)
     return {
         "models": [{"key": p.key, "label": p.label, "model": p.model} for p in active_providers()],
         "synthesizer": os.getenv("SYNTHESIZER", "claude"),
@@ -179,7 +206,7 @@ async def ask(req: AskRequest, request: Request, x_app_password: str | None = He
     if wait:
         raise HTTPException(429, "Too many questions from this address. Try again shortly.",
                             headers={"Retry-After": str(wait)})
-    check_password(x_app_password)
+    await check_password(request, x_app_password)
     configured = {provider.key for provider in active_providers()}
     if req.models is not None and (len(set(req.models)) != len(req.models) or not set(req.models) <= configured):
         raise HTTPException(422, "Choose unique models from the configured roster.")

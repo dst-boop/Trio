@@ -51,14 +51,14 @@ for (const id of ['openai', 'claude', 'gemini'] as const) {
 
 test('Claude initial usage alone does not masquerade as final token totals', async () => {
   let usage: unknown = 'unset';
-  const fetcher = (async () => sse(fixture('claude').filter((e: any) => e.type !== 'message_delta'))) as typeof fetch;
+  const fetcher = (async () => sse(fixture('claude').filter(e => !('type' in e) || e.type !== 'message_delta'))) as typeof fetch;
   await callProvider('claude', 'k', 'm', 's', 'q', signal(), fetcher, u => usage = u, () => {});
   assert.equal(usage, null);
 });
 
 test('Claude context-window truncations are rejected in streaming and regular responses', async () => {
   const stop_reason = 'model_context_window_exceeded';
-  const streamed = fixture('claude').map((e: any) => e.delta?.stop_reason ? { ...e, delta: { stop_reason } } : e);
+  const streamed = fixture('claude').map(e => 'delta' in e && typeof e.delta === 'object' && 'stop_reason' in e.delta && e.delta.stop_reason ? { ...e, delta: { stop_reason } } : e);
   await assert.rejects(callProvider('claude', 'k', 'm', 's', 'q', signal(), (async () => sse(streamed)) as typeof fetch, undefined, () => {}), /interrupted/);
   await assert.rejects(callProvider('claude', 'k', 'm', 's', 'q', signal(), (async () => Response.json({ stop_reason, content: [{ type: 'text', text: 'Cut off' }] })) as typeof fetch), /did not complete/);
 });
@@ -82,7 +82,7 @@ function setup() {
   return { question: 'Plan?', connections, mode: 'deep' as const, lead: 'claude' as const };
 }
 test('Deep Council streams every phase while only completed answers enter later prompts', async () => {
-  const events: RunEvent[] = [], calls: any[] = [];
+  const events: RunEvent[] = [], calls: unknown[] = [];
   const fetcher = (async (url, init) => {
     const id: ProviderId = String(url).includes('openai') ? 'openai' : String(url).includes('anthropic') ? 'claude' : 'gemini';
     const body = JSON.parse(init!.body as string); calls.push(body);
@@ -98,7 +98,7 @@ test('Deep Council streams every phase while only completed answers enter later 
 
 test('broken stream retries once, clears partial output, and counts unknown billed usage', async () => {
   const input = setup(); input.connections.claude.enabled = false; input.connections.gemini.enabled = false;
-  const events: RunEvent[] = [], bodies: any[] = [];
+  const events: RunEvent[] = [], bodies: unknown[] = [];
   const fetcher = (async (_url, init) => {
     const body = JSON.parse(init!.body as string); bodies.push(body);
     if (bodies.length === 1) return sse([{ type: 'response.output_text.delta', delta: 'Broken draft' }]);
@@ -106,8 +106,10 @@ test('broken stream retries once, clears partial output, and counts unknown bill
     assert.ok(body.input.includes('Recovered draft')); assert.ok(!body.input.includes('Broken draft'));
     return sse(fixture('openai', 'Final answer'));
   }) as typeof fetch;
-  const result = await orchestrate({ ...input, mode: 'fast' }, e => events.push(e), signal(), fetcher);
+  const charged: ProviderId[] = [];
+  const result = await orchestrate({ ...input, mode: 'fast', beforeCall: async id => { charged.push(id); } }, e => events.push(e), signal(), fetcher);
   assert.equal(result.usage?.calls, 3); assert.equal(result.usage?.reportedCalls, 2); assert.equal(result.usage?.costUSD, null);
+  assert.deepEqual(charged, ['openai', 'openai', 'openai'], 'the non-streaming retry is charged like any other request');
   assert.equal(result.drafts.openai, 'Recovered draft'); assert.match(result.errors.join(), /retrying once/);
   const starts = events.filter(e => e.type === 'contribution_start' && e.phase === 'draft'); assert.equal(starts.length, 2);
   let view = empty();
@@ -148,4 +150,14 @@ test('an idle stream can be cancelled before any text arrives', async () => {
   const pending = callProvider('openai', 'k', 'm', 's', 'q', controller.signal, (async () => response) as typeof fetch, undefined, () => {});
   setTimeout(() => controller.abort(), 5);
   await assert.rejects(pending, /abort/i); assert.equal(cancelled, true);
+});
+
+test('a refused beforeCall sends nothing and fails only that request', async () => {
+  const input = setup(); input.connections.gemini.enabled = false;
+  const sent: string[] = [];
+  const fetcher = (async url => { sent.push(String(url)); return String(url).includes('openai') ? sse(fixture('openai', 'OpenAI draft')) : sse(fixture('claude', 'Claude draft')); }) as typeof fetch;
+  const result = await orchestrate({ ...input, mode: 'compare', beforeCall: async id => { if (id === 'claude') throw new Error('Included usage is used up.'); } }, () => {}, signal(), fetcher);
+  assert.equal(sent.length, 1); assert.ok(sent[0].includes('openai'));
+  assert.equal(result.drafts.openai, 'OpenAI draft'); assert.equal(result.drafts.claude, undefined);
+  assert.ok(result.errors.some(e => e.includes('Included usage is used up.')));
 });

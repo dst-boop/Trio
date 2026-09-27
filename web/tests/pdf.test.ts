@@ -27,14 +27,17 @@ test('PDF file loading checks size before reading, handles failures, and sanitiz
   await assert.rejects(readPdfFile(failed), e => e instanceof Error && /Could not read/.test(e.message) && !e.message.includes('secret path'));
 });
 
-function assertBody(id: ProviderId, body: any, withImage = false) {
-  const content = id === 'openai' ? body.input[0].content : id === 'claude' ? body.messages[0].content : body.input;
+/** The parts of a provider request body these assertions read; OpenAI nests parts under input[0].content. */
+type Part = { type: string; text: string; image_url?: string; content?: Part[] };
+type ProviderRequest = { messages: { content: Part[] }[]; input: Part[]; store?: boolean };
+function assertBody(id: ProviderId, body: ProviderRequest, withImage = false) {
+  const content = id === 'openai' ? body.input[0].content! : id === 'claude' ? body.messages[0].content : body.input;
   if (id === 'openai') { assert.deepEqual(content[0], { type: 'input_file', filename: 'document.pdf', file_data: `data:application/pdf;base64,${pdf.data}` }); assert.equal(body.store, false); }
   else if (id === 'claude') assert.deepEqual(content[0], { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf.data } });
   else { assert.deepEqual(content[0], { type: 'document', mime_type: 'application/pdf', data: pdf.data }); assert.equal(body.store, false); }
   assert.equal(content.length, withImage ? 3 : 2);
   if (withImage) assert.ok(JSON.stringify(content[1]).includes(image.data));
-  assert.ok(!content.at(-1).text.includes(pdf.data)); return content.at(-1).text as string;
+  const last = content.at(-1)!; assert.ok(!last.text.includes(pdf.data)); return last.text;
 }
 function response(id: ProviderId) {
   const text = 'Document finding, page 1';

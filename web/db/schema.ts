@@ -79,3 +79,9 @@ export const workComparisonPhases = sqliteTable('work_comparison_phases', {
   step: integer('step').notNull(),
   report: text('report').notNull(),
 }, t => [primaryKey({columns:[t.userId,t.runId,t.step]})]);
+
+export const workspaceUsage = sqliteTable('workspace_usage', {
+  userId: text('user_id').notNull(),
+  day: text('day').notNull(),
+  calls: integer('calls').notNull().default(0),
+}, t => [primaryKey({ columns: [t.userId, t.day] })]);

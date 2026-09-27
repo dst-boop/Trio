@@ -71,6 +71,7 @@ see [.env.example](.env.example) for the full list.
 | `MODEL_TIMEOUT_SECONDS` | `240` | Per-call timeout |
 | `MAX_CONCURRENT_RUNS` | `8` | Simultaneous questions per server instance |
 | `ASK_RATE_LIMIT_PER_MINUTE` | `20` | Questions per minute from one address; `0` disables |
+| `PASSWORD_FAILURES_PER_MINUTE` | `10` | Wrong `APP_PASSWORD` guesses one address may make per minute, across every endpoint, before it is locked out; `0` disables |
 | `TRUST_PROXY_HEADER` | off | `1` = read the caller's address from `X-Forwarded-For` |
 | `TRIO_DB` | `./trio.db` | SQLite file for saved conversations; use a persistent volume in containers |
 
@@ -109,6 +110,9 @@ health check. If `APP_PASSWORD` is set, send it as the `X-App-Password` header.
 `Retry-After` header once the cap is reached. The count is kept in the server
 process, so running several instances allows the limit on each one, and it is
 counted before the password check so guessing the password is throttled too.
+Wrong passwords are also counted per address on every password-checked
+endpoint (`PASSWORD_FAILURES_PER_MINUTE`, 10 by default), so `/api/status` and
+the conversation routes cannot be used to guess it either.
 Behind a proxy every caller shares the proxy's address until you set
 `TRUST_PROXY_HEADER=1`; leave it off otherwise, because an unverified
 `X-Forwarded-For` is attacker-controlled and would defeat the limit entirely.

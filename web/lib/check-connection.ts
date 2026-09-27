@@ -22,7 +22,7 @@ export async function checkConnection(input: unknown, signal: AbortSignal, fetch
       if (provider === 'gemini' && response.status === 400) {
         try {
           const data = await readProviderJson(response, combined, 16_384);
-          const details = data.error?.details;
+          const details = (data.error as { details?: unknown } | null | undefined)?.details;
           if (Array.isArray(details) && details.some(detail => detail?.['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && detail.domain === 'googleapis.com' && detail.reason === 'API_KEY_INVALID')) return 'geminiKey';
         } catch { combined.throwIfAborted(); }
         return 'rejected';

@@ -8,7 +8,7 @@ export function setAnswerFeedback(sessions: Session[], sessionId: string, index:
   const parsed = feedback === null ? undefined : answerFeedbackSchema.parse(feedback);
   const updated = sessions.map(s => s.id !== sessionId ? s : { ...s, turns: s.turns.map((t, i) => {
     if (i !== index) return t;
-    const { feedback: previous, ...rest } = t;
+    const rest = { ...t }; delete rest.feedback;
     return parsed ? { ...rest, feedback: parsed } : rest;
   }) });
   serializeSessions(updated); // Reject an over-capacity edit before changing the UI.
