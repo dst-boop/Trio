@@ -9,7 +9,10 @@ import { personalMemoryRule } from './memory.ts';
 import { currentTimeContext, currentTimeRule } from './current-time.ts';
 import { readResearch, ResearchPaused, selectResearchProvider, type ResearchChoice, type Research } from './research.ts';
 
-export type Input = { question: string; timeZone?: string; memory?: string; instructions?: string; context?: string; image?: ImageInput; pdf?: PdfInput; webResearch?: boolean; researchProvider?: ResearchChoice; history?: { role: 'user' | 'assistant'; content: string }[]; connections: Connections; mode: Mode; lead: ProviderId; reviewAnswer?: string };
+export type Input = {
+  /** Runs before every provider request, retries and continuations included; throwing fails that request. */
+  beforeCall?: (provider: ProviderId) => Promise<void>;
+  question: string; timeZone?: string; memory?: string; instructions?: string; context?: string; image?: ImageInput; pdf?: PdfInput; webResearch?: boolean; researchProvider?: ResearchChoice; history?: { role: 'user' | 'assistant'; content: string }[]; connections: Connections; mode: Mode; lead: ProviderId; reviewAnswer?: string };
 export async function callProvider(id: ProviderId, key: string, model: string, instructions: string, input: string, signal: AbortSignal, fetcher: typeof fetch = fetch, onUsage?: (tokens: Tokens | null) => void, onDelta?: (text: string) => void, image?: ImageInput, onResearch?: (research: Research) => void, continuation?: unknown[], pdf?: PdfInput): Promise<string> {
   if (onResearch && id === 'gemini') throw new Error('Shared web research supports OpenAI and Claude.');
   if (continuation && (!onResearch || id !== 'claude')) throw new Error('Invalid research continuation.');
@@ -96,7 +99,7 @@ export async function orchestrate(input: Input, emit: (event: RunEvent) => void,
     const c = input.connections[id];
     const total = usage[id] ??= { model: c.model, calls: 0, reportedCalls: 0, inputTokens: 0, outputTokens: 0, costUSD: 0 };
     const attempt = async (stream: boolean, continuation?: unknown[]) => {
-      signal.throwIfAborted(); total.calls++;
+      signal.throwIfAborted(); await input.beforeCall?.(id); total.calls++;
       emit({ type: 'contribution_start', phase, provider: id });
       let recorded = false;
       try { return await callProvider(id, c.key, c.model, system, prompt, signal, fetcher, tokens => {

@@ -2,8 +2,8 @@ import { CredentialError } from './credential-store.ts';
 
 // Workspace-provided keys are paid by the operator, so each account gets a daily
 // allowance of provider calls made with them. Users' own keys are never counted.
-// The count is a reservation made before any provider is called: a run that fails
-// or is cancelled still uses its share, so the operator's worst case stays bounded.
+// Every provider request is charged just before it is sent, retries and research
+// continuations included, so the cap bounds what is actually dispatched.
 export const defaultDailyWorkspaceCalls = 200;
 export type WorkspaceBudgetEnv = { DB?: D1Database; TRIO_WORKSPACE_DAILY_CALLS?: string };
 
@@ -13,13 +13,7 @@ export function dailyWorkspaceCalls(env: WorkspaceBudgetEnv) {
   return /^\d{1,7}$/.test(raw) ? Number(raw) : defaultDailyWorkspaceCalls;
 }
 
-// Upper-bound provider calls per workspace-funded model for one ask, by mode:
-// Single and Compare answer once; Quick adds a synthesis; Council adds a review;
-// Deep Council adds a revision round. Web research is one more call when funded.
-const callsPerModel = { single: 1, compare: 1, fast: 2, council: 3, deep: 4 } as const;
-export const askWorkspaceCalls = (mode: keyof typeof callsPerModel, fundedModels: number, fundedResearch: boolean) =>
-  fundedModels * callsPerModel[mode] + (fundedResearch ? 1 : 0);
-
+const usedUp = (limit: number) => new CredentialError(`Today's included usage is used up (${limit} provider calls per day, reset at 00:00 UTC). Add your own API key in Connections to keep going.`, 429);
 export const utcDay = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
 /** Reserve `calls` from today's allowance, or throw a 429 CredentialError when it would be exceeded. */
@@ -34,5 +28,14 @@ export async function chargeWorkspaceCalls(env: WorkspaceBudgetEnv, userId: stri
     + 'ON CONFLICT (user_id, day) DO UPDATE SET calls = calls + excluded.calls WHERE workspace_usage.calls + excluded.calls <= ?4 '
     + 'RETURNING calls',
   ).bind(userId, utcDay(now), calls, limit).first<{ calls: number }>();
-  if (!row) throw new CredentialError(`Today's included usage is used up (${limit} provider calls per day, reset at 00:00 UTC). Add your own API key in Connections to keep going.`, 429);
+  if (!row) throw usedUp(limit);
+}
+
+/** Refuse up front when today's allowance is already used up, before a run starts. */
+export async function assertWorkspaceCallsLeft(env: WorkspaceBudgetEnv, userId: string, now = Date.now()) {
+  const limit = dailyWorkspaceCalls(env);
+  if (limit === 0) return;
+  if (!env.DB) throw new CredentialError('Included connections are unavailable because usage could not be checked. Add your own API key in Connections.', 503);
+  const row = await env.DB.prepare('SELECT calls FROM workspace_usage WHERE user_id = ? AND day = ?').bind(userId, utcDay(now)).first<{ calls: number }>();
+  if ((row?.calls ?? 0) >= limit) throw usedUp(limit);
 }

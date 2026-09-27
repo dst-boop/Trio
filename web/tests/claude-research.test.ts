@@ -52,7 +52,9 @@ test('one paused search continues unchanged only with Claude and counts both cal
     }
     otherPrompts.push(JSON.stringify(body)); return answer();
   }) as typeof fetch;
-  const result = await orchestrate({ question: 'Current evidence?', webResearch: true, researchProvider: 'claude', connections: connections(), mode: 'deep', lead: 'gemini' }, e => events.push(e), signal(), fetcher);
+  let charged = 0;
+  const result = await orchestrate({ question: 'Current evidence?', webResearch: true, researchProvider: 'claude', connections: connections(), mode: 'deep', lead: 'gemini', beforeCall: async () => { charged++; } }, e => events.push(e), signal(), fetcher);
+  assert.equal(charged, 12, 'the research continuation is charged too');
   assert.equal(searches, 2); assert.equal(otherPrompts.length, 10); assert.equal(result.usage!.calls, 12); assert.equal(result.usage!.reportedCalls, 12); assert.equal(result.usage!.costUSD, null);
   assert.equal(result.researchBy, 'claude'); assert.equal(result.research!.provider, 'claude'); assert.equal(events[0].provider, 'claude');
   for (const prompt of otherPrompts) { assert.ok(prompt.includes('A supported finding.')); assert.ok(!prompt.includes('opaque-provider-only')); assert.ok(!prompt.includes('opaque-citation-index')); }

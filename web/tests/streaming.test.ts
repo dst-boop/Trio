@@ -106,8 +106,10 @@ test('broken stream retries once, clears partial output, and counts unknown bill
     assert.ok(body.input.includes('Recovered draft')); assert.ok(!body.input.includes('Broken draft'));
     return sse(fixture('openai', 'Final answer'));
   }) as typeof fetch;
-  const result = await orchestrate({ ...input, mode: 'fast' }, e => events.push(e), signal(), fetcher);
+  const charged: ProviderId[] = [];
+  const result = await orchestrate({ ...input, mode: 'fast', beforeCall: async id => { charged.push(id); } }, e => events.push(e), signal(), fetcher);
   assert.equal(result.usage?.calls, 3); assert.equal(result.usage?.reportedCalls, 2); assert.equal(result.usage?.costUSD, null);
+  assert.deepEqual(charged, ['openai', 'openai', 'openai'], 'the non-streaming retry is charged like any other request');
   assert.equal(result.drafts.openai, 'Recovered draft'); assert.match(result.errors.join(), /retrying once/);
   const starts = events.filter(e => e.type === 'contribution_start' && e.phase === 'draft'); assert.equal(starts.length, 2);
   let view = empty();
@@ -148,4 +150,14 @@ test('an idle stream can be cancelled before any text arrives', async () => {
   const pending = callProvider('openai', 'k', 'm', 's', 'q', controller.signal, (async () => response) as typeof fetch, undefined, () => {});
   setTimeout(() => controller.abort(), 5);
   await assert.rejects(pending, /abort/i); assert.equal(cancelled, true);
+});
+
+test('a refused beforeCall sends nothing and fails only that request', async () => {
+  const input = setup(); input.connections.gemini.enabled = false;
+  const sent: string[] = [];
+  const fetcher = (async url => { sent.push(String(url)); return String(url).includes('openai') ? sse(fixture('openai', 'OpenAI draft')) : sse(fixture('claude', 'Claude draft')); }) as typeof fetch;
+  const result = await orchestrate({ ...input, mode: 'compare', beforeCall: async id => { if (id === 'claude') throw new Error('Included usage is used up.'); } }, () => {}, signal(), fetcher);
+  assert.equal(sent.length, 1); assert.ok(sent[0].includes('openai'));
+  assert.equal(result.drafts.openai, 'OpenAI draft'); assert.equal(result.drafts.claude, undefined);
+  assert.ok(result.errors.some(e => e.includes('Included usage is used up.')));
 });

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
-import { askWorkspaceCalls, chargeWorkspaceCalls, dailyWorkspaceCalls, defaultDailyWorkspaceCalls } from '../lib/workspace-budget.ts';
+import { assertWorkspaceCallsLeft, chargeWorkspaceCalls, dailyWorkspaceCalls, defaultDailyWorkspaceCalls } from '../lib/workspace-budget.ts';
 
 function database() {
   const sql = new DatabaseSync(':memory:');
@@ -51,11 +51,16 @@ test('zero calls, a disabled cap and a missing database behave predictably', asy
   for (const bad of ['-1', 'lots', '1e3', '12345678']) assert.equal(dailyWorkspaceCalls({ TRIO_WORKSPACE_DAILY_CALLS: bad }), defaultDailyWorkspaceCalls);
 });
 
-test('an ask reserves its worst case per included model and mode', () => {
-  assert.equal(askWorkspaceCalls('single', 1, false), 1);
-  assert.equal(askWorkspaceCalls('compare', 3, false), 3);
-  assert.equal(askWorkspaceCalls('fast', 3, false), 6);
-  assert.equal(askWorkspaceCalls('council', 2, true), 7);
-  assert.equal(askWorkspaceCalls('deep', 3, true), 13);
-  assert.equal(askWorkspaceCalls('deep', 0, false), 0);
+test('a run is refused up front only once the allowance is fully used', async () => {
+  const { db, sql } = database();
+  try {
+    const env = { DB: db, TRIO_WORKSPACE_DAILY_CALLS: '2' };
+    await assertWorkspaceCallsLeft(env, 'alice', noon);
+    await chargeWorkspaceCalls(env, 'alice', 1, noon);
+    await assertWorkspaceCallsLeft(env, 'alice', noon);
+    await chargeWorkspaceCalls(env, 'alice', 1, noon);
+    await assert.rejects(assertWorkspaceCallsLeft(env, 'alice', noon), (e: Error & { status?: number }) => e.status === 429);
+    await assertWorkspaceCallsLeft(env, 'alice', nextDay);
+    await assertWorkspaceCallsLeft({ TRIO_WORKSPACE_DAILY_CALLS: '0' }, 'alice');
+  } finally { sql.close(); }
 });
