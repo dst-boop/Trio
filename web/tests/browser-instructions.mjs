@@ -59,9 +59,9 @@ try {
   await mkdir('test-output', { recursive: true }); await page.locator('.session-instructions').screenshot({ path: 'test-output/instructions-mobile.png' });
   const base = { question: 'q', connections: Object.fromEntries(['openai', 'claude', 'gemini'].map(id => [id, { key: '', model: 'model', enabled: true }])), mode: 'fast', lead: 'openai' };
   for (const instructions of ['x'.repeat(6001), { text: 'not a string' }]) {
-    const response = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, instructions } }); assert.equal(response.status(), 400); assert.match((await response.json()).error, /session instructions/);
+    const response = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl }, data: { ...base, instructions } }); assert.equal(response.status(), 400); assert.match((await response.json()).error, /session instructions/);
   }
-  const valid = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, instructions: 'x'.repeat(6000) } }); assert.match((await valid.json()).error, /Connect at least one/);
+  const valid = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl }, data: { ...base, instructions: 'x'.repeat(6000) } }); assert.match((await valid.json()).error, /Connect at least one/);
   assert.equal(requests.length, 4); assert.deepEqual(errors, []);
 } finally { await browser.close(); }
 console.log('Session-instruction browser checks passed: demo separation, live payloads, snapshots, editing and clearing, refresh, session isolation, history, backups, literal text, mobile, API limits.');

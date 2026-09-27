@@ -44,7 +44,7 @@ await page.getByRole('dialog').waitFor({ state: 'hidden' });
 await page.setViewportSize({ width: 390, height: 844 });
 await page.screenshot({ path: 'test-output/mobile.png', fullPage: true });
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'No mobile overflow');
-const bad = await page.request.post(`${baseUrl}/api/ask`, { data: { question: 'x' } });
+const bad = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl }, data: { question: 'x' } });
 assert.equal(bad.status(), 400);
 const crossOrigin = await page.request.post(`${baseUrl}/api/ask`, { headers: { origin: 'https://example.com' }, data: {} });
 assert.equal(crossOrigin.status(), 403);

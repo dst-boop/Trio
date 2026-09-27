@@ -68,11 +68,11 @@ try {
   assert.equal(await page.getByAltText('Attached image preview').count(), 0);
   const base = { question: 'q', connections: Object.fromEntries(['openai', 'claude', 'gemini'].map(id => [id, { key: '', model: 'model', enabled: true }])), mode: 'fast', lead: 'openai' };
   for (const image of [{ mimeType: 'image/png', data: 'https://example.com/a.png' }, { mimeType: 'image/svg+xml', data: btoa('<svg></svg>') }, { mimeType: 'image/jpeg', data: png.toString('base64') }]) {
-    const response = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, image } }); assert.equal(response.status(), 400); assert.match((await response.json()).error, /image format/);
+    const response = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl }, data: { ...base, image } }); assert.equal(response.status(), 400); assert.match((await response.json()).error, /image format/);
   }
-  const valid = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, image: { mimeType: 'image/png', data: png.toString('base64') } } });
+  const valid = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl }, data: { ...base, image: { mimeType: 'image/png', data: png.toString('base64') } } });
   assert.equal(valid.status(), 400); assert.match((await valid.json()).error, /Connect at least one/);
-  const huge = await page.request.post(`${baseUrl}/api/ask`, { headers: { 'Content-Type': 'application/json' }, data: 'x'.repeat(8_000_001) }); assert.equal(huge.status(), 413);
+  const huge = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl, 'Content-Type': 'application/json' }, data: 'x'.repeat(8_000_001) }); assert.equal(huge.status(), 413);
   assert.equal(calls, 3); assert.deepEqual(errors, []);
 } finally { await browser.close(); }
 console.log('Image browser checks passed: preview, demo separation, text plus image, follow-ups, removal, metadata-only persistence, session isolation, late decode, API validation, mobile.');
