@@ -11,9 +11,10 @@ type SaveState = { revision: number; saved: string; pending: string; saving: boo
 export function useAccountWorkspace(accountId: string | undefined, sessions: Session[], restore: (sessions: Session[]) => void) {
   const enabled = Boolean(accountId);
   const [ready, setReady] = useState(false), [status, setStatus] = useState('Loading your workspace…'), [error, setError] = useState('');
-  const [conflict, setConflict] = useState(false), [tick, setTick] = useState(0);
+  const [conflict, setConflict] = useState(false), [tick, setTick] = useState(0), [revision, setRevision] = useState(0);
   const state = useRef<SaveState>({ revision: 0, saved: '', pending: '', saving: false, blocked: false });
-  const restoreRef = useRef(restore); restoreRef.current = restore;
+  const restoreRef = useRef(restore);
+  useEffect(() => { restoreRef.current = restore; });
   const alive = useRef(true);
   const flush = useCallback(async () => {
     const s = state.current;
@@ -29,16 +30,18 @@ export function useAccountWorkspace(accountId: string | undefined, sessions: Ses
         const data = await response.json();
         if (!response.ok) { setConflict(response.status === 409); throw new Error(responseError(data, 'Could not save. Download a backup before closing this tab.')); }
         const revision = z.object({ revision: z.literal(attempt.revision + 1) }).parse(data).revision;
-        s.revision = revision; s.saved = attempt.snapshot; s.attempt = undefined;
+        s.revision = revision; s.saved = attempt.snapshot; s.attempt = undefined; setRevision(revision);
       }
       if (alive.current && !s.blocked) { setStatus('Saved to your account'); setError(''); }
     } catch (e) { s.blocked = true; if (alive.current) { setError(e instanceof DOMException && e.name === 'TimeoutError' ? 'Saving timed out. Retry to check whether the save completed, or download a backup.' : e instanceof Error ? e.message : 'Could not save your workspace.'); setStatus('Changes not saved'); } }
     finally { s.saving = false; }
   }, [accountId]);
+  // A new account or reload shows the loading state before its request starts.
+  const [loadFor, setLoadFor] = useState({ accountId, tick });
+  if (loadFor.accountId !== accountId || loadFor.tick !== tick) { setLoadFor({ accountId, tick }); if (accountId) { setReady(false); setError(''); setStatus('Loading your workspace…'); } }
   useEffect(() => {
     if (!enabled) return;
     alive.current = true; let cancelled = false;
-    setReady(false); setError(''); setStatus('Loading your workspace…');
     fetch('/api/workspace', { cache: 'no-store', signal: AbortSignal.timeout(30_000), headers: { 'X-Trio-Account': accountId! } }).then(async response => {
       const data = await response.json(); if (!response.ok) throw new Error(responseError(data, 'Could not load your workspace.'));
       const payload = z.object({ revision: z.number(), sessions: z.unknown(), accountId: z.string() }).parse(data);
@@ -46,13 +49,14 @@ export function useAccountWorkspace(accountId: string | undefined, sessions: Ses
       const snapshot = workspaceSchema.parse({ revision: payload.revision, sessions: payload.sessions }); if (cancelled) return;
       const serialized = serializeSessions(snapshot.sessions);
       state.current = { revision: snapshot.revision, saved: serialized, pending: serialized, saving: false, blocked: false };
-      restoreRef.current(snapshot.sessions); setReady(true); setConflict(false); setStatus('Saved to your account');
+      setRevision(snapshot.revision); restoreRef.current(snapshot.sessions); setReady(true); setConflict(false); setStatus('Saved to your account');
     }).catch(e => { if (!cancelled) { setError(e instanceof Error ? e.message : 'Could not load your workspace.'); setStatus('Workspace unavailable'); } });
     return () => { cancelled = true; alive.current = false; };
   }, [enabled, accountId, tick]);
   useEffect(() => {
     if (!enabled || !ready) return;
     try { state.current.pending = serializeSessions(sessions); }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reports the outcome of queueing this snapshot on the save queue (a ref shared with async flushes).
     catch { state.current.blocked = true; setError('This workspace exceeds the save limit. Download a backup and remove older sessions.'); setStatus('Changes not saved'); return; }
     if (state.current.pending === state.current.saved || state.current.blocked) return;
     setStatus('Saving…'); const timer = setTimeout(() => { void flush(); }, 450);
@@ -65,7 +69,7 @@ export function useAccountWorkspace(accountId: string | undefined, sessions: Ses
     window.addEventListener('beforeunload', warn); document.addEventListener('visibilitychange', hidden);
     return () => { window.removeEventListener('beforeunload', warn); document.removeEventListener('visibilitychange', hidden); };
   }, [enabled, flush]);
-  return { ready, status, error, conflict, revision: state.current.revision, reload: () => setTick(t => t + 1), retry: () => {
+  return { ready, status, error, conflict, revision, reload: () => setTick(t => t + 1), retry: () => {
     try { state.current.pending = serializeSessions(sessions); }
     catch { setError('This workspace exceeds the save limit. Download a backup and remove older sessions.'); return; }
     state.current.blocked = false; setError(''); void flush();

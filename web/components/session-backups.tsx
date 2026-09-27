@@ -14,7 +14,9 @@ export function SessionBackups({ sessions, busy, remember, account = false, open
   const chosen = useMemo(() => incoming.filter(s => selected.includes(s.id)), [incoming, selected]);
   const plan = useMemo(() => chosen.length ? planImport(sessions, chosen) : { sessions, added: 0, skipped: 0, copies: 0, overCapacity: false, fitsLocalHistory: true }, [sessions, chosen]);
   useEffect(() => () => { version.current++; }, []);
-  useEffect(() => { version.current++; setLoading(false); setError(''); setIncoming([]); setSelected([]); setFilename(''); }, [open]);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) { setWasOpen(open); setLoading(false); setError(''); setIncoming([]); setSelected([]); setFilename(''); }
+  useEffect(() => { version.current++; }, [open]);
   function changeOpen(value: boolean) {
     version.current++; onOpenChange(value);
   }

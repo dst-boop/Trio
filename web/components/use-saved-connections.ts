@@ -11,17 +11,20 @@ export function useSavedConnections(accountId: string | undefined, setConnection
   const [loading, setLoading] = useState(Boolean(accountId)), [error, setError] = useState('');
   const [saving, setSaving] = useState<ProviderId | 'all' | null>(null);
   const active = useRef<AbortController | null>(null);
-  const account = useRef(accountId); account.current = accountId;
-  const loadedAccount = useRef(accountId);
+  const account = useRef(accountId);
+  useEffect(() => { account.current = accountId; }, [accountId]);
   const [generation, setGeneration] = useState(0);
   const reload = useCallback(() => setGeneration(value => value + 1), []);
+  // Another account's keys never carry over; each (re)load starts from a clean, loading view.
+  const [loadFor, setLoadFor] = useState({ accountId, generation });
+  if (loadFor.accountId !== accountId || loadFor.generation !== generation) {
+    setLoadFor({ accountId, generation });
+    if (loadFor.accountId !== accountId) { setConnections(freshConnections()); setMetadata({}); setWorkspace({}); setSaving(null); setError(''); }
+    if (!accountId) { setMetadata({}); setWorkspace({}); setLoading(false); } else { setLoading(true); setError(''); }
+  }
   useEffect(() => {
-    if (loadedAccount.current !== accountId) {
-      setConnections(freshConnections()); setMetadata({}); setWorkspace({}); setSaving(null); setError(''); loadedAccount.current = accountId;
-    }
-    if (!accountId) { setMetadata({}); setWorkspace({}); setLoading(false); return; }
+    if (!accountId) return;
     const controller = new AbortController(); active.current?.abort(); active.current = controller;
-    setLoading(true); setError('');
     void (async () => {
       try {
         const response = await fetch('/api/connections', { headers: { 'X-Trio-Account': accountId }, cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) });

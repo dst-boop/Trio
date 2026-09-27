@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { providers, type Mode, type ProviderId } from '@/lib/trio';
 
 type Choice = { title: string; desc: string; calls: string };
-export function AnswerControls({ mode, lead, modes, loading, busy, runMode, demo, research, onMode, onLead }: { mode: Mode; lead: ProviderId; modes: Record<Mode, Choice>; loading: boolean; busy: boolean; runMode: Mode; demo: boolean; research: boolean; onMode: (mode: Mode) => void; onLead: (lead: ProviderId) => void }) {
+export function AnswerControls({ mode, lead, modes, loading, busy, runMode, demo, onMode, onLead }: { mode: Mode; lead: ProviderId; modes: Record<Mode, Choice>; loading: boolean; busy: boolean; runMode: Mode; demo: boolean; research: boolean; onMode: (mode: Mode) => void; onLead: (lead: ProviderId) => void }) {
   const id = useId();
   return <section className="answer-controls" aria-label="Next answer settings">
     <span className="sr-only">{busy ? `Next question’s settings. ${modes[runMode].title} is running.` : 'Answer settings'}</span>

@@ -18,7 +18,8 @@ export function QualityCheck({accountId,open,onOpenChange,live,onConnections}:{a
   const [runs,setRuns]=useState<QualityRun[]>([]),[current,setCurrent]=useState<QualityRun|null>(null);
   const [report,setReport]=useState<Report|null>(null),[error,setError]=useState('');
   const [revealId,setRevealId]=useState<string|null>(null);
-  useEffect(()=>{setRevealId(null);},[open,accountId,current?.id]);
+  const [revealFor,setRevealFor]=useState({open,accountId,run:current?.id});
+  if(revealFor.open!==open||revealFor.accountId!==accountId||revealFor.run!==current?.id){setRevealFor({open,accountId,run:current?.id});setRevealId(null);}
   const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[executing,setExecuting]=useState(false),[paused,setPaused]=useState(false);
   const version=useRef(0),continueRun=useRef(false),startId=useRef(crypto.randomUUID());
   async function api(query='',body?:unknown) {
@@ -31,10 +32,14 @@ export function QualityCheck({accountId,open,onOpenChange,live,onConnections}:{a
     try {const data=await api();if(epoch!==version.current)return;setRuns(data.runs);setConnections(data.connections);setCurrent(old=>data.runs.find((r:QualityRun)=>r.id===old?.id)??data.runs[0]??null);}
     catch(e){if(epoch===version.current)setError((e as Error).message);}finally{if(epoch===version.current)setLoading(false);}
   }
+  // Opening/account changes clear the previous view before it can render.
+  const [viewFor,setViewFor]=useState({open,accountId});
+  if(viewFor.open!==open||viewFor.accountId!==accountId){setViewFor({open,accountId});setBusy(false);setExecuting(false);setReport(null);setCurrent(null);setRuns([]);setConnections([]);}
   useEffect(()=>{
-    version.current++;continueRun.current=false;setBusy(false);setExecuting(false);setReport(null);setCurrent(null);setRuns([]);setConnections([]);
+    version.current++;continueRun.current=false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches saved runs from the server when the dialog opens; load() marks loading before its request.
     if(open)void load();
-    return()=>{version.current++;continueRun.current=false;};
+    return()=>{version.current+=1;continueRun.current=false;};
     // Opening/account changes invalidate responses from the previous view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[open,accountId]);

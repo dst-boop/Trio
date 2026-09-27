@@ -10,7 +10,10 @@ export function MemoryBackup({ notes, enabled, draft, busy, open, onPending, onU
   const [loading, setLoading] = useState(false), [error, setError] = useState('');
   const version = useRef(0), file = useRef<HTMLInputElement>(null);
   function clear() { version.current++; setIncoming(null); setLoading(false); setFilename(''); setError(''); onPending(false); }
-  useEffect(() => { clear(); }, [open]);
+  // Opening or closing discards a chosen file: reset the view now, then drop late reads and tell the parent.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) { setWasOpen(open); setIncoming(null); setLoading(false); setFilename(''); setError(''); }
+  useEffect(() => { version.current++; onPending(false); }, [open, onPending]);
   useEffect(() => () => { version.current++; }, []);
   async function read(selected?: File) {
     if (!selected || busy) return;

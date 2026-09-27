@@ -43,7 +43,7 @@ export function WorkComparison({accountId,open,onOpenChange,live,onConnections}:
   const [ratings,setRatings]=useState<DraftRatings>(emptyRatings),[error,setError]=useState('');
   const [loading,setLoading]=useState(false),[busy,setBusy]=useState(false),[executing,setExecuting]=useState(false),[paused,setPaused]=useState(false),[uncertain,setUncertain]=useState(false),[preview,setPreview]=useState(false),[deleteAsked,setDeleteAsked]=useState(false);
   const version=useRef(0),continueRun=useRef(false),startId=useRef(crypto.randomUUID()),liveRef=useRef(live);
-  liveRef.current=live;
+  useEffect(()=>{liveRef.current=live;},[live]);
   async function api<T={run:ComparisonRun}>(query='',body?:unknown):Promise<T> {
     const response=await fetch('/api/work-comparison'+query,{method:body?'POST':'GET',signal:AbortSignal.timeout((body as {action?:string}|undefined)?.action==='step'?165_000:30_000),headers:{'Content-Type':'application/json','X-Trio-Account':accountId},...(body?{body:JSON.stringify(body)}:{})});
     const data=await response.json() as {error?:string};if(!response.ok)throw new Error(data.error||'Could not load this comparison.');return data as T;
@@ -66,13 +66,18 @@ export function WorkComparison({accountId,open,onOpenChange,live,onConnections}:
     }catch(e){if(epoch===version.current)setError((e as Error).message);}
     finally{if(epoch===version.current)setLoading(false);}
   }
+  // A new account or open-dialog epoch clears the previous view before it can render.
+  const [viewFor,setViewFor]=useState({open,accountId});
+  if(viewFor.open!==open||viewFor.accountId!==accountId){setViewFor({open,accountId});setBusy(false);setExecuting(false);setLoading(false);setReport(null);setCurrent(null);setRuns([]);setConnections([]);setRatings(emptyRatings());setError('');setPreview(false);setDeleteAsked(false);setUncertain(false);}
   useEffect(()=>{
-    version.current++;continueRun.current=false;setBusy(false);setExecuting(false);setLoading(false);setReport(null);setCurrent(null);setRuns([]);setConnections([]);setRatings(emptyRatings());setError('');setPreview(false);setDeleteAsked(false);setUncertain(false);
+    version.current++;continueRun.current=false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches saved comparisons from the server when the dialog opens; load() marks loading before its request.
     if(open)void load();
-    return()=>{version.current++;continueRun.current=false;};
+    return()=>{version.current+=1;continueRun.current=false;};
     // Every request belongs to an account and open-dialog epoch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[open,accountId]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser time zone is only known after hydration; read it on mount and on account change.
   useEffect(()=>{setTask({...emptyComparisonTask});let timeZone='UTC';try{timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone;}catch{}setSettings({...defaultComparisonSettings,timeZone});startId.current=crypto.randomUUID();},[accountId]);
   async function drive(initial:ComparisonRun) {
     const epoch=version.current;continueRun.current=true;setBusy(true);setExecuting(true);setPaused(false);setError('');

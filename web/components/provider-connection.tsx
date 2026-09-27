@@ -15,10 +15,10 @@ export function ProviderConnection({ id, connection, disabled, open, onChange, a
   const usingSaved = connection.key === savedKeyReference;
   const usingWorkspace = connection.key === workspaceKeyReference;
   const cancel = () => { active.current?.abort(); active.current = null; };
-  useEffect(() => {
-    setStatus('idle');
-    return () => { active.current?.abort(); active.current = null; };
-  }, [connection.key, connection.model, open]);
+  // A changed key, model, or dialog visibility makes the last check result stale.
+  const [checkedFor, setCheckedFor] = useState({ key: connection.key, model: connection.model, open });
+  if (checkedFor.key !== connection.key || checkedFor.model !== connection.model || checkedFor.open !== open) { setCheckedFor({ key: connection.key, model: connection.model, open }); setStatus('idle'); }
+  useEffect(() => () => { active.current?.abort(); active.current = null; }, [connection.key, connection.model, open]);
   const change = (value: Connections[ProviderId]) => { cancel(); setStatus('idle'); onChange(value); };
   async function check() {
     cancel(); const controller = new AbortController(); active.current = controller; setStatus('checking');
