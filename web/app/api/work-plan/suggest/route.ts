@@ -5,6 +5,7 @@ import { readJsonBody, JsonBodyError } from '@/lib/request-json';
 import { readWorkspace } from '@/lib/account-store';
 import { CredentialError, readSavedConnections, resolveCredential } from '@/lib/credential-store';
 import { resolveRequestKey, workspaceAvailability } from '@/lib/workspace-keys';
+import { chargeWorkspaceCalls } from '@/lib/workspace-budget';
 import { savedKeyReference, workspaceKeyReference } from '@/lib/saved-connections';
 import { providers } from '@/lib/trio';
 import { actionPlanSource, planSuggestionRequestSchema, suggestActionPlan, PlanSuggestionError } from '@/lib/action-plan-suggestions';
@@ -36,7 +37,9 @@ export async function POST(request: Request) {
       }
       if (included[provider.id]) keys.push(await resolveRequestKey(env, request, user.userId, provider.id, workspaceKeyReference));
     }
-    input.connection.key = await resolveRequestKey(env, request, user.userId, input.connection.provider, input.connection.key);
+    const reference = input.connection.key;
+    input.connection.key = await resolveRequestKey(env, request, user.userId, input.connection.provider, reference);
+    if (reference === workspaceKeyReference) await chargeWorkspaceCalls(env, user.userId, 1);
     keys.push(input.connection.key);
     request.signal.throwIfAborted();
     const result = await suggestActionPlan(turn, input.connection, keys, request.signal);

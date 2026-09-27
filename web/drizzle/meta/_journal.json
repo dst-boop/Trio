@@ -43,6 +43,13 @@
       "when": 1790321446180,
       "tag": "0005_salty_chameleon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790482695846,
+      "tag": "0006_workspace_usage",
+      "breakpoints": true
     }
   ]
 }
