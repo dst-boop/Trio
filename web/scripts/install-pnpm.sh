@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# pnpm installer for the managed Sites environment (the "managed-linux" execution profile).
+# Nothing in this repository calls it: the Sites tooling runs it, with --prepare-store to
+# warm the shared pnpm store and --require-shared to insist on it, inside sites-env.sh.
+# Clean clones and CI use `pnpm install` (or scripts/install-ci.sh) instead. Keep it as long
+# as this app is published through Sites; removing it breaks that environment's installs.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
