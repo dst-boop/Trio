@@ -2,6 +2,8 @@
 
 Browser regression setup, local D1 prerequisites, and dev/Worker test groups are documented in [tests/README.md](tests/README.md). CI runs both browser groups in a disposable checkout with synthetic credentials.
 
+Account history recovery recognizes save conflicts even when a gateway returns HTML or an empty body. Unreadable acknowledgments retain the exact pending save for an explicit retry; loading failures show recovery guidance instead of parser diagnostics.
+
 A multi-user online workspace for OpenAI, Claude, and Gemini. Ask once, get independent perspectives, review disagreements, and combine the strongest ideas.
 
 The workspace uses a quiet charcoal palette, a persistent composer, and an uncluttered reading view. Guided briefs are available directly in an empty conversation and still require an explicit submission. Streaming text previews are coalesced at 50 ms intervals; first text, resets, errors, and final results remain immediate. Every stream event is still processed, and only the authoritative completed result is saved. Unchanged answers skip Markdown rendering, and code blocks retain their DOM identity while text arrives. These changes reduce browser rendering work, not provider latency. A synthetic 200-chunk browser check produced 14 text updates; this is not a live-provider speed benchmark.

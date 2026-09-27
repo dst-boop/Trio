@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { serializeSessions, type Session } from '@/lib/sessions';
 import { workspaceSchema } from '@/lib/account-store';
 import { workspaceVersion } from '@/lib/workspace-version';
+import { readWorkspaceResponse } from '@/lib/workspace-response';
 import { z } from 'zod';
-const responseError = (data: unknown, fallback: string) => z.object({ error: z.string() }).safeParse(data).data?.error ?? fallback;
 type SaveAttempt = { requestId: string; snapshot: string; revision: number };
 type SaveState = { revision: number; saved: string; pending: string; saving: boolean; blocked: boolean; attempt?: SaveAttempt };
 
@@ -27,9 +27,12 @@ export function useAccountWorkspace(accountId: string | undefined, sessions: Ses
         // again after a response was lost. Then save the latest pending state.
         const attempt = s.attempt ??= { requestId: crypto.randomUUID(), snapshot: s.pending, revision: s.revision };
         const response = await fetch('/api/workspace', { method: 'PUT', signal: AbortSignal.timeout(30_000), headers: { 'Content-Type': 'application/json', 'X-Trio-Account': accountId!, 'X-Trio-Workspace-Version': String(workspaceVersion) }, body: JSON.stringify({ requestId: attempt.requestId, revision: attempt.revision, sessions: JSON.parse(attempt.snapshot) }) });
-        const data = await response.json();
-        if (!response.ok) { setConflict(response.status === 409); throw new Error(responseError(data, 'Could not save. Download a backup before closing this tab.')); }
-        const revision = z.object({ revision: z.literal(attempt.revision + 1) }).parse(data).revision;
+        // Recovery is selected from HTTP status even when a proxy supplies no JSON.
+        setConflict(response.status === 409);
+        const data = await readWorkspaceResponse(response, 'save');
+        const confirmed = z.object({ revision: z.literal(attempt.revision + 1) }).safeParse(data);
+        if (!confirmed.success) throw new Error('Your save was not confirmed. Retry saving, or download a backup before closing this tab.');
+        const revision = confirmed.data.revision;
         s.revision = revision; s.saved = attempt.snapshot; s.attempt = undefined;
         if (state.current === s) setRevision(revision); // a save from before an account switch or reload never overwrites the new revision
       }
@@ -44,10 +47,14 @@ export function useAccountWorkspace(accountId: string | undefined, sessions: Ses
     if (!enabled) return;
     alive.current = true; let cancelled = false;
     fetch('/api/workspace', { cache: 'no-store', signal: AbortSignal.timeout(30_000), headers: { 'X-Trio-Account': accountId! } }).then(async response => {
-      const data = await response.json(); if (!response.ok) throw new Error(responseError(data, 'Could not load your workspace.'));
-      const payload = z.object({ revision: z.number(), sessions: z.unknown(), accountId: z.string() }).parse(data);
+      const data = await readWorkspaceResponse(response, 'load');
+      const decoded = z.object({ revision: z.number(), sessions: z.unknown(), accountId: z.string() }).safeParse(data);
+      if (!decoded.success) throw new Error('Your saved workspace could not be read. Please retry loading.');
+      const payload = decoded.data;
       if (payload.accountId !== accountId) throw new Error('The signed-in account changed. Reload this page.');
-      const snapshot = workspaceSchema.parse({ revision: payload.revision, sessions: payload.sessions }); if (cancelled) return;
+      const parsed = workspaceSchema.safeParse({ revision: payload.revision, sessions: payload.sessions }); if (cancelled) return;
+      if (!parsed.success) throw new Error('Your saved workspace could not be read. Please retry loading.');
+      const snapshot = parsed.data;
       const serialized = serializeSessions(snapshot.sessions);
       state.current = { revision: snapshot.revision, saved: serialized, pending: serialized, saving: false, blocked: false };
       setRevision(snapshot.revision); restoreRef.current(snapshot.sessions); setReady(true); setConflict(false); setStatus('Saved to your account');
