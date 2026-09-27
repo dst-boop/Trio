@@ -47,7 +47,8 @@ async generator of plain dict events that drives all three frontends.
   Tests use an isolated `TRIO_DB` through `tests/conftest.py`.
 - **Degrade gracefully.** One model failing must never sink a run. Streams
   fall back to non-streaming calls; synthesis falls through the other
-  models, then the longest draft.
+  models, then (Python) the draft the reviewers rated strongest, or the
+  longest draft when no review gave a verdict.
 - **No vendor SDKs.** Providers are plain `httpx` calls so there is nothing
   to keep in sync except model names in `.env`.
 - **No secrets in the repo.** Keys live in `.env` (gitignored); document new

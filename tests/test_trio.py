@@ -318,3 +318,50 @@ def test_markdown_scripts_are_served_locally():
             assert path in page
             response = client.get(path)
             assert response.status_code == 200 and "javascript" in response.headers["content-type"]
+
+
+def _fallback_run(monkeypatch, review_text):
+    """Three drafts, every synthesis fails; reviews come from review_text(context)."""
+    import asyncio
+
+    import orchestrator
+    from providers import Provider
+
+    drafts = {"claude": "Short but right.", "openai": "A much longer answer " * 20, "gemini": "Medium length answer here."}
+
+    def make(key):
+        async def ask(client, model, k, system, messages, usage=None):
+            if "final answer" in system.lower():
+                raise RuntimeError("synthesis unavailable")
+            if "reviewer" in system.lower():
+                return review_text(messages[-1]["content"])
+            return drafts[key]
+        return ask
+
+    providers = [Provider(key, key.title(), "m", "k", make(key), None) for key in drafts]
+    monkeypatch.setattr(orchestrator, "active_providers", lambda: providers)
+
+    async def collect():
+        return [ev async for ev in orchestrator.run(None, "q")]
+
+    return next(e for e in asyncio.run(collect()) if e["type"] == "final")
+
+
+def test_fallback_prefers_the_draft_reviewers_rated_strongest(monkeypatch):
+    import re
+
+    def vote_for_short(context):
+        # Name whichever anonymised letter holds the short draft.
+        letter = re.search(r"### Response ([A-Z])\nShort but right\.", context).group(1)
+        return f"Analysis...\n**Strongest:** Response {letter}"
+
+    final = _fallback_run(monkeypatch, vote_for_short)
+    assert final["fallback"] is True
+    assert final["by"] == "claude" and final["text"] == "Short but right."
+    assert "rated strongest" in final["note"]
+
+
+def test_fallback_uses_the_longest_draft_without_a_verdict(monkeypatch):
+    final = _fallback_run(monkeypatch, lambda context: "No clear winner.")
+    assert final["by"] == "openai"
+    assert "most complete" in final["note"]
