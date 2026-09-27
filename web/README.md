@@ -74,6 +74,8 @@ A live run is stopped after `TRIO_RUN_TIMEOUT_SECONDS` (default 600, up to 3600)
 
 **Turning optional tools off.** Set `TRIO_DISABLED_FEATURES` to a comma-separated list of `quality` (Quality check), `comparison` (Compare on your work), `work` (Your work board and action-plan drafts), `audio` (Audio to text), `image` (Create image) and `memory` (Personal memory). Everything is on when it is unset. A listed tool disappears from the workspace and demo, and its API routes answer 404 before any provider call, so it cannot be reached directly. With `memory` off, answers are never personalized. Saved data is kept, so turning a tool back on restores it.
 
+**Final answer by a model that did not draft.** A per-tab switch in Connections makes the preferred model sit out drafting, review and revision in Quick synthesis, Council and Deep Council, and only write the final answer from the others' work, so the writer never judges its own draft. It needs three available models. The answer says "which did not draft", and the export notes it. If that writer fails, a drafting model writes the answer and the result says so.
+
 Usage on included connections bills the workspace owner's provider accounts, so keep the audience invite-only and watch provider spending. In-app quality checks still require the account's own saved keys because their calls are pinned to saved-key revisions.
 
 ## Provider access checks

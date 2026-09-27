@@ -107,3 +107,10 @@ test('deep council restoration and export retain originals, reviews and revision
   assert.match(exported, /## ChatGPT revised answer\n\nChoose A after checking the assumption/);
   assert.equal(conversationHistory([deep])[1].content, 'A with caveats');
 });
+
+test('the independent-writer marker survives saving and appears in the export', () => {
+  const turn: Turn = { question: 'Plan?', mode: 'council', result: { answer: 'Final', by: 'claude', independentWriter: true, drafts: { openai: 'A', gemini: 'B' }, reviews: {}, errors: [], seconds: 2, demo: false } };
+  const [restored] = parseSessions(serializeSessions([{ id: 'one', title: 'Plan', time: '', turns: [turn] }]));
+  assert.equal(restored.turns[0].result.independentWriter, true);
+  assert.match(sessionMarkdown([turn]), /written by a model that did not draft/);
+});

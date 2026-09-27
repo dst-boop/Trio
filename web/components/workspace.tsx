@@ -92,6 +92,7 @@ export default function Home({ account, features = allFeatures }: { account?: { 
   const [instructions, setInstructions] = useState('');
   const [researchProvider, setResearchProvider] = useState<ResearchChoice>('auto');
   const [webResearch, setWebResearch] = useState(false);
+  const [independentWriter, setIndependentWriter] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]), [current, setCurrent] = useState<string | null>(null);
   const turns = useMemo(() => sessions.find(s => s.id === current)?.turns ?? noTurns, [sessions, current]);
   const [busy, setBusy] = useState(false), [stage, setStage] = useState('');
@@ -218,7 +219,7 @@ export default function Home({ account, features = allFeatures }: { account?: { 
         // Keep each partial result, so a stopped demo still shows what arrived.
         result = await runDemo(chosenMode, lead, result, controller.signal, { result: partial => { result = partial; setWorking(partial); }, stage: setStage, answerReady: () => setTab('answer') });
       } else {
-        result = await runLiveRequest(JSON.stringify({ ...request, timeZone: browserTimeZone(), personalize: Boolean(account) && features.memory, connections, mode: chosenMode, lead, ...(target ? { reviewAnswer: target.result.answer } : {}) }), { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, controller.signal, event => {
+        result = await runLiveRequest(JSON.stringify({ ...request, timeZone: browserTimeZone(), personalize: Boolean(account) && features.memory, connections, mode: chosenMode, lead, independentWriter: independentWriter && connected >= 3 && ['fast', 'council', 'deep'].includes(chosenMode), ...(target ? { reviewAnswer: target.result.answer } : {}) }), { 'Content-Type': 'application/json', ...(account ? { 'X-Trio-Account': account.userId } : {}) }, controller.signal, event => {
           if (event.type === 'stage') { setStage(event.stage!); if (event.stage === 'synthesis') setTab('answer'); }
           result = applyRunEvent(result, event);
           if (event.type === 'final' && chosenMode !== 'compare') setTab('answer');
@@ -300,7 +301,7 @@ export default function Home({ account, features = allFeatures }: { account?: { 
     {account && features.memory && <PersonalMemory accountId={account.userId} open={memoryOpen} onOpenChange={setMemoryOpen} memory={personalMemory} connections={connections} sessionId={current} workspaceRevision={cloud.revision} sessionSaved={cloud.ready && !cloud.error && cloud.status === 'Saved to your account'} busy={busy} />}
     <SessionBackups sessions={sessions} busy={busy} remember={account ? true : remember} account={Boolean(account)} open={backupsOpen} onOpenChange={setBackupsOpen} onImport={incoming => { if (busy) return; setSessions(mergeBackup(sessions, incoming).sessions); }} />
     <BranchConversation source={sessions.find(s => s.id === current)} turnIndex={branchPoint} count={sessions.length} busy={busy} hasUnsent={Boolean(prompt) || attachments.present} onClose={() => setBranchPoint(null)} onCreate={createBranch} />
-    <ConnectionsDialog open={settings} onOpenChange={setSettings} account={account} busy={busy} connected={connected} demo={demo} temporaryDemo={temporaryDemo} onDemo={setDemo} preferences={preferences} savedConnections={savedConnections} connections={connections} onConnections={setConnections} lead={lead} onLead={setLead} remember={remember} onRemember={setRemember}
+    <ConnectionsDialog open={settings} onOpenChange={setSettings} account={account} busy={busy} connected={connected} demo={demo} temporaryDemo={temporaryDemo} onDemo={setDemo} preferences={preferences} savedConnections={savedConnections} connections={connections} onConnections={setConnections} lead={lead} onLead={setLead} remember={remember} onRemember={setRemember} independentWriter={independentWriter} onIndependentWriter={setIndependentWriter}
       onClearTabKeys={() => { setConnections(applyWorkspaceConnections(freshConnections(), savedConnections.workspace)); setTemporaryDemoAccount(account?.userId ?? 'guest'); }}
       onForgetAll={() => { setTemporaryDemoAccount(account?.userId ?? 'guest'); void savedConnections.forgetAll(); }} />
     <HelpDialog open={help} onOpenChange={setHelp} account={Boolean(account)} />

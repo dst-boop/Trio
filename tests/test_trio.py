@@ -365,3 +365,60 @@ def test_fallback_uses_the_longest_draft_without_a_verdict(monkeypatch):
     final = _fallback_run(monkeypatch, lambda context: "No clear winner.")
     assert final["by"] == "openai"
     assert "most complete" in final["note"]
+
+
+def _independent_run(monkeypatch, fail_writer=False, keys=("claude", "openai", "gemini")):
+    """Record which stage each model is called for, with claude as the independent synthesizer."""
+    import asyncio
+
+    import orchestrator
+    from providers import Provider
+
+    calls = []
+
+    def make(key):
+        async def ask(client, model, k, system, messages, usage=None):
+            stage = "final" if "final answer" in system.lower() else "review" if "reviewer" in system.lower() else "draft"
+            calls.append((key, stage))
+            if fail_writer and key == "claude" and stage == "final":
+                raise RuntimeError("writer unavailable")
+            return f"{key} {stage}"
+        return ask
+
+    providers = [Provider(key, key.title(), "m", "k", make(key), None) for key in keys]
+    monkeypatch.setattr(orchestrator, "active_providers", lambda: providers)
+
+    async def collect():
+        return [ev async for ev in orchestrator.run(None, "q", synthesizer="claude", independent_synthesizer=True)]
+
+    return asyncio.run(collect()), calls
+
+
+def test_independent_synthesizer_only_writes_the_final_answer(monkeypatch):
+    events, calls = _independent_run(monkeypatch)
+    assert [stage for key, stage in calls if key == "claude"] == ["final"]
+    assert {key for key, stage in calls if stage == "draft"} == {"openai", "gemini"}
+    assert {key for key, stage in calls if stage == "review"} == {"openai", "gemini"}
+    final = next(e for e in events if e["type"] == "final")
+    assert final["by"] == "claude" and final["independent"] is True and final["text"] == "claude final"
+    assert next(e for e in events if e["type"] == "start")["independent_synthesizer"] is True
+
+
+def test_independent_synthesizer_falls_back_to_a_drafter(monkeypatch):
+    events, _ = _independent_run(monkeypatch, fail_writer=True)
+    final = next(e for e in events if e["type"] == "final")
+    assert final["by"] in {"openai", "gemini"} and "independent" not in final
+
+
+def test_independent_synthesizer_needs_three_models(monkeypatch):
+    events, calls = _independent_run(monkeypatch, keys=("claude", "openai"))
+    assert events == [{"type": "error", "message": "An independent synthesizer needs three configured models, including the synthesizer."}]
+    assert calls == []
+
+
+def test_api_accepts_independent_synthesizer(client):
+    r = client.post("/api/ask", json={"question": "Plan?", "stream": False, "synthesizer": "gemini", "independent_synthesizer": True})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["written_by"] == "gemini" and body["independent"] is True
+    assert "gemini" not in body["drafts"]

@@ -189,6 +189,7 @@ async def run(
     thorough: bool = True,
     model_keys: list[str] | None = None,
     synthesizer: str | None = None,
+    independent_synthesizer: bool = False,
 ) -> AsyncIterator[dict]:
     t_start = time.monotonic()
     providers = active_providers()
@@ -198,19 +199,28 @@ async def run(
         yield {"type": "error", "message": "No API keys are set. Add at least one key to .env and restart."}
         return
 
+    # An independent synthesiser judges drafts it did not write: it sits out drafting and
+    # review, so two other models must be available to draft.
+    writer = (synthesizer or os.getenv("SYNTHESIZER", "claude").lower()) if independent_synthesizer else None
+    if writer and (len(providers) < 3 or writer not in {p.key for p in providers}):
+        yield {"type": "error", "message": "An independent synthesizer needs three configured models, including the synthesizer."}
+        return
+    drafters = [p for p in providers if p.key != writer]
+
     convo = [*(history or []), {"role": "user", "content": question}]
     yield {
         "type": "start",
         "thorough": thorough and len(providers) > 1,
         "models": [{"key": p.key, "label": p.label, "model": p.model} for p in providers],
         "synthesizer": synthesizer or os.getenv("SYNTHESIZER", "claude").lower(),
+        **({"independent_synthesizer": True} if writer else {}),
     }
 
     # ---- 1. Draft -------------------------------------------------------
     drafts: dict[str, str] = {}
     usage_totals = _new_totals()
     queue: asyncio.Queue = asyncio.Queue()
-    tasks = [asyncio.create_task(_draft_one(client, p, convo, queue, usage_totals)) for p in providers]
+    tasks = [asyncio.create_task(_draft_one(client, p, convo, queue, usage_totals)) for p in drafters]
     pending = len(tasks)
     try:
         while pending:
@@ -228,7 +238,7 @@ async def run(
         yield {"type": "error", "message": "All three models failed. Check your API keys and model names in .env."}
         return
 
-    if len(drafts) == 1:
+    if len(drafts) == 1 and not writer:
         (only_key, only_text), = drafts.items()
         yield {"type": "final", "text": only_text, "by": only_key,
                "usage": _usage_summary(providers, usage_totals),
@@ -270,7 +280,10 @@ async def run(
 
     final_msgs = [{"role": "user", "content": prompt}]
     last_err = None
-    for p in _synth_order(providers, set(drafts), synthesizer):
+    order = _synth_order(providers, set(drafts), synthesizer)
+    if writer:  # the independent writer first, then only models that drafted
+        order = [p for p in providers if p.key == writer] + [p for p in order if p.key in drafts]
+    for p in order:
         streamed = ""
         emitted = False
         stream_failed = False
@@ -304,6 +317,7 @@ async def run(
                 "type": "final", "text": text, "by": p.key,
                 "letters": letters, "usage": _usage_summary(providers, usage_totals),
                 "seconds": round(time.monotonic() - t_start, 1),
+                **({"independent": True} if writer and p.key == writer else {}),
             }
             return
 

@@ -72,6 +72,7 @@ recorded is a decision, an unrecorded one is drift.
 | Capability | Python root | Hosted `web/` |
 | --- | --- | --- |
 | Answer modes | Council, Quick (`thorough: false`), single model via `models` | Single, Quick synthesis, Council, Deep Council, Compare |
+| Final writer that did not draft | `independent_synthesizer` (API) / `--independent-synthesizer` (CLI) | per-tab switch in Connections for Quick synthesis, Council and Deep Council |
 | Response navigation and mode selection | no | docked question and mode controls; next-question choices stay available during runs; expandable previews with one conversation scroll |
 | Stream rendering and task setup | no | coalesced text previews with immediate first/final events; stable Markdown blocks; guided briefs on the empty workspace |
 | Remembered mode and preferred model | no | private account preferences; first-use Single answer, no automatic paid runs |
