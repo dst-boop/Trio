@@ -1,6 +1,6 @@
 'use client';
 
-import { Component, lazy, Suspense, type ReactNode } from 'react';
+import { Component, lazy, memo, Suspense, type ReactNode } from 'react';
 
 const FormattedAnswer = lazy(() => import('./answer-renderer').then(module => ({ default: module.Answer })));
 
@@ -15,7 +15,7 @@ class FormattingBoundary extends Component<{ children: ReactNode; text: string }
 }
 
 /** Load Markdown only when an answer exists. Plain text remains readable if its chunk fails. */
-export function Answer({ text }: { text: string }) {
+export const Answer = memo(function Answer({ text }: { text: string }) {
   if (!text) return null;
   return <FormattingBoundary text={text}><Suspense fallback={<PlainAnswer text={text} />}><FormattedAnswer text={text} /></Suspense></FormattingBoundary>;
-}
+});

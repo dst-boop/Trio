@@ -28,7 +28,7 @@ try {
  });
  await page.getByLabel('Choose text context').setInputFiles({name:'reference.txt',mimeType:'text/plain',buffer:Buffer.from('Original reference context')});
  await page.getByText('reference.txt',{exact:true}).waitFor();
- const originalImage=await page.getByRole('heading',{name:'One question. Three perspectives.'}).screenshot();
+ const originalImage=await page.getByRole('textbox',{name:'Your question',exact:true}).screenshot();
  await page.getByLabel('Choose image').setInputFiles({name:'original.png',mimeType:'image/png',buffer:originalImage});
  await page.getByAltText('Attached image preview').waitFor();
  await page.getByLabel('Choose PDF',{exact:true}).setInputFiles({name:'original.pdf',mimeType:'application/pdf',buffer:Buffer.from(samplePdf)});
@@ -36,7 +36,7 @@ try {
  await page.getByRole('textbox',{name:'Your question'}).fill('Is the original plan sound?');
  await page.getByRole('button',{name:'Ask Trio',exact:true}).click();
  await page.getByRole('button',{name:'Have the team check this'}).waitFor();
- assert.equal(requests[0].mode,'single');assert.equal(requests[0].lead,'claude');assert.deepEqual(requests[0].history,[],'Demo stays out of live history');
+ assert.equal(requests[0].mode,'single');assert.equal(requests[0].lead,'openai');assert.deepEqual(requests[0].history,[],'Demo stays out of live history');
  await page.getByRole('textbox',{name:'Your question'}).fill('Keep this unsent follow-up');
  await page.getByLabel('Choose text context').setInputFiles({name:'next-reference.txt',mimeType:'text/plain',buffer:Buffer.from('Unsent follow-up reference')});
  await page.getByLabel('Choose image').setInputFiles({name:'next.png',mimeType:'image/png',buffer:await page.getByRole('textbox',{name:'Your question'}).screenshot()});
@@ -44,7 +44,7 @@ try {
  await page.getByLabel('Choose PDF',{exact:true}).setInputFiles({name:'next.pdf',mimeType:'application/pdf',buffer:Buffer.from(samplePdf+'\n% New follow-up document')});
  await page.locator('.pdf-context').getByText('next.pdf',{exact:true}).waitFor();
  await page.getByRole('combobox', { name: 'Answer model' }).click();
- await page.getByRole('option', { name: 'ChatGPT', exact: true }).click();
+ await page.getByRole('option', { name: 'Claude', exact: true }).click();
  await page.getByRole('button',{name:'Have the team check this'}).click();
  await page.getByText('Correction from review',{exact:true}).waitFor();
  const review=requests[1];assert.equal(review.mode,'council');assert.equal(review.question,requests[0].question);assert.equal(review.reviewAnswer,'Original marker answer');assert.equal(review.context,'Original reference context');assert.deepEqual(review.history,[],'Original answer must not enter independent drafting through history');
