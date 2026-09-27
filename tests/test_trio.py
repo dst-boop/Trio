@@ -305,3 +305,16 @@ def test_synthesizer_preference_is_respected(client, monkeypatch):
     monkeypatch.setenv("SYNTHESIZER", "gemini")
     out = client.post("/api/ask", json={"question": "hi", "stream": False}).json()
     assert out["written_by"] == "gemini"
+
+
+def test_markdown_scripts_are_served_locally():
+    # The page must not depend on a third-party CDN for scripts that see its content.
+    from fastapi.testclient import TestClient
+    import main
+    with TestClient(main.app) as client:
+        page = client.get("/").text
+        assert "cdnjs" not in page
+        for path in ("/vendor/marked-12.0.2.min.js", "/vendor/purify-3.1.6.min.js"):
+            assert path in page
+            response = client.get(path)
+            assert response.status_code == 200 and "javascript" in response.headers["content-type"]
