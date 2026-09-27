@@ -2,6 +2,10 @@
 
 A multi-user online workspace for OpenAI, Claude, and Gemini. Ask once, get independent perspectives, review disagreements, and combine the strongest ideas.
 
+The workspace uses a quiet charcoal palette, a persistent composer, and an uncluttered reading view. Guided briefs are available directly in an empty conversation and still require an explicit submission. Streaming text previews are coalesced at 50 ms intervals; first text, resets, errors, and final results remain immediate. Every stream event is still processed, and only the authoritative completed result is saved. Unchanged answers skip Markdown rendering, and code blocks retain their DOM identity while text arrives. These changes reduce browser rendering work, not provider latency. A synthetic 200-chunk browser check produced 14 text updates; this is not a live-provider speed benchmark.
+
+Answer instructions prioritize the requested deliverable, task-appropriate depth, decision criteria, and concrete next steps when useful. Reviews focus on consequential issues rather than repeating whole drafts. Detailed and exact-format requests remain authoritative. These are prompt changes; real-model improvements in usefulness or factual accuracy have not been independently measured.
+
 Explicit answer formats (such as JSON only, exact labels, or CSV) take precedence over default Markdown, next steps, and correction summaries in drafts, revisions, and synthesis. Reviews still explain factual and format problems; web research still produces an evidence brief. This is prompt guidance, not schema-enforced output: nonconforming model responses stay visible, with no automatic rewriting or extra repair calls. Quality checks retain their strict scorer. Cases used to tune these prompts are regression checks, not independent evidence of improved accuracy.
 
 ## Guided work and recorded results
@@ -212,6 +216,7 @@ Run browser checks with Playwright installed separately and a local dev server r
 ```sh
 node tests/browser-smoke.mjs
 node tests/browser-preferences-recovery.mjs
+node tests/browser-polish.mjs
 node tests/browser-quality.mjs
 node tests/browser-capacity.mjs
 node tests/browser-branches.mjs

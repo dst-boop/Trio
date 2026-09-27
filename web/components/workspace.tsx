@@ -36,6 +36,7 @@ import { setAnswerFeedback, type AnswerFeedback as Feedback } from '@/lib/answer
 import { ConversationHistory } from '@/components/conversation-history';
 import { FollowUpContext } from '@/components/follow-up-context';
 import { runLiveRequest } from '@/lib/run-live-request';
+import { createRunPreview } from '@/lib/run-preview';
 import { applyRunEvent } from '@/lib/run-events';
 import { readImageFile, type AttachedImage } from '@/lib/images';
 import { readPdfFile, attachmentBytes, maxAttachmentBytes, type AttachedPdf } from '@/lib/pdf';
@@ -118,6 +119,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
   const [sessions, setSessions] = useState<Session[]>([]), [current, setCurrent] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]), [busy, setBusy] = useState(false), [stage, setStage] = useState('');
   const followUpContext = useMemo(() => conversationContext(turns), [turns]);
+  const openActions = useMemo(() => workSummary(sessions).open, [sessions]);
   const [working, setWorking] = useState<Result | null>(null), [runningQuestion, setRunningQuestion] = useState(''), [tab, setTab] = useState('answer');
   const [remember, setRemember] = useState(false), [loaded, setLoaded] = useState(false);
   const [storageError, setStorageError] = useState(false);
@@ -229,6 +231,8 @@ export default function Home({ account }: { account?: { userId: string; displayN
     document.getElementById("conversation-scroll")?.scrollTo({ top: 0 });
     setBusy(true); setRunMode(chosenMode); setStage(!demo && request.webResearch ? 'research' : 'draft'); setWorking({ ...emptyResult(demo), researchRequested: !demo && request.webResearch, researchBy: researcher, ...(target ? { reviewedAnswer: target.result.answer } : {}) }); setRunningQuestion(question); setTab(chosenMode === 'single' ? 'answer' : 'drafts');
     const controller = new AbortController(); abortRef.current = controller;
+    const preview = createRunPreview(setWorking);
+    controller.signal.addEventListener('abort', preview.dispose, { once: true });
     let result = { ...emptyResult(demo), ...(target ? { reviewedAnswer: target.result.answer } : {}) };
     try {
       if (demo) {
@@ -244,14 +248,14 @@ export default function Home({ account }: { account?: { userId: string; displayN
           if (event.type === 'stage') { setStage(event.stage!); if (event.stage === 'synthesis') setTab('answer'); }
           result = applyRunEvent(result, event);
           if (event.type === 'final' && chosenMode !== 'compare') setTab('answer');
-          setWorking({ ...result });
+          preview.update(result, event);
         });
       }
       saveTurn(question, result, chosenMode, request.instructions ?? '', imageName, pdfName);
       setReviewTarget(!demo && chosenMode === 'single' ? { result, request, imageName, pdfName } : null);
       setWorking(null); setRunningQuestion(''); if (!demo && !teamReview) setPrompt(''); setStage('done');
     } catch (error) { if (controller.signal.aborted) { toast('Session stopped. No result was saved.'); setWorking({ ...result, errors: [...result.errors, 'Session stopped. Partial contributions are shown below.'] }); } else { const text = error instanceof Error ? error.message : 'Something went wrong.'; toast.error(text); setWorking({ ...result, errors: [...result.errors, text] }); } setStage('failed'); }
-    finally { setBusy(false); abortRef.current = null; }
+    finally { preview.dispose(); controller.signal.removeEventListener('abort', preview.dispose); setBusy(false); abortRef.current = null; }
   }
   async function attach(file?: File) {
     if (!file || busy) return;
@@ -295,14 +299,14 @@ export default function Home({ account }: { account?: { userId: string; displayN
         <div className="side-label">YOUR WORKSPACE</div>
         {account && <button className="side-nav" disabled={busy} onClick={() => setQualityOpen(true)}><GitCompareArrows size={17} />Quality check</button>}
         {account && <button className="side-nav" disabled={busy} onClick={() => setComparisonOpen(true)}><GitCompareArrows size={17} />Compare on your work</button>}
-        <button className="side-nav" disabled={busy} onClick={() => setWorkOpen(true)}><Check size={17} />Your work<span className="nav-count">{workSummary(sessions).open}</span></button>
-        <button className="side-nav selected" onClick={() => promptRef.current?.focus()}><Layers3 size={17} /> Collective intelligence</button>
+        <button className="side-nav" disabled={busy} onClick={() => setWorkOpen(true)}><Check size={17} />Your work<span className="nav-count">{openActions}</span></button>
+        <button className="side-nav selected" onClick={() => promptRef.current?.focus()}><Layers3 size={17} /> Conversations</button>
         <button className="side-nav" onClick={() => setSettings(true)}><Settings2 size={17} /> Model connections <span className="nav-count">{connected}/3</span></button>
         {account && <button className="side-nav" disabled={busy} onClick={() => setMemoryOpen(true)}><Lightbulb size={17} />Personal memory<span className="nav-count" role="status">{memoryStatus}</span></button>}
         <button className="side-nav" disabled={busy} onClick={() => setBackupsOpen(true)}><Archive size={17} />Back up & restore</button>
         <div className="history-heading"><span className="side-label">RECENT SESSIONS</span>{sessions.length > 0 && <button aria-label="Clear session history" disabled={busy} onClick={() => setClearHistory(true)}><Trash2 size={14} /></button>}</div>
         <SessionList sessions={sessions} current={current} busy={busy} query={sessionQuery} onQuery={setSessionQuery} onSelect={s => requestNavigation({ type: 'session', id: s.id })} onAction={setSessionAction} onExport={s => downloadSession(s.turns)} />
-        <div className="sidebar-bottom-card"><span className="tiny-orbits">◎ <span>✳</span> ✦</span><strong>Different perspectives.<br />A stronger answer.</strong><p>Independent thinking.<br />Collective intelligence.</p><button onClick={() => setHelp(true)}>How Trio works <ChevronRight size={14} /></button></div>
+        <button className="workspace-help" onClick={() => setHelp(true)}><CircleHelp size={16} />How Trio works<ChevronRight size={14} /></button>
       </SidebarContent>
       <SidebarFooter className="sidebar-foot"><span className="avatar">Y</span><div title={account?.email}>{account?.displayName ?? "Guest workspace"}<small><ShieldCheck size={12} /> {account ? cloud.status : "Stored on this device"}</small>{account ? <a href="/signout-with-chatgpt?return_to=%2F" onClick={e => { if (busy || cloud.status === "Saving…") { e.preventDefault(); toast("Wait for the current run and save to finish before signing out."); } else if (cloud.error) { e.preventDefault(); setWorkspaceRecovery('signout'); } }}>Sign out</a> : <a href="/signin-with-chatgpt?return_to=%2Fworkspace">Sign in to save online</a>}</div><button aria-label="About Trio" onClick={() => setHelp(true)}><CircleHelp size={17} /></button></SidebarFooter>
     </Sidebar>
@@ -314,6 +318,7 @@ export default function Home({ account }: { account?: { userId: string; displayN
         {storageError && <div className="error-box" role="alert"><strong>Browser history could not be updated</strong><p>{remember ? 'Recent changes are only in this tab. Export important sessions before closing or refreshing; the previous saved copy may be older.' : 'Browser storage is unavailable. Previously saved history may still be on this device.'}</p>{turns.length > 0 && <button onClick={exportSession}>Export current session</button>}</div>}
         <div className={`page-intro${displayed ? " has-answer" : ""}`}><div><div className="eyebrow"><span className="mini-line" /> COLLECTIVE INTELLIGENCE</div><h1>One question. <span>Three perspectives.</span></h1><p>Choose a single answer or bring in the team.</p></div><span className="intro-symbol" aria-hidden>◈</span></div>
         <div className="connection-summary"><span>{demo ? 'Prepared example · no live answers' : connected + ' model' + (connected === 1 ? '' : 's') + ' connected'}</span><button disabled={busy || preferences.loading || savedConnections.loading} onClick={() => { if (demo && connected) setDemo(false); else setSettings(true); }}>{demo ? connected ? 'Use live models' : 'Set up live answers' : 'Manage connections'}</button></div>
+        {!displayed && <div className="workspace-starters"><WorkflowBriefs busy={busy || preferences.loading} prompt={prompt} onApply={text => { setPrompt(text); setDemo(false); promptRef.current?.focus(); toast('Brief prepared. Review it, then choose Ask Trio.'); }} /></div>}
         {displayed && <section className="results-section" key={`${current ?? "new"}:${turns.length}:${working ? "working" : "saved"}`}><div className="question-title"><MessageSquare size={17} /><h2>{question}</h2></div>{displayed.demo && <div className="demo-notice">ILLUSTRATIVE DEMO · Prepared sample responses. No model APIs were called.</div>}{busy && <RunPipeline result={displayed} mode={displayMode} busy={busy} stage={stage} />}
           {displayed.researchRequested && <ResearchPanel research={displayed.research} provider={displayed.researchBy} loading={busy && stage === "research"} />}
           <Tabs value={tab} onValueChange={setTab}>{busy && !demo && <p className="revision-note">Responses are arriving live. Partial text may change; only completed runs are saved.</p>}<div className="result-toolbar"><TabsList className="result-tabs"><TabsTrigger value="answer">Answer</TabsTrigger><TabsTrigger value="drafts">Perspectives <span>{Object.keys(displayed.drafts).length}</span></TabsTrigger><TabsTrigger value="reviews">Peer reviews <span>{Object.keys(displayed.reviews).length}</span></TabsTrigger>{displayMode === 'deep' && <TabsTrigger value="revisions">Revisions <span>{Object.keys(displayed.revisions ?? {}).length}</span></TabsTrigger>}</TabsList><div className="result-actions">{!working && !displayed.demo && turns.length > 0 && <button className="branch-latest" disabled={busy} onClick={() => setBranchPoint(turns.length - 1)}>Continue from here ↗</button>}<button aria-label="Copy answer" disabled={!displayed.answer} onClick={() => void copy(displayed.answer)}><Copy size={16} /></button><button aria-label="Export session as Markdown" disabled={!turns.length || busy} onClick={exportSession}><Download size={16} /></button></div></div>
