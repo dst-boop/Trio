@@ -61,7 +61,7 @@ try {
   await page.locator('.previous-turns > summary').click(); await page.getByRole('button', { name: /Question 1/ }).click();
   await page.locator('.history-turn-body .research-panel summary').click(); await page.getByRole('link', { name: 'Primary report', exact: false }).waitFor();
   const connections = { openai: { enabled: false, key: '', model: 'model' }, claude: { enabled: true, key: 'fake', model: 'model' }, gemini: { enabled: false, key: '', model: 'model' } };
-  const rejected = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'claude', webResearch: true, researchProvider: 'openai', connections } });
+  const rejected = await page.request.post(baseUrl + '/api/ask', { headers: { Origin: baseUrl }, data: { question: 'q', mode: 'compare', lead: 'claude', webResearch: true, researchProvider: 'openai', connections } });
   assert.equal(rejected.status(), 400); assert.match((await rejected.json()).error, /research provider is unavailable/);
   assert.deepEqual(errors, []);
   console.log('Web research browser checks passed: opt-in, prerequisite, citations, mobile layout, history, export, refresh, and API validation.');

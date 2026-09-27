@@ -52,9 +52,11 @@ try {
   await page.reload({ waitUntil: 'networkidle' }); await page.getByText('Claude research answer 2', { exact: true }).waitFor();
   await page.locator('.research-panel summary').filter({ hasText: 'Claude' }).click(); await page.getByRole('link', { name: 'Claude source', exact: false }).waitFor();
   const connections = { openai: { enabled: false, key: '', model: 'model' }, claude: { enabled: false, key: '', model: 'model' }, gemini: { enabled: true, key: 'fake', model: 'model' } };
-  const rejected = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'gemini', webResearch: true, researchProvider: 'auto', connections } });
+  const noOrigin = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'gemini', connections } });
+  assert.equal(noOrigin.status(), 403, 'a request without an Origin header is refused before validation');
+  const rejected = await page.request.post(baseUrl + '/api/ask', { headers: { Origin: baseUrl }, data: { question: 'q', mode: 'compare', lead: 'gemini', webResearch: true, researchProvider: 'auto', connections } });
   assert.equal(rejected.status(), 400); assert.match((await rejected.json()).error, /research provider is unavailable/);
-  const invalid = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'gemini', webResearch: true, researchProvider: 'gemini', connections } });
+  const invalid = await page.request.post(baseUrl + '/api/ask', { headers: { Origin: baseUrl }, data: { question: 'q', mode: 'compare', lead: 'gemini', webResearch: true, researchProvider: 'gemini', connections } });
   assert.equal(invalid.status(), 400); assert.deepEqual(errors, []);
   console.log('Claude research browser checks passed: automatic and explicit choice, unavailable connection, attribution, unknown-event preservation, persistence, export, mobile, and API validation.');
 } finally { await browser.close(); }

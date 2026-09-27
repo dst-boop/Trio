@@ -340,7 +340,7 @@ def _mock(label: str):
         if "final answer" in system.lower():
             text = f"**Mock final answer** written by {label}, combining all three drafts."
         elif "review" in system.lower():
-            text = f"- {label} mock review: Response A is strongest; B misses a caveat."
+            text = f"- {label} mock review: Response A is strongest; B misses a caveat.\nStrongest: Response A"
         else:
             text = f"Mock draft from **{label}** for: _{q[:80]}_"
         _mock_usage(usage, messages, text)

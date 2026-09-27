@@ -78,10 +78,10 @@ try {
   const earlier = page.getByRole('button', { name: /Question 2/ }); await earlier.click(); await page.getByText('PDF used: report.pdf. Reattach it to revisit document details; PDF data is not saved.', { exact: true }).waitFor();
   const base = { question: 'q', connections: Object.fromEntries(['openai', 'claude', 'gemini'].map(id => [id, { key: '', model: 'model', enabled: true }])), mode: 'fast', lead: 'openai' };
   for (const pdf of [{ mimeType: 'application/pdf', data: 'https://example.org/report.pdf' }, { mimeType: 'text/html', data: btoa('<html>') }, { mimeType: 'application/pdf', data: btoa('not pdf') }]) {
-    const response = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, pdf } }); assert.equal(response.status(), 400); assert.match((await response.json()).error, /PDF format/);
+    const response = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl }, data: { ...base, pdf } }); assert.equal(response.status(), 400); assert.match((await response.json()).error, /PDF format/);
   }
-  const valid = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, pdf: { mimeType: 'application/pdf', data: file.buffer.toString('base64') } } }); assert.match((await valid.json()).error, /Connect at least one/);
-  const combined = await page.request.post(`${baseUrl}/api/ask`, { data: { ...base, pdf: { mimeType: 'application/pdf', data: large.toString('base64') }, image: { mimeType: 'image/png', data: png.toString('base64') } } }); assert.equal(combined.status(), 400); assert.match((await combined.json()).error, /together must be under 4 MB/);
+  const valid = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl }, data: { ...base, pdf: { mimeType: 'application/pdf', data: file.buffer.toString('base64') } } }); assert.match((await valid.json()).error, /Connect at least one/);
+  const combined = await page.request.post(`${baseUrl}/api/ask`, { headers: { Origin: baseUrl }, data: { ...base, pdf: { mimeType: 'application/pdf', data: large.toString('base64') }, image: { mimeType: 'image/png', data: png.toString('base64') } } }); assert.equal(combined.status(), 400); assert.match((await combined.json()).error, /together must be under 4 MB/);
   assert.equal(calls, 3); assert.deepEqual(errors, []);
 } finally { await browser.close(); }
 console.log('PDF browser checks passed: demo separation, PDF/image/text combination, follow-ups, metadata-only history, mobile, combined limits, invalid files, session isolation, stale reads, API validation.');

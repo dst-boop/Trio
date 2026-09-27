@@ -28,6 +28,7 @@ export const providerCredentials = sqliteTable('provider_credentials', {
   provider: text('provider').notNull(),
   cipher: text('cipher'),
   iv: text('iv'),
+  keyId: text('key_id'),
   model: text('model').notNull(),
   enabled: integer('enabled').notNull().default(1),
   revision: integer('revision').notNull(),

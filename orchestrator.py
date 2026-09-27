@@ -13,7 +13,9 @@ from __future__ import annotations
 import asyncio
 import os
 import random
+import re
 import time
+from collections import Counter
 from typing import AsyncIterator
 
 import httpx
@@ -32,7 +34,8 @@ REVIEW_SYSTEM = (
     "(1) factual or reasoning errors, naming the response; "
     "(2) points where the responses disagree, and which side is right and why; "
     "(3) anything important that every response missed; "
-    "(4) which response is strongest overall."
+    "(4) which response is strongest overall. "
+    "Finish with one final line exactly in the form 'Strongest: Response X', naming one letter."
 )
 
 FINAL_SYSTEM = (
@@ -43,6 +46,26 @@ FINAL_SYSTEM = (
     "disagreement cannot be resolved, say so briefly and explain what it depends on. "
     "Reply to the user directly. Do not mention the drafts, the reviewers, or this process."
 )
+
+
+# The machine-readable verdict REVIEW_SYSTEM asks each reviewer to end with.
+_STRONGEST = re.compile(r"^[\s*_]*Strongest:?[\s*_]*Response\s+([A-Z])\b", re.IGNORECASE | re.MULTILINE)
+
+
+def _fallback_draft(drafts: dict[str, str], reviews: dict[str, str], letters: dict[str, str]) -> tuple[str, bool]:
+    """The draft the reviewers named strongest most often, and whether any vote decided it.
+
+    Length only breaks ties or stands in when no review gave a usable verdict: a longer
+    answer is not a better one, but with nothing else to go on it is the most complete.
+    """
+    model_of = {letter: key for key, letter in letters.items()}
+    votes: Counter[str] = Counter()
+    for review in reviews.values():
+        verdicts = _STRONGEST.findall(review)
+        if verdicts and model_of.get(verdicts[-1].upper()) in drafts:
+            votes[model_of[verdicts[-1].upper()]] += 1
+    best = max(drafts, key=lambda k: (votes[k], len(drafts[k])))
+    return best, votes[best] > 0
 
 
 def _synth_order(providers: list[Provider], succeeded: set[str], preferred: str | None = None) -> list[Provider]:
@@ -284,11 +307,12 @@ async def run(
             }
             return
 
-    # Every synthesiser failed: fall back to the longest draft rather than nothing.
-    best = max(drafts, key=lambda k: len(drafts[k]))
+    # Every synthesiser failed: show the draft the reviewers rated strongest rather than nothing.
+    best, voted = _fallback_draft(drafts, reviews, letters)
+    shown = "the answer the reviewers rated strongest" if voted else "the most complete single answer"
     yield {
         "type": "final", "text": drafts[best], "by": best, "fallback": True,
-        "note": f"Could not combine the answers ({last_err}). Showing the most complete single answer.",
+        "note": f"Could not combine the answers ({last_err}). Showing {shown}.",
         "usage": _usage_summary(providers, usage_totals),
         "seconds": round(time.monotonic() - t_start, 1),
     }

@@ -23,6 +23,16 @@ const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
+/**
+ * Reads the signed-in user from identity headers WITHOUT verifying them. This is safe
+ * only when every request reaches the app through an edge that removes any client-sent
+ * copies and sets these headers itself:
+ * - the ChatGPT Sites edge (hosted deployment), or
+ * - worker/access-entry.ts, which verifies the Cloudflare Access JWT and replaces the
+ *   headers (standalone deployment).
+ * Never serve this app from an entry point that lets a client supply these headers,
+ * or anyone could sign in as anyone. See "invite-only" in README.md.
+ */
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const userId = requestHeaders.get(USER_ID_HEADER);

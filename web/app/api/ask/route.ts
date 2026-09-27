@@ -11,18 +11,20 @@ import { CredentialError } from '@/lib/credential-store';
 import { savedKeyReference, workspaceKeyReference } from '@/lib/saved-connections';
 import { resolveRequestKey } from '@/lib/workspace-keys';
 import { assertWorkspaceCallsLeft, chargeWorkspaceCalls } from '@/lib/workspace-budget';
+
+const runTimeLimitSeconds = (env: { TRIO_RUN_TIMEOUT_SECONDS?: string }) => { const value = Number(env.TRIO_RUN_TIMEOUT_SECONDS?.trim()); return Number.isInteger(value) && value >= 1 && value <= 3600 ? value : 600; };
 import { providers, type RunEvent } from '@/lib/trio';
 import { readMemory } from '@/lib/memory-store';
 import { imageSchema } from '@/lib/images';
 import { pdfSchema, attachmentBytes, maxAttachmentBytes } from '@/lib/pdf';
 
-const connection = z.object({ key: z.string().max(1024), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
+// Keys are printable ASCII like every other key input; an empty key means not connected.
+const connection = z.object({ key: z.string().trim().max(1024).regex(/^[!-~]*$/), model: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._:-]+$/), enabled: z.boolean() });
 const schema = z.object({ timeZone: timeZoneSchema.optional(), personalize: z.boolean().optional(), instructions: instructionsSchema.optional(), webResearch: z.boolean().optional(), researchProvider: z.enum(['auto', 'openai', 'claude']).optional(), question: z.string().trim().min(1).max(20000), context: z.string().max(60000).optional(), image: imageSchema.optional(), pdf: pdfSchema.optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(30000) })).max(12).optional(), connections: z.object({ openai: connection, claude: connection, gemini: connection }), reviewAnswer: z.string().trim().min(1).max(120000).optional(), mode: z.enum(['single', 'council', 'deep', 'fast', 'compare']), lead: z.enum(['openai', 'claude', 'gemini']) }).refine(data => attachmentBytes(data.image, data.pdf) <= maxAttachmentBytes, 'Images and PDFs together must be under 4 MB.');
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return reply({ error: 'Sign in to Trio to run live models. Your keys have not been sent to any provider.' }, 401);
-  const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
+  if (request.headers.get('origin') !== new URL(request.url).origin) return reply({ error: 'Invalid request origin.' }, 403);
   // Reject bad uploads before resolving credentials or calling providers.
   let body;
   try { body = await readJsonBody(request, 8_000_000); }
@@ -75,7 +77,12 @@ export async function POST(request: Request) {
     start(controller) {
       const emit = (event: RunEvent) => { if (!abort.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event.type === 'final' && event.result ? { ...event, result: { ...event.result, errors: [...credentialErrors, ...event.result.errors] } } : event) + '\n')); };
       for (const text of credentialErrors) emit({ type: 'error', text });
-      orchestrate({ ...parsed.data, memory, beforeCall: async id => { if (funded.has(id)) await chargeWorkspaceCalls(env, user.userId, 1); } }, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted) controller.close(); });
+      // Each provider attempt has its own timeout, but retries and synthesis fallbacks can
+      // chain; one overall limit stops a run from holding the connection open indefinitely.
+      let timedOut = false;
+      const limitSeconds = runTimeLimitSeconds(env);
+      const deadline = setTimeout(() => { emit({ type: 'error', text: `This run reached Trio's ${limitSeconds % 60 ? `${limitSeconds}-second` : `${limitSeconds / 60}-minute`} limit and was stopped. No completed answer was saved; partial text is shown. Try Single or Quick synthesis, or retry.` }); timedOut = true; abort.abort(); }, limitSeconds * 1000);
+      orchestrate({ ...parsed.data, memory, beforeCall: async id => { if (funded.has(id)) await chargeWorkspaceCalls(env, user.userId, 1); } }, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { clearTimeout(deadline); request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted || timedOut) controller.close(); });
     },
     cancel() { abort.abort(); },
   });

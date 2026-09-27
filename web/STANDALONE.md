@@ -33,7 +33,9 @@ separate commands below; the ordinary build still produces the Sites app.
 6. Generate a separate random 32-byte base64 encryption master and upload it
    with `pnpm exec wrangler secret put TRIO_CREDENTIAL_KEY --config
    wrangler.standalone.local.json`. Enter it at Wrangler's hidden prompt. Preserve
-   it across future deployments; replacing it makes saved keys unreadable.
+   it across future deployments; replacing it outright makes saved keys
+   unreadable. To rotate, set it to `NEW,OLD` until saved keys have moved to
+   the new key (see "Rotating the master" in README.md), then to `NEW`.
    Do not commit it or reuse the Sites encryption master.
 7. Optionally set `TRIO_WORKSPACE_OPENAI_KEY`, `TRIO_WORKSPACE_CLAUDE_KEY`,
    and `TRIO_WORKSPACE_GEMINI_KEY` with the same secret command. Included

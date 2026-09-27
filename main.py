@@ -22,6 +22,7 @@ from typing import Literal
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 try:  # optional: load .env when running locally
@@ -115,6 +116,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Trio", lifespan=lifespan)
+# Markdown rendering and sanitising scripts, pinned and served locally rather than from a CDN.
+app.mount("/vendor", StaticFiles(directory=STATIC / "vendor"), name="vendor")
 
 
 class Turn(BaseModel):
