@@ -68,6 +68,8 @@ Workspace keys never leave the server. The browser sends only the public referen
 
 Included connections are capped per account at `TRIO_WORKSPACE_DAILY_CALLS` provider calls per UTC day (default 200; `0` removes the cap). Each provider request on an included key is counted just before it is sent, including a non-streaming retry after an interrupted stream and a Claude research continuation, so the cap bounds what is actually dispatched. Image generation, transcription, memory suggestions and action-plan drafts are one request each. Once the allowance is used up, new requests return 429 until 00:00 UTC, and a run already in progress treats further included-key requests as failed steps, keeping whatever completed; the user's own keys are never counted.
 
+A live run is stopped after `TRIO_RUN_TIMEOUT_SECONDS` (default 600, up to 3600). Each provider attempt already has its own 120-second timeout, but retries and synthesis fallbacks can chain; at the limit the stream reports an error event, keeps the partial text visible, saves no completed answer and closes.
+
 Usage on included connections bills the workspace owner's provider accounts, so keep the audience invite-only and watch provider spending. In-app quality checks still require the account's own saved keys because their calls are pinned to saved-key revisions.
 
 ## Provider access checks

@@ -11,6 +11,8 @@ import { CredentialError } from '@/lib/credential-store';
 import { savedKeyReference, workspaceKeyReference } from '@/lib/saved-connections';
 import { resolveRequestKey } from '@/lib/workspace-keys';
 import { assertWorkspaceCallsLeft, chargeWorkspaceCalls } from '@/lib/workspace-budget';
+
+const runTimeLimitSeconds = (env: { TRIO_RUN_TIMEOUT_SECONDS?: string }) => { const value = Number(env.TRIO_RUN_TIMEOUT_SECONDS?.trim()); return Number.isInteger(value) && value >= 1 && value <= 3600 ? value : 600; };
 import { providers, type RunEvent } from '@/lib/trio';
 import { readMemory } from '@/lib/memory-store';
 import { imageSchema } from '@/lib/images';
@@ -75,7 +77,12 @@ export async function POST(request: Request) {
     start(controller) {
       const emit = (event: RunEvent) => { if (!abort.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event.type === 'final' && event.result ? { ...event, result: { ...event.result, errors: [...credentialErrors, ...event.result.errors] } } : event) + '\n')); };
       for (const text of credentialErrors) emit({ type: 'error', text });
-      orchestrate({ ...parsed.data, memory, beforeCall: async id => { if (funded.has(id)) await chargeWorkspaceCalls(env, user.userId, 1); } }, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted) controller.close(); });
+      // Each provider attempt has its own timeout, but retries and synthesis fallbacks can
+      // chain; one overall limit stops a run from holding the connection open indefinitely.
+      let timedOut = false;
+      const limitSeconds = runTimeLimitSeconds(env);
+      const deadline = setTimeout(() => { emit({ type: 'error', text: `This run reached Trio's ${limitSeconds % 60 ? `${limitSeconds}-second` : `${limitSeconds / 60}-minute`} limit and was stopped. No completed answer was saved; partial text is shown. Try Single or Quick synthesis, or retry.` }); timedOut = true; abort.abort(); }, limitSeconds * 1000);
+      orchestrate({ ...parsed.data, memory, beforeCall: async id => { if (funded.has(id)) await chargeWorkspaceCalls(env, user.userId, 1); } }, emit, abort.signal).catch(e => { if (!abort.signal.aborted) emit({ type: 'error', text: e instanceof Error ? e.message : 'The session failed.' }); }).finally(() => { clearTimeout(deadline); request.signal.removeEventListener('abort', cancel); if (!abort.signal.aborted || timedOut) controller.close(); });
     },
     cancel() { abort.abort(); },
   });

@@ -9,6 +9,7 @@ declare namespace Cloudflare {
     TRIO_WORKSPACE_CLAUDE_KEY?: string;
     TRIO_WORKSPACE_GEMINI_KEY?: string;
     TRIO_WORKSPACE_DAILY_CALLS?: string;
+    TRIO_RUN_TIMEOUT_SECONDS?: string;
     DB?: D1Database;
     ASSETS?: Fetcher;
     BUCKET?: R2Bucket;
