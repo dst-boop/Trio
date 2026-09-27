@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -9,15 +10,15 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${baseUrl}/signin-with-chatgpt?return_to=%2Fdemo`, { waitUntil: 'networkidle' });
-  const png = await page.getByRole('heading', { name: 'One question. Three perspectives.' }).screenshot();
+  const png = await page.getByRole('textbox', { name: 'Your question', exact: true }).screenshot();
   const file = { name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from(samplePdf) };
   await page.getByLabel('Choose PDF', { exact: true }).setInputFiles(file);
-  await page.getByText('Demo ignores this PDF. Switch to Live in Connections to analyze it.').waitFor();
+  assert.match(await page.locator('.pdf-context').textContent(), /Demo ignores this PDF/);
   await page.getByRole('button', { name: 'Run demo', exact: true }).click();
   await page.getByRole('button', { name: 'Run demo', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').first().fill('fake-pdf-key');
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await setDemoMode(page, false);
   await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByLabel('Choose image').setInputFiles({ name: 'diagram.png', mimeType: 'image/png', buffer: png });

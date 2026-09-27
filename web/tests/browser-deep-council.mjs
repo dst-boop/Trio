@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
@@ -33,9 +34,9 @@ try {
   await page.getByRole('radio', { name: 'Deep Council', exact: true }).check();
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').nth(0).fill('offline-test-key');
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await setDemoMode(page, false);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByText('Up to 10 calls + retries', { exact: true }).waitFor();
+  await page.getByText('Up to 10 calls + retries · provider billing', { exact: true }).waitFor();
   const result = { drafts: { openai: 'Original position' }, reviews: { openai: 'Check the assumption' }, revisions: { openai: 'Corrected position with remaining uncertainty' }, answer: 'A careful conclusion', errors: [], seconds: 2, demo: false, by: 'openai' };
   await page.route('**/api/ask', async route => {
     const body = route.request().postDataJSON();

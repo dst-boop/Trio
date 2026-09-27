@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -12,9 +13,10 @@ try {
   await openQuestionOptions(page);
   assert.equal(await page.getByRole('switch', { name: 'Web research', exact: true }).isDisabled(), true);
   await closeQuestionOptions(page);
+  await page.getByRole('radio', { name: 'Council', exact: true }).check();
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
   await page.getByPlaceholder('Paste your API key').nth(1).fill('fake-claude-research');
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+  await setDemoMode(page, false);
   await page.getByRole('switch', { name: 'Remember sessions on this device', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await openQuestionOptions(page); await page.getByRole('switch', { name: 'Web research', exact: true }).click();
@@ -60,7 +62,7 @@ try {
   await page.locator('.history-turn-body .research-panel summary').click(); await page.getByRole('link', { name: 'Primary report', exact: false }).waitFor();
   const connections = { openai: { enabled: false, key: '', model: 'model' }, claude: { enabled: true, key: 'fake', model: 'model' }, gemini: { enabled: false, key: '', model: 'model' } };
   const rejected = await page.request.post(baseUrl + '/api/ask', { data: { question: 'q', mode: 'compare', lead: 'claude', webResearch: true, researchProvider: 'openai', connections } });
-  assert.equal(rejected.status(), 400); assert.match((await rejected.json()).error, /OpenAI/);
+  assert.equal(rejected.status(), 400); assert.match((await rejected.json()).error, /research provider is unavailable/);
   assert.deepEqual(errors, []);
   console.log('Web research browser checks passed: opt-in, prerequisite, citations, mobile layout, history, export, refresh, and API validation.');
 } finally { await browser.close(); }

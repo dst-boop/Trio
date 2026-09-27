@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
@@ -19,7 +20,7 @@ try{
   assert.equal(await page.getByRole('textbox',{name:'Your question',exact:true}).inputValue(),'');assert.equal(await page.getByText('current.txt',{exact:true}).count(),0);assert.equal(await page.getByText('Latest original answer',{exact:true}).count(),0);
   assert.equal(await page.locator('.previous-turns').count(),0);
   let saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('trio-sessions')));assert.equal(saved.length,2);assert.deepEqual(saved.find(s=>s.id==='original'),source);const branch=saved.find(s=>s.id!=='original');assert.equal(branch.title,'An alternative plan');assert.equal(branch.turns.length,1);assert.equal(branch.instructions,'Use concise bullet points');
-  await page.setViewportSize({width:1440,height:1050});await page.getByRole('button',{name:'Connections',exact:true}).click();await page.getByPlaceholder('Paste your API key').nth(1).fill('fake-branch-key');await page.getByRole('switch',{name:'Demo mode',exact:true}).click();await page.getByRole('button',{name:'Done',exact:true}).click();
+  await page.setViewportSize({width:1440,height:1050});await page.getByRole('radio',{name:'Council',exact:true}).check();await page.getByRole('button',{name:'Connections',exact:true}).click();await page.getByPlaceholder('Paste your API key').nth(1).fill('fake-branch-key');await setDemoMode(page, false);await page.getByRole('button',{name:'Done',exact:true}).click();
   let request;await page.route('**/api/ask',route=>{request=route.request().postDataJSON();return route.fulfill({contentType:'application/x-ndjson',body:JSON.stringify({type:'final',result:{...result,answer:'Alternative follow-up answer'}})+'\n'});});
   await page.getByRole('textbox',{name:'Your question',exact:true}).fill('Try a different direction');await page.getByRole('button',{name:'Ask Trio',exact:true}).click();await page.getByText('Alternative follow-up answer',{exact:true}).waitFor();
   assert.equal(request.instructions,'Use concise bullet points');assert.equal(request.history.length,2);assert.ok(!JSON.stringify(request.history).includes('Original second'));assert.equal(request.context,undefined);assert.equal(request.pdf,undefined);assert.equal(request.image,undefined);

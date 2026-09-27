@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -12,12 +13,14 @@ try{
   await page.reload({waitUntil:'networkidle'});
   await page.locator('.answer-heading strong').filter({hasText:'Single-model answer'}).waitFor();
   assert.equal(await page.locator('.pipeline [aria-label="Peer review: Skipped"]').count(),1);assert.equal(await page.locator('.pipeline .complete').count(),2);
+  await page.locator('.run-details > summary').click();
   await page.locator('.run-coverage summary').click();await page.getByText('No cross-model comparison was possible.',{exact:false}).waitFor();
   await page.locator('.session-open').filter({hasText:'Partially reviewed question'}).click();
   await page.locator('.answer-heading strong').filter({hasText:'Single-model fallback'}).waitFor();
   for(const label of ['Web research: Unavailable','Peer review: Partial','Revise answers: Partial','Write answer: Unavailable'])assert.equal(await page.locator(`.pipeline [aria-label="${label}"]`).count(),1);
   assert.equal(await page.locator('.pipeline .complete').count(),1,'Only the draft step completed fully');
-  const latest=page.locator('.results-section > .run-coverage');
+  await page.locator('.run-details > summary').click();
+  const latest=page.locator('.results-section > .run-details .run-coverage');
   if(await latest.getAttribute('open')===null)await latest.locator('summary').click();
   await latest.getByText('1 of 3 model reviews returned.',{exact:false}).waitFor();await latest.getByText('1 of 3 revised answers returned.',{exact:false}).waitFor();
   await latest.getByText('Research was requested, but no cited brief was returned.',{exact:false}).waitFor();
@@ -28,11 +31,11 @@ try{
   const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export session as Markdown',exact:true}).click();const file=await download;const markdown=await readFile(await file.path(),'utf8');assert.match(markdown,/Peer review — Partial: 1 of 3/);assert.match(markdown,/Peer review — Skipped/);assert.match(markdown,/## Single-model fallback/);
   await page.setViewportSize({width:390,height:844});await latest.scrollIntoViewIfNeeded();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await mkdir('test-output',{recursive:true});await page.screenshot({path:'test-output/review-coverage-mobile.png'});
   await page.setViewportSize({width:1440,height:1050});await page.getByRole('button',{name:/New session/}).click();
-  await page.getByRole('button',{name:'Connections',exact:true}).click();await page.getByPlaceholder('Paste your API key').first().fill('fake-key');await page.getByRole('switch',{name:'Demo mode',exact:true}).click();await page.getByRole('button',{name:'Done',exact:true}).click();
+  await page.getByRole('button',{name:'Connections',exact:true}).click();await page.getByPlaceholder('Paste your API key').first().fill('fake-key');await setDemoMode(page, false);await page.getByRole('button',{name:'Done',exact:true}).click();
   await page.route('**/api/ask',route=>route.fulfill({contentType:'application/x-ndjson',body:[{type:'stage',stage:'draft'},{type:'contribution_start',phase:'draft',provider:'openai'},{type:'contribution_delta',phase:'draft',provider:'openai',text:'Interrupted partial text'}].map(e=>JSON.stringify(e)).join('\n')+'\n'}));
   await page.getByRole('textbox',{name:'Your question',exact:true}).fill('Interrupt this run');await page.getByRole('button',{name:'Ask Trio',exact:true}).click();await page.getByText('Connection interrupted. Try again.',{exact:true}).last().waitFor();
   assert.equal(await page.locator('.pipeline .complete').count(),0);assert.equal(await page.locator('.run-coverage').count(),0,'Partial text must not be labeled completed coverage');
-  await page.getByRole('button',{name:/New session/}).click();await page.getByRole('button',{name:'Discard and start new',exact:true}).click();await page.getByRole('button',{name:'Connections',exact:true}).click();await page.getByRole('switch',{name:'Demo mode',exact:true}).click();await page.getByRole('button',{name:'Done',exact:true}).click();
+  await page.getByRole('button',{name:/New session/}).click();await page.getByRole('button',{name:'Discard and start new',exact:true}).click();await page.getByRole('button',{name:'Connections',exact:true}).click();await setDemoMode(page, true);await page.getByRole('button',{name:'Done',exact:true}).click();
   await page.getByRole('button',{name:'Run demo',exact:true}).click();await page.getByRole('button',{name:'Run demo',exact:true}).waitFor();assert.equal(await page.locator('.pipeline .complete').count(),0);assert.ok(await page.locator('.pipeline .sample').count());assert.equal(await page.locator('.run-coverage').count(),0);await page.locator('.answer-heading strong').filter({hasText:'Sample answer'}).waitFor();
   assert.deepEqual(errors,[]);console.log('Review coverage browser passed: single-model, partial reviews/revisions, failed research/synthesis, historical records, exports, settings isolation, interrupted stream, demo labels, mobile.');
 }finally{await browser.close();}

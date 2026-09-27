@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import { openQuestionOptions, closeQuestionOptions } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -40,7 +41,7 @@ try {
   await prompt.fill('A luminous observatory'); assert.equal(await warns(), true);
   await dialog.getByRole('button', { name: 'Connections', exact: true }).click();
   for (let i = 0; i < 3; i++) await page.getByPlaceholder('Paste your API key').nth(i).fill('fake-image-key-' + i);
-  await page.getByRole('switch', { name: 'Demo mode', exact: true }).click(); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await setDemoMode(page, false); await page.getByRole('button', { name: 'Done', exact: true }).click();
   // Closing the parent panel must preserve the description retained via Connections.
   await openQuestionOptions(page); await closeQuestionOptions(page);
   await page.getByRole('textbox', { name: 'Your question', exact: true }).fill('Review this visual concept.');

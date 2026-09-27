@@ -1,0 +1,67 @@
+name: Browser regressions
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: web
+    env:
+      PLAYWRIGHT_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Install isolated browser tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/trio-browser" --no-package-lock --no-audit --no-fund playwright@1.62.1
+          node "$RUNNER_TEMP/trio-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          echo "PLAYWRIGHT_MODULE=file://$RUNNER_TEMP/trio-browser/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+      - run: node scripts/setup-browser.mjs
+      - name: Run dev browser suite
+        run: |
+          mkdir -p test-output
+          node scripts/run-framework.mjs dev --port 5173 > test-output/dev-server.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS http://localhost:5173/demo > /dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/test-browser.mjs
+      - name: Build Worker and run production browser suite
+        run: |
+          node scripts/run-framework.mjs build
+          node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --port 8787 --inspector-port 0 > test-output/worker-server.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS http://127.0.0.1:8787/demo > /dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/test-browser.mjs --worker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-results
+          path: web/test-output/

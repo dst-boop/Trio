@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
@@ -32,7 +33,7 @@ try {
   assert.equal((await page.request.put(baseUrl + '/api/workspace', { headers: { origin: baseUrl }, data: { revision: stored.revision, sessions: [], userId: 'someone-else' } })).status(), 400);
   await page.getByRole('group', { name: 'Session: My existing project', exact: true }).locator('.session-open').click();
   await page.route('**/api/ask', route => route.fulfill({ contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'final', result: { answer: 'Saved live answer', drafts: { openai: 'Saved live answer' }, reviews: {}, errors: [], seconds: 1, demo: false } }) + '\n' }));
-  await page.getByRole('button', { name: 'Connections', exact: true }).click(); await page.getByPlaceholder('Paste your API key').first().fill('fake-account-key'); await page.getByRole('switch', { name: 'Demo mode', exact: true }).click(); await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Connections', exact: true }).click(); await page.getByPlaceholder('Paste your API key').first().fill('fake-account-key'); await setDemoMode(page, false); await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('textbox', { name: 'Your question', exact: true }).fill('Account follow-up'); await page.getByRole('button', { name: 'Ask Trio', exact: true }).click(); await page.getByText('Saved to your account', { exact: true }).waitFor();
   const live = await (await page.request.get(baseUrl + '/api/workspace')).json(); assert.equal(live.sessions[0].turns.length, 2); assert.ok(!JSON.stringify(live).includes('fake-account-key'));
   // A fresh browser context with the same signed-in account sees its server history.

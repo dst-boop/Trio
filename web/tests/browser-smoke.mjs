@@ -1,3 +1,4 @@
+import { setDemoMode } from './workspace-ui.mjs';
 const baseUrl = process.env.TRIO_BASE_URL || 'http://localhost:5173';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import { mkdir } from 'node:fs/promises';
@@ -24,7 +25,7 @@ const keyInputs = page.getByPlaceholder('Paste your API key');
 await keyInputs.nth(0).fill('not-a-real-key');
 await page.getByRole('switch', { name: 'Remember sessions on this device' }).click();
 assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('not-a-real-key'));
-await page.getByRole('switch', { name: 'Demo mode', exact: true }).click();
+await setDemoMode(page, false);
 await page.getByRole('button', { name: 'Done', exact: true }).click();
 await page.route('**/api/ask', async route => {
   const body = route.request().postDataJSON();
