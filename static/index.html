@@ -161,6 +161,8 @@ async function loadStatus() {
     store.set("trio_pw", pw);
     return loadStatus();
   }
+  if (r.status === 429) throw new Error('Too many wrong passwords from this address. Wait a minute, then reload.');
+  if (!r.ok) throw new Error(`The server returned an error (${r.status}). Reload to try again.`);
   const s = await r.json();
   const on = new Set(s.models.map((m) => m.key));
   availableModels = [...on]; selectedModels = [...on];
@@ -202,7 +204,7 @@ $('#synthesizer').addEventListener('change', event => { preferredSynthesizer = e
 async function restoreConversation() {
   if (!conversationId) return;
   const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, { headers: headers(), cache: 'no-store' });
-  if (!response.ok) throw new Error(response.status === 404 ? 'This conversation could not be found.' : 'Could not open this conversation. Check the server password and reload.');
+  if (!response.ok) throw new Error(response.status === 404 ? 'This conversation could not be found.' : response.status === 429 ? 'Too many wrong passwords from this address. Wait a minute, then reload.' : 'Could not open this conversation. Check the server password and reload.');
   const saved = await response.json();
   history = []; $('#thread').replaceChildren(); turnCount = saved.turns.length;
   for (const turn of saved.turns) {
@@ -345,7 +347,8 @@ async function ask(question) {
     res = await fetch("/api/ask", { method: "POST", headers: headers(),
       body: JSON.stringify({ question, history: conversationId ? [] : history.slice(-40), conversation_id: conversationId, expected_turns: conversationId ? turnCount : null, models: selectedModels, synthesizer: preferredSynthesizer || null, thorough: $("#thorough").checked, stream: true }) });
   } catch { return handle(ui, { type: "error", message: "Can't reach the server. Check that it's running and try again." }); }
-  if (res.status === 401) { store.set("trio_pw", ""); await loadStatus(); return handle(ui, { type: "error", message: "Password needed. Enter it, then ask again." }); }
+  if (res.status === 401) { store.set("trio_pw", ""); await loadStatus().catch(() => {}); return handle(ui, { type: "error", message: "Password needed. Enter it, then ask again." }); }
+  if (res.status === 429) return handle(ui, { type: "error", message: "Too many requests from this address. Wait a minute, then ask again." });
   if (res.status === 409) return handle(ui, { type: 'save_error', message: 'This conversation changed in another tab. Reload before continuing.' });
   if (!res.ok) return handle(ui, { type: "error", message: `The server returned an error (${res.status}). Try again.` });
 
