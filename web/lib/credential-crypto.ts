@@ -25,6 +25,8 @@ async function keyFingerprint(raw: Uint8Array) {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from([...encoder.encode('trio-credential-key-id-v1:'), ...raw])));
   return [...digest.slice(0, 8)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
+/** The fingerprint stored in key_id for the first key in `master`; used by operators during rotation. */
+export async function credentialKeyId(master: string | undefined) { return (await masterKeys(master))[0].id; }
 const associatedData = (userId: string, provider: string) => encoder.encode(JSON.stringify(['trio-credentials-v1', userId, provider]));
 
 export async function encryptCredential(master: string | undefined, userId: string, provider: string, value: string): Promise<Required<EncryptedCredential>> {
